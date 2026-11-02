@@ -693,7 +693,7 @@ async function claimRun(db: DbConnection, runId: string): Promise<SiteAuditRunRo
 					eq(geoSiteAuditRuns.status, "QUEUED"),
 					and(
 						eq(geoSiteAuditRuns.status, "RUNNING"),
-						lt(geoSiteAuditRuns.startedAt, sql`now() - ${RUNNING_STALE_MS} * interval '1 millisecond'`),
+						lt(geoSiteAuditRuns.startedAt, sql`now() - ${RUNNING_STALE_MS}::int * interval '1 millisecond'`),
 					),
 				),
 			),
@@ -854,11 +854,11 @@ export async function sweepStaleSiteAuditRuns(deps: Pick<SiteJobDeps, "db" | "se
 			or(
 				and(
 					eq(geoSiteAuditRuns.status, "QUEUED"),
-					lt(geoSiteAuditRuns.createdAt, sql`now() - ${QUEUED_STALE_MS} * interval '1 millisecond'`),
+					lt(geoSiteAuditRuns.createdAt, sql`now() - ${QUEUED_STALE_MS}::int * interval '1 millisecond'`),
 				),
 				and(
 					eq(geoSiteAuditRuns.status, "RUNNING"),
-					lt(geoSiteAuditRuns.startedAt, sql`now() - ${RUNNING_STALE_MS} * interval '1 millisecond'`),
+					lt(geoSiteAuditRuns.startedAt, sql`now() - ${RUNNING_STALE_MS}::int * interval '1 millisecond'`),
 				),
 			),
 		)

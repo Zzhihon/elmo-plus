@@ -231,10 +231,10 @@ function contentRules(page: AuditPageFacts, ctx: PageRuleContext, emit: Emit): v
 	const excerpt = body.slice(0, 120);
 
 	const emptyMarker = ctx.config.emptySectionPatterns.find((pattern) => pattern.test(body));
-	if (page.role !== "detail" && emptyMarker && length < 60) {
+	if (emptyMarker && length < 60) {
 		emit(
 			"section.empty",
-			{ summary: `栏目页只有“${excerpt}”`, excerpt, images },
+			{ summary: `页面内容只有“${excerpt}”`, excerpt, images },
 			looksLikeFaq(page) ? "FAQ" : undefined,
 		);
 		return;
