@@ -4,7 +4,7 @@ import {
 	GEO_TASK_REVIEW_OVERDUE_HOURS,
 	geoSystemPrincipal,
 } from "@workspace/geo-domain";
-import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, getTableName, gt, inArray, isNull, lt, ne, sql } from "drizzle-orm";
 import type { db as Database } from "../db/db";
 import type { DbConnection } from "../db/db-connection";
 import {
@@ -75,6 +75,10 @@ export async function expireGeoAdminRequests(db: Db, now: Date = new Date()): Pr
 
 /** When each task entered the review state it is in now. */
 async function reviewEntries(db: DbConnection, organizationId: string) {
+	// Spelled out: drizzle drops table names from columns in a single-table selection,
+	// and a bare "id" inside the subquery would be the event's own id.
+	const task = (column: typeof geoOptimizationTasks.id | typeof geoOptimizationTasks.state) =>
+		sql`${sql.identifier(getTableName(geoOptimizationTasks))}.${sql.identifier(column.name)}`;
 	return db
 		.select({
 			id: geoOptimizationTasks.id,
@@ -82,7 +86,7 @@ async function reviewEntries(db: DbConnection, organizationId: string) {
 			state: geoOptimizationTasks.state,
 			enteredAt: sql<Date>`(
 				select max(${geoTaskEvents.createdAt}) from ${geoTaskEvents}
-				where ${geoTaskEvents.taskId} = ${geoOptimizationTasks.id} and ${geoTaskEvents.toState} = ${geoOptimizationTasks.state}
+				where ${geoTaskEvents.taskId} = ${task(geoOptimizationTasks.id)} and ${geoTaskEvents.toState} = ${task(geoOptimizationTasks.state)}
 			)`.mapWith((value) => new Date(value)),
 		})
 		.from(geoOptimizationTasks)
