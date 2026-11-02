@@ -20,6 +20,7 @@ import { tanstackStartCookies } from "better-auth/tanstack-start";
 import type { JWTPayload } from "jose";
 import { db } from "../db/db";
 import * as schema from "../db/schema";
+import { auditGeoMembershipChange } from "../geo/membership-audit";
 import { hasSessionFactor, recordSessionFactor, sessionFactorFor } from "../geo/session-factor";
 import { nativeClientRegistrationDefault } from "./native-client-registration";
 import { ac, adminRole, memberRole, ownerRole, userRole } from "./permissions";
@@ -132,6 +133,41 @@ function geoSessionFactorPlugin(deploymentSsoProviders: ReadonlySet<string>) {
 	} satisfies BetterAuthPlugin;
 }
 
+type OrganizationHooks = NonNullable<NonNullable<CreateAuthOptions["organizationOptions"]>["organizationHooks"]>;
+
+/** Keeps the deployment's own hooks and, with GEO on, audits who gains or loses administrator standing. */
+function withGeoMembershipAudit(hooks: OrganizationHooks | undefined): OrganizationHooks | undefined {
+	if (!isGeoWorkspaceEnabled()) return hooks;
+	const audit = (change: Parameters<typeof auditGeoMembershipChange>[1]) =>
+		auditGeoMembershipChange(db, change).catch((error) =>
+			console.error("[geo-auth] could not audit a membership change", error),
+		);
+	return {
+		...hooks,
+		afterAddMember: async (data) => {
+			await hooks?.afterAddMember?.(data);
+			await audit({ organizationId: data.organization.id, userId: data.user.id, previousRole: null, role: data.member.role });
+		},
+		afterAcceptInvitation: async (data) => {
+			await hooks?.afterAcceptInvitation?.(data);
+			await audit({ organizationId: data.organization.id, userId: data.user.id, previousRole: null, role: data.member.role });
+		},
+		afterUpdateMemberRole: async (data) => {
+			await hooks?.afterUpdateMemberRole?.(data);
+			await audit({
+				organizationId: data.organization.id,
+				userId: data.user.id,
+				previousRole: data.previousRole,
+				role: data.member.role,
+			});
+		},
+		afterRemoveMember: async (data) => {
+			await hooks?.afterRemoveMember?.(data);
+			await audit({ organizationId: data.organization.id, userId: data.user.id, previousRole: data.member.role, role: null });
+		},
+	};
+}
+
 /** GEO administrators must hold a second factor; outside GEO nothing asks for one. */
 function geoAuthPlugins(sso: CreateAuthOptions["sso"]): BetterAuthPlugin[] {
 	if (!isGeoWorkspaceEnabled()) return [];
@@ -215,6 +251,7 @@ export function createAuth(options?: CreateAuthOptions) {
 				ac,
 				roles: { owner: ownerRole, admin: ownerRole, member: memberRole },
 				...options?.organizationOptions,
+				organizationHooks: withGeoMembershipAudit(options?.organizationOptions?.organizationHooks),
 			}),
 			// `permissions` is server-only to the plugin, so scopes cannot be set
 			// from a browser.
