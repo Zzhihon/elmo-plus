@@ -2,8 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@workspace/ui/components/skeleton";
 import { useState } from "react";
 import { GeoPaginatedTable } from "@/components/geo/shell/paginated-table";
-import type { GeoDictionaryVersionSummary } from "@/server/geo/profile-core";
 import { listGeoDictionaryVersionsFn } from "@/server/geo/profile";
+import type { GeoDictionaryVersionSummary } from "@/server/geo/profile-core";
 import { formatGeoDateTime, geoActorLabel } from "./format";
 
 function summarize(version: GeoDictionaryVersionSummary): string {

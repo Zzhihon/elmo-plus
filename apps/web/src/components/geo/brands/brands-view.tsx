@@ -9,7 +9,6 @@ import { useMemo, useState } from "react";
 import { GeoEmptyState } from "@/components/geo/shell/empty-state";
 import { GeoPageFrame } from "@/components/geo/shell/page-frame";
 import { useGeoViewer } from "@/components/geo/shell/use-geo-viewer";
-import type { GeoBrandEntity, GeoBrandWithProducts, GeoProduct } from "@/server/geo/profile-core";
 import {
 	createGeoBrandFn,
 	createGeoProductFn,
@@ -18,9 +17,10 @@ import {
 	updateGeoBrandFn,
 	updateGeoProductFn,
 } from "@/server/geo/profile";
+import type { GeoBrandEntity, GeoBrandWithProducts, GeoProduct } from "@/server/geo/profile-core";
 import { listGeoMembersFn } from "@/server/geo/prompts";
 import { BrandCard } from "./brand-card";
-import { type BrandFormValues, BrandFormDialog, brandPayload } from "./brand-form-dialog";
+import { BrandFormDialog, type BrandFormValues, brandPayload } from "./brand-form-dialog";
 import { BrandHistoryDialog } from "./brand-history-dialog";
 import { DictionaryVersionsPanel } from "./dictionary-versions-panel";
 import { geoErrorMessage } from "./format";

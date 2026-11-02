@@ -1,4 +1,9 @@
-import { GEO_BRAND_KIND_LABELS, GEO_FACT_STATUS_LABELS, GEO_FACT_STATUSES, type GeoBrandKind } from "@workspace/geo-domain";
+import {
+	GEO_BRAND_KIND_LABELS,
+	GEO_FACT_STATUS_LABELS,
+	GEO_FACT_STATUSES,
+	type GeoBrandKind,
+} from "@workspace/geo-domain";
 import { Button } from "@workspace/ui/components/button";
 import {
 	Dialog,
@@ -135,7 +140,11 @@ export function BrandFormDialog({
 						</Field>
 					</div>
 
-					<Field id="brand-aliases" label="别名" hint="大小写、全半角和空格不同的写法会合并为一个；与其他品牌或竞品重复会被拒绝。">
+					<Field
+						id="brand-aliases"
+						label="别名"
+						hint="大小写、全半角和空格不同的写法会合并为一个；与其他品牌或竞品重复会被拒绝。"
+					>
 						<TagsInput
 							value={values.aliases}
 							onValueChange={(next) => set("aliases", next)}
@@ -157,7 +166,11 @@ export function BrandFormDialog({
 							maxItems={50}
 						/>
 					</Field>
-					<Field id="brand-domains" label="品牌域名" hint="只填主机名，例如 www.example-electric.test；www 与裸域视为同一站点。">
+					<Field
+						id="brand-domains"
+						label="品牌域名"
+						hint="只填主机名，例如 www.example-electric.test；www 与裸域视为同一站点。"
+					>
 						<TagsInput
 							value={values.domains}
 							onValueChange={(next) => set("domains", next)}
@@ -200,7 +213,11 @@ export function BrandFormDialog({
 								</SelectContent>
 							</Select>
 						</Field>
-						<Field id="brand-fact-notes" label="待核实事实" hint="每行一条。外部资料中的数字和资质只记在这里，经客户原件核实后再改状态。">
+						<Field
+							id="brand-fact-notes"
+							label="待核实事实"
+							hint="每行一条。外部资料中的数字和资质只记在这里，经客户原件核实后再改状态。"
+						>
 							<Textarea
 								id="brand-fact-notes"
 								rows={3}

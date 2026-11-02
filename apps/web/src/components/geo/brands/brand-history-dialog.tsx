@@ -1,12 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@workspace/ui/components/badge";
-import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogHeader,
-	DialogTitle,
-} from "@workspace/ui/components/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@workspace/ui/components/dialog";
 import { Skeleton } from "@workspace/ui/components/skeleton";
 import { GeoEmptyState } from "@/components/geo/shell/empty-state";
 import { getGeoBrandFn } from "@/server/geo/profile";

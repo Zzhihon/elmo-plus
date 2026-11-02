@@ -155,7 +155,9 @@ export function BrandCard({
 										<TableRow key={product.id} className={product.status === "DISABLED" ? "opacity-60" : undefined}>
 											<TableCell>
 												{product.name}
-												{product.status === "DISABLED" && <span className="ml-2 text-xs text-muted-foreground">已停用</span>}
+												{product.status === "DISABLED" && (
+													<span className="ml-2 text-xs text-muted-foreground">已停用</span>
+												)}
 											</TableCell>
 											<TableCell className="font-mono text-xs">{product.model ?? "—"}</TableCell>
 											<TableCell>{GEO_TERM_KIND_LABELS[product.termKind]}</TableCell>
