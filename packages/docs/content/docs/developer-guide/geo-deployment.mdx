@@ -1,0 +1,129 @@
+---
+title: GEO 工作台部署
+description: 单企业独立实例的拓扑、容量起点、对象存储、恶意文件扫描、字体、环境变量与升级流程。
+---
+
+GEO 工作台在 `GEO_WORKSPACE_ENABLED=1` 时启用。关闭时它的页面、`/api/v1/geo` 接口和 worker 队列都不存在，其他部署模式不受影响。本页说明单企业独立实例的部署方式，所用文件在仓库的 `infra/` 目录。
+
+## 运行拓扑
+
+| 服务 | 作用 |
+| --- | --- |
+| `web` | 工作台页面与 API，只监听 `127.0.0.1`，由前置反向代理提供 HTTPS |
+| `worker` | pg-boss 作业：官网采集、AI 采样、评估、报告、复测、保留期清理与运维告警。每类作业独立队列与并发上限 |
+| `postgres` | 业务数据、任务状态、版本元数据与审计 |
+| `geo-objectstore` | S3 兼容对象存储，保存网页快照、上传资料、AI 原始回答与报告文件。桶始终私有 |
+| `geo-objectstore-init` | 启动时创建私有桶，桶已存在时不做任何事 |
+| `clamav`（可选） | 上传附件的恶意文件扫描 |
+| `db-migrate` | 按需运行的迁移容器，只在升级流程中使用 |
+
+浏览器永远拿不到对象存储地址或密钥：快照和附件经过鉴权的服务端路由下发。
+
+## 容量起点
+
+以 **8 vCPU / 16 GiB 内存 / 100 GiB 持久存储** 作为验证起点，再根据实际页面量、历史版本保留期和采样频率调整。这是起点而不是承诺：上线前用真实的站点规模与采样计划跑一轮，观察 运行状态 页的队列积压和 P95 用时后再定。
+
+ClamAV 常驻约 1 GiB 内存，首次启动要下载病毒库，几分钟后才可用。
+
+## 前置要求
+
+- Docker Engine 与 Compose v2.24 或更高版本（`env_file` 使用 `path`/`required` 写法）。
+- 一个 HTTPS 反向代理（如 Nginx、Caddy）指向 `127.0.0.1:${ELMO_WEB_PORT}`。生产环境不得用 HTTP 提供工作台；`APP_URL` 必须是对外的 HTTPS 地址。
+- 备份主机需要 `pg_dump`/`psql`/`pg_restore`（主版本不低于 PostgreSQL 服务端）、`age`、`rclone` 和 bash 4 以上，详见 [备份与恢复](/docs/developer-guide/geo-backup-restore)。
+
+## 安装步骤
+
+1. 复制配置样例并替换所有占位值：
+
+   ```bash
+   cd infra/compose
+   cp env.example .env
+   ```
+
+   `.env` 已被 gitignore。部署专属的引导配置（`GEO_BOOTSTRAP_PATH` 指向的 JSON）同样只放在仓库之外或 `infra/local/`。
+
+2. 构建镜像。应用镜像从本仓库构建，以 `ELMO_IMAGE_TAG` 打标签，升级就是一次显式的标签变更：
+
+   ```bash
+   docker compose build
+   ```
+
+3. 首次初始化数据库：
+
+   ```bash
+   docker compose up -d postgres
+   docker compose run --rm db-migrate
+   ```
+
+4. 启动服务（需要扫描时加 `--profile clamav`，并在 `.env` 中设置 `GEO_CLAMD_HOST`/`GEO_CLAMD_PORT`）：
+
+   ```bash
+   docker compose --profile clamav up -d
+   ```
+
+5. 登录后在 **工作台设置 → 安全** 为平台管理员启用两步验证，再按 [管理员手册](/docs/developer-guide/geo-admin-guide) 分配角色。
+
+## 镜像版本
+
+`infra/compose/docker-compose.yml` 中的第三方镜像全部固定到具体版本，不使用 `latest`：
+
+| 镜像 | 用途 |
+| --- | --- |
+| `postgres:18.1-alpine` | 数据库 |
+| `chrislusf/seaweedfs:3.80` | S3 兼容对象存储 |
+| `rclone/rclone:1.68.2` | 创建私有桶 |
+| `clamav/clamav:1.4.1` | 恶意文件扫描 |
+
+升级任何一个镜像前先在演练环境验证，并按下文的升级流程先备份。需要更严格的供应链控制时，把标签改成摘要（`image@sha256:...`）。
+
+## 对象存储
+
+- `GEO_OBJECT_STORE_URL` 使用 path-style 地址 `https://host/bucket[/prefix]`。容器内的默认值指向 `http://geo-objectstore:8333/elmo-geo`，流量不出主机网络。
+- 对象存储只配置一个带密钥的身份，没有匿名身份，因此桶不可能被公开访问。S3 端口只绑定在 `127.0.0.1`，供主机上的备份脚本使用。
+- 使用云厂商的对象存储时，把上述变量指向该桶，确认桶策略禁止公共读写、开启版本控制，并删除 compose 文件中的 `geo-objectstore` 与 `geo-objectstore-init` 服务。
+
+## 恶意文件扫描
+
+上传的附件在入库前经 clamd 的 `INSTREAM` 协议扫描：
+
+- 配置了 `GEO_CLAMD_HOST`/`GEO_CLAMD_PORT`：干净的文件标记为 **已扫描**，命中签名的文件被拒绝并记为 **感染**。clamd 无法连接或超时，上传失败，不会悄悄放行。
+- 未配置：文件标记为 **未扫描**，界面上显式提示。仅适合开发或客户明确接受该风险的环境。
+
+## 中文字体
+
+PDF 报告需要中日韩字体。`docker/Dockerfile` 在 web 与 worker 镜像中安装 Noto CJK，并设置 `GEO_PDF_FONT_PATH=/usr/share/fonts/noto/NotoSansCJK-Regular.ttc`。自行构建镜像或更换字体时覆盖这个变量；找不到字体时报告任务明确失败，不会输出乱码文件。
+
+## 环境变量
+
+| 变量 | 说明 |
+| --- | --- |
+| `GEO_WORKSPACE_ENABLED` | `1` 或 `true` 启用工作台 |
+| `GEO_OBJECT_STORE_URL` | 对象存储地址，启用后必填。`file:///path` 只用于开发 |
+| `GEO_OBJECT_STORE_ACCESS_KEY` / `GEO_OBJECT_STORE_SECRET_KEY` | S3 密钥，S3 地址时必填 |
+| `GEO_OBJECT_STORE_REGION` | 默认 `us-east-1` |
+| `GEO_PDF_FONT_PATH` | CJK 字体路径 |
+| `GEO_CLAMD_HOST` / `GEO_CLAMD_PORT` | clamd 地址，留空表示不扫描 |
+| `GEO_BOOTSTRAP_PATH` | 部署专属的引导 JSON，幂等导入，文件不存在时什么都不做 |
+
+其余变量（`DATABASE_URL`、`BETTER_AUTH_SECRET`、`ELMO_ENCRYPTION_KEY`、采样目标等）与 [配置说明](/docs/developer-guide/configuration) 相同。`ELMO_ENCRYPTION_KEY` 用于加密数据库里的平台密钥，丢失后已保存的密钥无法解密，要与备份分开妥善保管。
+
+## 升级与迁移
+
+任何数据库结构升级都按以下顺序执行，不跳步：
+
+1. **迁移前备份**：`BACKUP_ENV_FILE=infra/compose/.env infra/backup/pre-migrate.sh`。它做一次完整备份并复制到异地，失败时以非零码退出，此时不得继续。成功后它打印接下来的命令，但自己从不执行迁移。
+2. **停止写入**：`docker compose stop web worker`。
+3. **构建新版本**：修改 `.env` 中的 `ELMO_IMAGE_TAG`，`docker compose build`。
+4. **迁移**：`docker compose run --rm db-migrate`。
+5. **启动并验证**：`docker compose up -d`，确认 `/api/health` 正常、可以登录、运行状态 页的队列在消费、最近的审计日志可查。
+
+大版本升级先在演练环境用最新备份完整走一遍上述流程。
+
+### 回滚
+
+迁移不可自动回退。迁移失败或升级后发现严重问题时：
+
+1. `docker compose stop web worker`。
+2. 把 `ELMO_IMAGE_TAG` 改回旧版本。
+3. 用第 1 步的迁移前备份恢复数据库（`restore.sh` 默认拒绝覆盖生产库，需要显式加 `--i-understand-this-overwrites`）。迁移前备份之后写入的数据会丢失，所以第 2 步停写很重要。
+4. `docker compose up -d` 并按上面的验证项检查。

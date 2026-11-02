@@ -1,0 +1,130 @@
+---
+title: GEO 备份与恢复
+description: 每日加密备份、异地副本、恢复步骤，以及 RPO 24 小时 / RTO 4 小时的恢复演练手册。
+---
+
+GEO 工作台的数据分两部分：PostgreSQL（业务数据、审计、版本元数据）和对象存储（网页快照、上传资料、AI 原始回答、报告文件）。两者必须一起备份、一起恢复，否则数据库里的对象指针会指向不存在的文件。脚本在仓库的 `infra/backup/`。
+
+协商目标：**RPO 不超过 24 小时，RTO 不超过 4 小时**。目标只有在实际演练通过后才算达成，验收前必须至少做一次完整的恢复演练。
+
+## 工具与密钥
+
+备份主机需要：
+
+- `pg_dump`、`psql`、`pg_restore`，主版本不低于服务端（PostgreSQL 18）；
+- [`age`](https://age-encryption.org) 用于加密，`rclone` 用于读写对象存储和异地副本；
+- bash 4 或更高版本。
+
+加密使用 age 的公钥模式：备份主机只持有公钥 `BACKUP_AGE_RECIPIENT`，能写备份但读不了；私钥（`BACKUP_AGE_IDENTITY_FILE`）离线保存，至少两人知道存放位置，只在恢复时取出。私钥丢失等于所有备份作废。
+
+数据库密码不要写进 `BACKUP_DATABASE_URL`，放在运行备份的账号的 `~/.pgpass` 中，避免出现在进程列表里。
+
+`ELMO_ENCRYPTION_KEY` 不在备份包里。没有它，恢复后的平台密钥无法解密，要单独、离线保管当前密钥和轮换中的旧密钥。
+
+## 每日备份
+
+```bash
+BACKUP_ENV_FILE=/opt/elmo/infra/compose/.env /opt/elmo/infra/backup/backup.sh
+```
+
+每次运行：
+
+1. 检查 `pg_dump` 版本与服务端兼容；
+2. `pg_dump -Fc` 导出数据库并用 age 加密；
+3. 用 rclone 镜像 GEO 桶，打包后加密；
+4. 写入 `manifest.txt`：备份类型、时间、数据库大小、对象数量和两个加密文件的 sha256（不含任何密钥）；
+5. 若设置了 `BACKUP_OFFSITE_REMOTE`，把整个备份包复制到异地；
+6. 本地只保留最近 `BACKUP_KEEP_LOCAL`（默认 7）份每日备份；
+7. 在 `geo_backup_runs` 表记录本次结果。表不存在或数据库不可达时只打印警告，不影响备份本身。
+
+退出码：`0` 成功，`1` 运行失败，`2` 配置或参数缺失，`3` 安全检查拒绝继续。脚本不会打印任何环境变量的值。
+
+### 定时
+
+`infra/backup/systemd/` 提供 systemd 服务与定时器样例（每天 02:00 UTC），`infra/backup/crontab.example` 提供 cron 样例。二选一，用专门的低权限账号运行。
+
+### 异地与加密
+
+`BACKUP_OFFSITE_REMOTE` 是运维人员在 rclone 中配置的远端，建议另一地域、另一账号下开启版本控制或对象锁定的桶，并用生命周期规则保留至少 30 天。备份包在离开主机之前已经加密，异地存储方看不到明文。
+
+### 告警
+
+worker 每小时检查 `geo_backup_runs`：
+
+- 最近一次每日备份失败：产生 **严重** 告警 `backup-failed`；
+- 26 小时内没有成功的每日备份（包括从未记录过）：产生 `backup-stale` 告警。
+
+告警显示在 **工作台设置 → 运行状态**，配置了邮件发送时也会发给告警接收人。
+
+## 迁移前备份
+
+```bash
+BACKUP_ENV_FILE=/opt/elmo/infra/compose/.env infra/backup/pre-migrate.sh
+```
+
+做一次类型为 `PRE_MIGRATION` 的完整备份，要求必须复制到异地，失败时以非零码退出。成功后打印停写、迁移、启动的命令，它自己从不执行迁移。完整流程见 [GEO 工作台部署](/docs/developer-guide/geo-deployment)。
+
+## 恢复
+
+```bash
+RESTORE_DATABASE_URL=postgres://elmo@127.0.0.1:5433/elmo_restore \
+RESTORE_OBJECT_STORE_URL=http://restore-objectstore.example.test:8333/elmo-geo \
+RESTORE_OBJECT_STORE_ACCESS_KEY=... RESTORE_OBJECT_STORE_SECRET_KEY=... \
+BACKUP_AGE_IDENTITY_FILE=/secure/elmo-backup.agekey \
+BACKUP_ENV_FILE=/opt/elmo/infra/compose/.env \
+  infra/backup/restore.sh --fetch --bundle 20261101T020000Z-daily
+```
+
+步骤：
+
+1. `--fetch` 时先从异地下载指定备份包；也可以用 `--bundle <本地目录>` 直接指定；
+2. 按 manifest 校验两个加密文件的 sha256，不一致立即停止；
+3. 解密并 `pg_restore` 到 `RESTORE_DATABASE_URL`（单事务，出错即停）；
+4. 解密对象归档并上传到 `RESTORE_OBJECT_STORE_URL`（`--skip-objects` 可跳过）；
+5. 运行只读校验查询：组织数、审计日志、采样证据、工单、网页版本、知识断言的行数与最新时间，以及已应用的迁移数。
+
+安全限制：目标库与生产库（`BACKUP_DATABASE_URL`/`DATABASE_URL`）相同，或目标桶与 `GEO_OBJECT_STORE_URL` 相同时，脚本以退出码 3 拒绝，除非显式加 `--i-understand-this-overwrites`。只有在真实灾难恢复且已停掉 web 与 worker 时才使用这个参数。
+
+生产恢复完成后，把应用指向恢复后的库和桶，启动 web 与 worker，再按下文的验证清单检查。
+
+## 恢复演练（UAT）
+
+演练在独立的演练库和演练桶中进行，不碰生产：
+
+```bash
+RESTORE_DATABASE_URL=postgres://elmo@127.0.0.1:5433/elmo_drill \
+RESTORE_OBJECT_STORE_URL=http://127.0.0.1:8433/elmo-geo-drill \
+RESTORE_OBJECT_STORE_ACCESS_KEY=... RESTORE_OBJECT_STORE_SECRET_KEY=... \
+BACKUP_AGE_IDENTITY_FILE=/secure/elmo-backup.agekey \
+DRILL_OPERATOR="张三" \
+BACKUP_ENV_FILE=/opt/elmo/infra/compose/.env \
+  infra/backup/restore-drill.sh
+```
+
+`restore-drill.sh` 取异地最新的每日备份，调用 `restore.sh`（不带覆盖参数，所以不可能写到生产），并计算：
+
+- **RTO** = 演练开始到校验查询通过的耗时；
+- **RPO** = 演练开始时间减去该备份的生成时间，即生产若在演练开始时故障会丢失多少数据。
+
+两者都在目标内（默认 RPO ≤ 24 小时、RTO ≤ 4 小时，可用 `DRILL_RPO_TARGET_HOURS`、`DRILL_RTO_TARGET_HOURS` 调整）才算通过。脚本在 `$BACKUP_DIR/drill-reports/` 写一份报告，并在 `geo_backup_runs` 记录一条 `RESTORE_DRILL`。
+
+注意 RTO 只覆盖数据恢复。真实故障还包括准备主机、拉取镜像、切换域名，演练时应在同样的条件下把这些步骤一起计时，并写进报告备注。
+
+### 演练后的验证清单
+
+用演练库启动一套临时的 web（`DATABASE_URL` 与 `GEO_OBJECT_STORE_URL` 指向演练环境，不启动 worker，避免对外采样），然后：
+
+1. 平台管理员能登录，两步验证正常；
+2. 打开一个工单详情，操作记录与诊断证据完整；
+3. 打开一条采样证据，原始回答与快照文件能正常加载（说明对象已恢复）；
+4. 审计日志能按时间查询到备份时间点附近的记录；
+5. 运行状态 页的指标与生产在备份时点的值一致。
+
+### 验收需要保留的材料
+
+- `drill-reports/` 中的演练报告；
+- `restore.sh` 输出的校验查询结果；
+- 上述验证清单每一步的截图；
+- 演练操作人、复核人与日期。
+
+每季度、每次大版本升级前、每次更换备份方式后都应重新演练。
