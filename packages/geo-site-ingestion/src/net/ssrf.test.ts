@@ -27,6 +27,9 @@ describe("isPublicAddress", () => {
 		"::ffff:7f00:1",
 		"::ffff:a9fe:a9fe",
 		"64:ff9b::a9fe:a9fe",
+		"64:ff9b:1::a00:1",
+		"::ffff:0:a00:1",
+		"::ffff:0:808:808",
 		"2002:7f00:1::",
 		"not-an-ip",
 	])("refuses %s", (address) => {
