@@ -624,8 +624,14 @@ export async function listAssetChoices(principal: GeoPrincipal) {
 		.then((rows) => rows.map((row) => ({ ...row, validUntil: iso(row.validUntil) })));
 }
 
+const FORM_OVERHEAD_BYTES = 64 * 1024;
+
 /** The upload routes take the file and its metadata as one multipart form. */
 export async function readAssetUpload(request: Request): Promise<{ file: File; metadata: AssetMetadata }> {
+	const declared = Number(request.headers.get("Content-Length") ?? "0");
+	if (declared > GEO_KNOWLEDGE_UPLOAD_MAX_BYTES + FORM_OVERHEAD_BYTES) {
+		throw new GeoError("VALIDATION_ERROR", `文件不能超过 ${GEO_KNOWLEDGE_UPLOAD_MAX_BYTES / 1024 / 1024} MB`);
+	}
 	const form = await request.formData().catch(() => null);
 	const file = form?.get("file");
 	if (!form || !(file instanceof File)) throw new GeoError("VALIDATION_ERROR", "请选择要上传的文件");
