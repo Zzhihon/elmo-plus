@@ -8,10 +8,16 @@
 		"test": "vitest run"
 	},
 	"exports": {
-		".": "./src/index.ts"
+		".": "./src/index.ts",
+		"./evaluation": "./src/evaluation/index.ts",
+		"./queries": "./src/queries/index.ts",
+		"./pdf": "./src/pdf.ts"
 	},
 	"dependencies": {
 		"@workspace/geo-domain": "workspace:*",
+		"@workspace/geo-evidence": "workspace:*",
+		"@workspace/lib": "workspace:*",
+		"drizzle-orm": "catalog:",
 		"pdfkit": "^0.20.2"
 	},
 	"devDependencies": {
