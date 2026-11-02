@@ -29,7 +29,7 @@ import {
 	geoTaskEvents,
 	geoTaskEvidence,
 } from "../db/schema-geo";
-import { geoRetentionConfigs } from "./maintenance";
+import { findGeoApprovalTimeouts, geoRetentionConfigs } from "./maintenance";
 import { purgeExpiredGeoData } from "./retention";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -509,5 +509,36 @@ describe("retention purge", () => {
 			.from(geoAuditLogs)
 			.where(and(eq(geoAuditLogs.organizationId, organizationId), eq(geoAuditLogs.action, "retention.purge")));
 		expect(summaries).toHaveLength(3);
+	});
+});
+
+describe("approval timeouts", () => {
+	it("dates a task's review from when it entered that review, not from the epoch", async () => {
+		const organizationId = await createOrganization();
+		const [task] = await db
+			.insert(geoOptimizationTasks)
+			.values({
+				organizationId,
+				title: "补充选型指南",
+				kind: "FAQ",
+				state: "PENDING_TECH_REVIEW",
+				sourceKind: "MANUAL",
+				createdBy: "user-a",
+			})
+			.returning();
+		const entered = new Date();
+		await db.insert(geoTaskEvents).values({
+			organizationId,
+			taskId: task.id,
+			fromState: "IN_PROGRESS",
+			toState: "PENDING_TECH_REVIEW",
+			action: "SUBMIT_FOR_REVIEW",
+			actorId: "user-a",
+			createdAt: entered,
+		});
+
+		expect((await findGeoApprovalTimeouts(db, organizationId, entered)).tasks).toEqual([]);
+		const overdue = await findGeoApprovalTimeouts(db, organizationId, new Date(entered.getTime() + 73 * 3_600_000));
+		expect(overdue.tasks).toEqual([expect.objectContaining({ id: task.id, enteredAt: entered })]);
 	});
 });
