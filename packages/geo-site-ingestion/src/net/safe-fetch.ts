@@ -22,6 +22,7 @@ export const systemResolver: Resolver = async (hostname) => {
 export interface SafeFetchOptions {
 	/** Every hop, including the first, must stay on these hosts. */
 	allowedHosts: readonly string[];
+	allowedPorts?: readonly number[];
 	userAgent: string;
 	accept?: string;
 	maxBytes: number;
@@ -247,7 +248,7 @@ export async function safeFetch(input: string, options: SafeFetchOptions): Promi
 	});
 
 	try {
-		const first = checkUrl(current, redirectPolicyOf(options.allowedHosts));
+		const first = checkUrl(current, redirectPolicyOf(options.allowedHosts, options.allowedPorts));
 		if (!first.ok) return fail("URL_REFUSED", `网址被拒绝：${first.reason}`, { blockedReason: first.reason });
 
 		for (let hop = 0; ; hop++) {
@@ -260,7 +261,7 @@ export async function safeFetch(input: string, options: SafeFetchOptions): Promi
 			if (REDIRECT_STATUSES.has(status) && response.headers.location) {
 				response.resume();
 				const target = new URL(response.headers.location, url).toString();
-				const decision = checkUrl(target, redirectPolicyOf(options.allowedHosts));
+				const decision = checkUrl(target, redirectPolicyOf(options.allowedHosts, options.allowedPorts));
 				redirects.push({ from: current, to: decision.ok ? decision.url : target, status });
 				if (!decision.ok) {
 					return fail("REDIRECT_BLOCKED", `重定向目标被拒绝：${decision.reason}`, {

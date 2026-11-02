@@ -17,6 +17,8 @@ export type UrlDecision = { ok: true; url: string; host: string } | { ok: false;
 
 export interface UrlPolicy {
 	allowedHosts: readonly string[];
+	/** Non-default ports that are also acceptable. Empty in every real source. */
+	allowedPorts?: readonly number[];
 	include?: readonly string[];
 	exclude?: readonly string[];
 }
@@ -71,7 +73,13 @@ export function checkUrl(input: string, policy: UrlPolicy, base?: string): UrlDe
 	}
 	if (!ALLOWED_PROTOCOLS.has(parsed.protocol)) return { ok: false, reason: "PROTOCOL", url: input };
 	if (parsed.username || parsed.password) return { ok: false, reason: "CREDENTIALS", url: input };
-	if (parsed.port && parsed.port !== DEFAULT_PORTS[parsed.protocol]) return { ok: false, reason: "PORT", url: input };
+	if (
+		parsed.port &&
+		parsed.port !== DEFAULT_PORTS[parsed.protocol] &&
+		!policy.allowedPorts?.includes(Number(parsed.port))
+	) {
+		return { ok: false, reason: "PORT", url: input };
+	}
 	const host = normalizeHost(parsed.hostname);
 	if (isIP(host.replace(/^\[|\]$/g, ""))) return { ok: false, reason: "IP_LITERAL", url: input };
 	if (!isAllowedHost(host, policy.allowedHosts)) return { ok: false, reason: "HOST_NOT_ALLOWED", url: input };
@@ -94,6 +102,6 @@ export function urlPolicyOf(allowedHosts: readonly string[], profile: SiteProfil
 }
 
 /** For redirects: only the host allowlist and the hard rules apply, not the crawl scope patterns. */
-export function redirectPolicyOf(allowedHosts: readonly string[]): UrlPolicy {
-	return { allowedHosts };
+export function redirectPolicyOf(allowedHosts: readonly string[], allowedPorts?: readonly number[]): UrlPolicy {
+	return { allowedHosts, allowedPorts };
 }
