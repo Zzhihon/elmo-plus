@@ -20,11 +20,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDraft, recordPublication, reviseDraft, transitionDraft } from "@/server/geo/drafts-core";
 import {
 	attachAssetSource,
+	listKnowledgeAssets,
 	registerAssetClaim,
 	reviewKnowledgeAsset,
 	uploadKnowledgeAsset,
 } from "@/server/geo/knowledge-assets-core";
-import { listConflicts, resolveConflict, reviewClaim } from "@/server/geo/knowledge-core";
+import { listConflicts, resolveConflict, reviewClaim, searchEntities } from "@/server/geo/knowledge-core";
 import { createGeoOrganization, expectGeoError } from "@/test/integration/geo-fixtures";
 
 let objectRoot: string;
@@ -171,6 +172,15 @@ describe("knowledge review gates", () => {
 			.where(eq(geoKnowledgeAssertions.id, other.assertionId));
 		const [kept] = await db.select().from(geoKnowledgeAssertions).where(eq(geoKnowledgeAssertions.id, approvedFactId));
 		expect([candidate?.status, kept?.status]).toEqual(["REJECTED", "APPROVED"]);
+	});
+});
+
+describe("knowledge views", () => {
+	it("counts the claims each original backs and finds entities by name", async () => {
+		const { rows } = await listKnowledgeAssets(operator, {}, { page: 1, limit: 20, offset: 0 });
+		expect(rows).toEqual([expect.objectContaining({ id: assetId, claimCount: 3 })]);
+		const entities = await searchEntities(operator, { q: "KYN28" });
+		expect(entities).toEqual([expect.objectContaining({ id: entityId, pageCount: 0 })]);
 	});
 });
 

@@ -32,6 +32,7 @@ import {
 	listConflicts,
 	reviewClaim,
 	searchClaims,
+	searchEntities,
 } from "@/server/geo/knowledge-core";
 import {
 	createTasksFromFindings,
@@ -369,6 +370,8 @@ describe("crawling an authorized site", () => {
 		expect(JSON.stringify(detail)).toContain(`${BASE}products/kyn28`);
 		const overview = await knowledgeOverview(operator);
 		expect(overview).toBeTruthy();
+		const entities = await searchEntities(operator, { q: "KYN28" });
+		expect(entities).toEqual([expect.objectContaining({ title: "KYN28 高压开关柜", pageCount: 1 })]);
 	});
 
 	it("audits the stored pages after a crawl and turns a finding into a task", async () => {
