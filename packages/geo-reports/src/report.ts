@@ -9,7 +9,7 @@ import {
 } from "@workspace/geo-domain";
 import { toCsv } from "./csv";
 import type { Insights } from "./insights";
-import { type CompetitorRef, formatMetric, type MetricValue } from "./metrics";
+import { type CompetitorRef, type EqualWeightSummary, formatMetric, formatSummaryRate, type MetricValue } from "./metrics";
 
 export const GEO_REPORT_FORMAT = "elmo-geo-report/1";
 
@@ -89,10 +89,12 @@ function counted(value: MetricValue): string {
 	return `${formatMetric(value)}（${value.numerator}/${value.denominator}${value.lowSample ? "，样本量低" : ""}）`;
 }
 
-export function methodology(promptSet: ReportSnapshot["conditions"]["promptSet"]): string[] {
+export function methodology(promptSet: ReportSnapshot["conditions"]["promptSet"], crossMode = false): string[] {
 	return [
 		`测试样本为固定问法集合${promptSet ? `“${promptSet.name}” v${promptSet.version}` : ""}，不代表平台总体真实用户的提问分布。`,
-		"指标按平台与采样方式分别计算，不跨“用户界面实测 / 模型 API 代理评测 / 人工证据”聚合；跨平台数字仅为内部概览的等权平均。",
+		crossMode
+			? "指标按平台与采样方式分别计算；同一采样方式内的跨平台数字为内部概览的等权平均。本报告按发起人的明确选择附加了一项跨采样方式汇总，并已单独标注，它混合了不同口径，不能作为任何一种采样方式的结果引用。"
+			: "指标按平台与采样方式分别计算，不跨“用户界面实测 / 模型 API 代理评测 / 人工证据”聚合；同一采样方式内的跨平台数字仅为内部概览的等权平均。",
 		"有效样本只包含完整回答；被拒绝、限流、失败、不可用与截断的采样不计入任何比率的分母，也不会被算作“未提及”。重采样按同一计划位次去重。",
 		"品牌提及按当时生效的品牌词典版本做确定性别名匹配；推荐、负面判断由规则得出，模型判断只用于发现分歧，存疑结果进入人工复核，复核结论以新评估版本保存。",
 		"推荐率只计规则或人工确认的明确推荐；前三率只在可判定排序的回答中计算；错误描述率只计经技术审核证实的错误，无法核实的陈述标为待核实，不计为错误。",
@@ -264,6 +266,17 @@ export function reportCsv(snapshot: ReportSnapshot): string {
 			]);
 		}
 	}
+	const overviewRow = (mode: string, name: string, entry: EqualWeightSummary) =>
+		rows.push(["概览", null, mode, name, null, null, formatSummaryRate(entry.value), entry.note]);
+	for (const mode of snapshot.insights.overview.bySurfaceMode) {
+		overviewRow(GEO_SURFACE_MODE_LABELS[mode.surfaceMode], "品牌提及率（等权）", mode.mention);
+		overviewRow(GEO_SURFACE_MODE_LABELS[mode.surfaceMode], "推荐率（等权）", mode.recommendation);
+	}
+	const mixed = snapshot.insights.overview.crossMode;
+	if (mixed) {
+		overviewRow("跨采样方式", "品牌提及率（等权）", mixed.mention);
+		overviewRow("跨采样方式", "推荐率（等权）", mixed.recommendation);
+	}
 	for (const finding of snapshot.findings) rows.push(["发现", null, null, null, null, null, null, finding]);
 	for (const task of snapshot.tasks.executed) {
 		rows.push(["已执行任务", null, null, task.title, null, null, task.state, task.publishedUrl ?? ""]);
@@ -299,4 +312,6 @@ export interface ReportFilters {
 	promptSetId: string | null;
 	notes: string | null;
 	nextPlan: string[] | null;
+	/** Set only when the requester explicitly asked for the labelled summary across surface modes. */
+	crossModeSummary?: boolean;
 }

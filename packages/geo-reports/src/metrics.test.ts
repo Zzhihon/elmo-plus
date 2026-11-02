@@ -1,7 +1,7 @@
 import type { GeoObservationStatus, GeoRecommendation } from "@workspace/geo-domain";
 import { describe, expect, it } from "vitest";
 import { compareBatches } from "./compare";
-import { computeInsights } from "./insights";
+import { computeInsights, GEO_CROSS_MODE_NOTE } from "./insights";
 import {
 	computeCellMetrics,
 	equalWeightSummary,
@@ -283,9 +283,38 @@ describe("platforms are never pooled", () => {
 			"deepseek|MODEL_API",
 			"qwen|MANUAL_EVIDENCE",
 		]);
-		expect(insights.overview.mention).toMatchObject({ cellsIncluded: 2, cellsWithoutData: 1, weighting: "EQUAL" });
-		expect(insights.overview.mention.value).toMatchObject({ status: "OK", rate: 0.5 });
-		expect(equalWeightSummary([], (entry) => entry.mentionRate).value.status).toBe("NO_DATA");
+		const [api, manual] = insights.overview.bySurfaceMode.filter((mode) => mode.surfaceMode !== "LIVE_SURFACE");
+		expect(api?.mention).toMatchObject({ cellsIncluded: 1, cellsWithoutData: 0, weighting: "EQUAL" });
+		expect(api?.mention.value).toMatchObject({ status: "OK", rate: 1 });
+		expect(manual?.mention.value).toMatchObject({ status: "OK", rate: 0 });
+		expect(equalWeightSummary([], (entry) => entry.mentionRate, "").value.status).toBe("NO_DATA");
+	});
+
+	it("gives no figure across surface modes unless it is explicitly asked for, and labels it then", () => {
+		const input = {
+			samples: [sample({ evaluation: mentioned }), sample({ platform: "qwen", surfaceMode: "MANUAL_EVIDENCE" })],
+			slots: [],
+			competitors: [],
+		};
+		expect(computeInsights(input).overview.crossMode).toBeNull();
+		const mixed = computeInsights({ ...input, crossMode: true }).overview.crossMode;
+		expect(mixed?.mention.value).toMatchObject({ status: "OK", rate: 0.5 });
+		expect(mixed?.mention.note).toBe(GEO_CROSS_MODE_NOTE);
+	});
+
+	it("averages the platforms of one surface mode without claiming counts that would not give that rate", () => {
+		const insights = computeInsights({
+			samples: [
+				sample({ evaluation: mentioned }),
+				sample({ platform: "qwen" }),
+				sample({ platform: "qwen" }),
+				sample({ platform: "qwen" }),
+			],
+			slots: [],
+			competitors: [],
+		});
+		const [mode] = insights.overview.bySurfaceMode;
+		expect(mode?.mention.value).toEqual({ status: "OK", rate: 0.5, lowSample: true });
 	});
 });
 

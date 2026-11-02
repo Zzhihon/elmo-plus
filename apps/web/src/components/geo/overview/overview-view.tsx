@@ -1,13 +1,15 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { GEO_SURFACE_MODE_LABELS } from "@workspace/geo-domain";
 import { buttonVariants } from "@workspace/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card";
+import { Checkbox } from "@workspace/ui/components/checkbox";
 import { Skeleton } from "@workspace/ui/components/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { GeoConditionsBar } from "@/components/geo/insights/conditions-bar";
-import { EvidenceLink, MetricFigure } from "@/components/geo/insights/metric-figure";
+import { EvidenceLink, SummaryFigure } from "@/components/geo/insights/metric-figure";
 import { GeoGapList } from "@/components/geo/insights/question-matrix";
 import { insightKeys } from "@/components/geo/insights/search";
 import { GeoTrendChart } from "@/components/geo/insights/trend-chart";
@@ -46,9 +48,11 @@ function PendingRow({ label, value }: { label: string; value: number }) {
 export function GeoOverviewView() {
 	const organization = useGeoOrganization();
 	const [poolPage, setPoolPage] = useState(1);
+	const [crossMode, setCrossMode] = useState(false);
 	const overview = useQuery({
-		queryKey: insightKeys.overview(organization.id),
-		queryFn: () => getOverviewFn({ data: { organizationId: organization.id } }),
+		queryKey: insightKeys.overview(organization.id, crossMode),
+		queryFn: () => getOverviewFn({ data: { organizationId: organization.id, crossMode } }),
+		placeholderData: keepPreviousData,
 	});
 	if (overview.error) return <p className="text-sm text-destructive">{overview.error.message}</p>;
 	if (!overview.data) return <Skeleton className="h-96 w-full" />;
@@ -60,23 +64,46 @@ export function GeoOverviewView() {
 			<GeoConditionsBar meta={meta} />
 			{insights.noData && <GeoNoDataNotice />}
 
-			<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-				<Stat title="品牌提及率（内部概览）" footer={insights.overview.mention.note}>
-					<MetricFigure value={insights.overview.mention.value} size="lg" />
-				</Stat>
-				<Stat title="推荐率（内部概览）" footer="仅计规则或人工确认的明确推荐，等权平均。">
-					<MetricFigure value={insights.overview.recommendation.value} size="lg" />
-				</Stat>
-				<Stat
-					title="有效样本"
-					footer={`计划 ${insights.totals.planned} 次 · 待评估 ${insights.totals.pendingEvaluation}`}
-				>
-					<span className="text-2xl font-semibold tabular-nums">{insights.totals.valid}</span>
-				</Stat>
+			{insights.overview.bySurfaceMode.map((mode) => (
+				<section key={mode.surfaceMode} className="flex flex-col gap-3">
+					<h2 className="text-lg font-semibold">{GEO_SURFACE_MODE_LABELS[mode.surfaceMode]}</h2>
+					<div className="grid gap-4 sm:grid-cols-3">
+						<Stat title="品牌提及率（内部概览）" footer={mode.mention.note}>
+							<SummaryFigure value={mode.mention.value} />
+						</Stat>
+						<Stat title="推荐率（内部概览）" footer="仅计规则或人工确认的明确推荐，同一采样方式内跨平台等权平均。">
+							<SummaryFigure value={mode.recommendation.value} />
+						</Stat>
+						<Stat title="有效样本" footer={`计划 ${mode.planned} 次 · 待评估 ${mode.pendingEvaluation}`}>
+							<span className="text-2xl font-semibold tabular-nums">{mode.valid}</span>
+						</Stat>
+					</div>
+				</section>
+			))}
+
+			<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
 				<Stat title="P0 缺口" footer="最新一轮中三次有效采样里提及不足两次的 P0 问法 × 平台">
 					<span className="text-2xl font-semibold tabular-nums">{p0Gaps.length}</span>
 				</Stat>
+				{insights.overview.crossMode && (
+					<>
+						<Stat title="品牌提及率（跨采样方式汇总）" footer={insights.overview.crossMode.mention.note}>
+							<SummaryFigure value={insights.overview.crossMode.mention.value} />
+						</Stat>
+						<Stat title="推荐率（跨采样方式汇总）" footer={insights.overview.crossMode.recommendation.note}>
+							<SummaryFigure value={insights.overview.crossMode.recommendation.value} />
+						</Stat>
+					</>
+				)}
 			</div>
+			<label className="flex items-center gap-2 text-sm text-muted-foreground" htmlFor="overview-cross-mode">
+				<Checkbox
+					id="overview-cross-mode"
+					checked={crossMode}
+					onCheckedChange={(checked) => setCrossMode(checked === true)}
+				/>
+				显示跨采样方式汇总（混合不同口径，仅供内部参考）
+			</label>
 
 			<section className="flex flex-col gap-3">
 				<div className="flex items-center justify-between">
@@ -195,7 +222,7 @@ export function GeoOverviewView() {
 			<p className="text-xs text-muted-foreground">
 				统计口径：
 				{meta.promptSet ? `固定问法集“${meta.promptSet.name}” v${meta.promptSet.version}` : "当前窗口无问法集样本"}
-				，指标默认按平台与采样方式分开计算；概览中的跨平台数字为等权平均，仅供内部参考。测试样本为固定问法集合，不代表平台真实用户分布。
+				，指标默认按平台与采样方式分开计算，不跨采样方式汇总；概览中同一采样方式内的跨平台数字为等权平均，仅供内部参考。测试样本为固定问法集合，不代表平台真实用户分布。
 			</p>
 		</div>
 	);
