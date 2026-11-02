@@ -3,6 +3,7 @@ export * from "./assertion-state";
 export * from "./brand-dictionary";
 export * from "./enums";
 export * from "./errors";
+export * from "./evaluation";
 export * from "./labels";
 export * from "./permissions";
 export * from "./principal";
