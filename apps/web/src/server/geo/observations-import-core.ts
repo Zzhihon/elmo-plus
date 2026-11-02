@@ -56,6 +56,10 @@ export type ManualImportResult =
 	  }
 	| { ok: false; code: "EVIDENCE_REQUIRED" | "VALIDATION_ERROR"; message: string; errors: ManualRowError[] };
 
+type ImportOutcome =
+	| { rejected: ManualRowError[] }
+	| { created: { id: string; status: ManualImportRow["status"] }[]; skippedRows: number[] };
+
 function rejected(errors: ManualRowError[]): ManualImportResult {
 	const code = manualImportErrorCode(errors);
 	return {
@@ -272,7 +276,7 @@ export async function importManualObservations(
 		return { row, prompt, target, fingerprint, evidence: evidence.resolved.get(row.row) as EvidencePointer };
 	});
 
-	const result = await db.transaction(async (tx) => {
+	const result = await db.transaction(async (tx): Promise<ImportOutcome> => {
 		// Nothing unique backs the fingerprint, so a double submit must queue behind the first import.
 		await tx.execute(
 			sql`select pg_advisory_xact_lock(hashtextextended(${`geo-manual-import:${principal.organizationId}`}, 0))`,

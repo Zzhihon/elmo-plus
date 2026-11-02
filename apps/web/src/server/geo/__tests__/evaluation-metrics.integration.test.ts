@@ -49,17 +49,15 @@ interface Judged {
 
 /** A first, automated evaluation of one answer, as the evaluation job stores it. */
 async function insertEvaluation(observationId: string, judged: Judged): Promise<string> {
-	const competitorHits = judged.competitor
-		? [
-				{
-					entityId: competitorId,
-					name: "样板开关",
-					mentioned: true,
-					recommendation: "MENTIONED_ONLY" as const,
-					rank: 2,
-				},
-			]
-		: [];
+	const competitorHits = [
+		{
+			entityId: competitorId,
+			name: "样板开关",
+			mentioned: judged.competitor === true,
+			recommendation: judged.competitor ? ("MENTIONED_ONLY" as const) : ("NOT_MENTIONED" as const),
+			rank: judged.competitor ? 2 : null,
+		},
+	];
 	const citationAttribution = judged.ownCitation
 		? [
 				{

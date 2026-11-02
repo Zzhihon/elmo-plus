@@ -16,6 +16,8 @@ export type UrlRefusal =
 export type UrlDecision = { ok: true; url: string; host: string } | { ok: false; reason: UrlRefusal; url: string };
 
 export interface UrlPolicy {
+	/** For API endpoints, which legitimately sit under paths such as /api; the crawler never sets it. */
+	allowSensitivePaths?: boolean;
 	allowedHosts: readonly string[];
 	/** Non-default ports that are also acceptable. Empty in every real source. */
 	allowedPorts?: readonly number[];
