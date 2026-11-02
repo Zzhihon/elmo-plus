@@ -109,7 +109,7 @@ export interface ApiHandlerMeta {
 	adminOnly: boolean;
 }
 
-function brand<T extends object>(handler: T, meta: ApiHandlerMeta): T {
+export function stampApiHandler<T extends object>(handler: T, meta: ApiHandlerMeta): T {
 	Object.defineProperty(handler, API_HANDLER, {
 		value: Object.freeze(meta),
 		enumerable: false,
@@ -175,7 +175,7 @@ export function createApiHandler<P = Record<string, string>, B = undefined>(opts
 		}
 	};
 
-	return brand(handler, {
+	return stampApiHandler(handler, {
 		kind: "endpoint",
 		scopes: opts.scopes ?? [],
 		adminOnly: opts.adminOnly === true,
@@ -193,7 +193,7 @@ export function withMethodGuard<T extends Record<string, unknown>>(handlers: T):
 	const guarded: Record<string, unknown> = { ...handlers };
 	for (const method of ALL_METHODS) {
 		if (method in handlers) continue;
-		guarded[method] = brand(
+		guarded[method] = stampApiHandler(
 			async () =>
 				Response.json(
 					{
