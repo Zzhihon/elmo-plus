@@ -15,8 +15,9 @@ import {
 } from "@workspace/lib/db/schema";
 import { and, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { getObservationReview, submitObservationReview } from "@/server/geo/evaluation-core";
-import { getInsights } from "@/server/geo/metrics-core";
+import { getObservationReview, listReviewPool, submitObservationReview } from "@/server/geo/evaluation-core";
+import { getInsights, getOverview, listClaimIssues } from "@/server/geo/metrics-core";
+import { getObservation, listObservations } from "@/server/geo/observations-core";
 import { createBrand } from "@/server/geo/profile-core";
 import {
 	createPrompt,
@@ -236,6 +237,27 @@ beforeAll(async () => {
 	await claim("p2a", "UNVERIFIED", "MISMATCH");
 });
 
+describe("review pool", () => {
+	it("lists the evaluation waiting for a person with the claim that disagrees with approved knowledge", async () => {
+		const { rows, total } = await listReviewPool(marketing, {}, { page: 1, limit: 20, offset: 0 });
+		expect(total).toBe(1);
+		expect(rows[0]).toMatchObject({
+			observationId: ids.p2a,
+			reviewReasons: ["LOW_CONFIDENCE"],
+			pendingClaims: 1,
+		});
+		const filtered = await listReviewPool(marketing, { reason: "CLAIM_MISMATCH" }, { page: 1, limit: 20, offset: 0 });
+		expect(filtered.total).toBe(0);
+		const overview = await getOverview(operator);
+		expect(overview.pending.reviewPool).toBe(1);
+		expect(overview.recent.cells.find((cell) => cell.platform === "deepseek")).toMatchObject({
+			total: 7,
+			valid: 5,
+			evaluated: 5,
+		});
+	});
+});
+
 describe("observation review", () => {
 	it("appends a new current version for a confirmation and keeps the original", async () => {
 		const evaluationId = ids["p2a:evaluation"];
@@ -366,6 +388,26 @@ describe("metrics on stored evidence", () => {
 		expect(qwen?.citations.status).toBe("NOT_PROVIDED");
 
 		expect(insights.totals).toMatchObject({ planned: 9, valid: 5, evaluated: 5 });
+	});
+
+	it("lists confirmed errors before unreviewed mismatches, and the evidence behind them", async () => {
+		const issues = await listClaimIssues(operator, { promptSetId });
+		expect(issues.map((issue) => [issue.observationId, issue.verdict])).toEqual([
+			[ids.p1a, "ERROR"],
+			[ids.p2a, "UNVERIFIED"],
+		]);
+		const { rows, total } = await listObservations(
+			operator,
+			{ promptSetId, platform: "deepseek" },
+			{ page: 1, limit: 50, offset: 0 },
+		);
+		expect(total).toBe(7);
+		expect(rows.find((row) => row.id === ids.p2a)?.evaluation).toMatchObject({
+			reviewStatus: "CONFIRMED",
+			recommendation: "RECOMMENDED",
+		});
+		const detail = await getObservation(operator, ids["p2b-retry"]);
+		expect(detail).toMatchObject({ id: ids["p2b-retry"], status: "VALID" });
 	});
 
 	it("reads only the current evaluation after a review", async () => {
