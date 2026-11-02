@@ -912,6 +912,11 @@ CREATE UNIQUE INDEX "geo_task_evidence_task_assertion_idx" ON "geo_task_evidence
 CREATE INDEX "geo_task_evidence_observation_idx" ON "geo_task_evidence" USING btree ("observation_id");--> statement-breakpoint
 CREATE FUNCTION "geo_append_only"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
+	-- Only the retention purge may delete, and only inside a transaction that set
+	-- geo.retention_purge with SET LOCAL. UPDATE is refused unconditionally.
+	IF TG_OP = 'DELETE' AND current_setting('geo.retention_purge', true) = 'on' THEN
+		RETURN OLD;
+	END IF;
 	RAISE EXCEPTION '% is append-only', TG_TABLE_NAME;
 END;
 $$;--> statement-breakpoint
