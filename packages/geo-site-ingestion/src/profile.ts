@@ -1,5 +1,6 @@
 import { GEO_SITE_ENTITY_KINDS } from "@workspace/geo-domain";
 import { z } from "zod";
+import { siteAuditConfigSchema } from "./audit/config";
 
 /** Bumped whenever the generic parsing code changes what it extracts from the same HTML. */
 export const CORE_PARSER_VERSION = "1";
@@ -143,6 +144,8 @@ export const siteProfileSchema = z.object({
 			reviewSlaDays: z.number().int().min(1).max(90).default(5),
 		})
 		.default({ parseSuccessMin: 0.9, sectionDropRatio: 0.5, blockedResponseRatio: 0.2, reviewSlaDays: 5 }),
+	/** Thresholds and keywords for the site audit; see `audit/config.ts`. */
+	audit: siteAuditConfigSchema.optional(),
 });
 export type SiteProfile = z.infer<typeof siteProfileSchema>;
 export type SiteProfileInput = z.input<typeof siteProfileSchema>;
