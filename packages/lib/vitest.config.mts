@@ -18,6 +18,8 @@ export default defineConfig({
 					name: "integration",
 					include: ["src/**/*.integration.test.ts"],
 					globalSetup: ["src/test/integration/global-setup.ts"],
+					// The rollups file truncates organizations, which cascades into every other file's rows.
+					fileParallelism: false,
 					// Its own variable rather than DATABASE_URL, which in a dev checkout
 					// points at data these tests would write into.
 					env: { DATABASE_URL: process.env.TEST_DATABASE_URL ?? "" },
