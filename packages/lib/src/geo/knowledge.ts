@@ -13,7 +13,7 @@ import {
 	hasValidOriginalDocument,
 	isLiveSource,
 } from "@workspace/geo-domain";
-import { and, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
+import { and, eq, getTableName, inArray, isNotNull, or, sql } from "drizzle-orm";
 import type { DbConnection } from "../db/db-connection";
 import {
 	geoAssertionConflicts,
@@ -94,6 +94,9 @@ export async function loadFactStates(
 	const states = new Map<string, GeoFactState>();
 	if (assertionIds.length === 0) return states;
 	const ids = [...new Set(assertionIds)];
+	// Spelled out because drizzle drops the table name from columns in a single-table
+	// selection, which would leave the subquery comparing a conflict's ids with its own id.
+	const assertionId = sql`${sql.identifier(getTableName(geoKnowledgeAssertions))}.${sql.identifier(geoKnowledgeAssertions.id.name)}`;
 	const rows = await db
 		.select({
 			id: geoKnowledgeAssertions.id,
@@ -104,8 +107,8 @@ export async function loadFactStates(
 			openConflicts: sql<number>`(
 				select count(*)::int from ${geoAssertionConflicts}
 				where ${geoAssertionConflicts.status} = 'OPEN'
-				and (${geoAssertionConflicts.approvedId} = ${geoKnowledgeAssertions.id}
-					or ${geoAssertionConflicts.candidateId} = ${geoKnowledgeAssertions.id})
+				and (${geoAssertionConflicts.approvedId} = ${assertionId}
+					or ${geoAssertionConflicts.candidateId} = ${assertionId})
 			)`,
 		})
 		.from(geoKnowledgeAssertions)
