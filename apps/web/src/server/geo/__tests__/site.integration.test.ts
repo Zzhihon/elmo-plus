@@ -26,9 +26,33 @@ import {
 } from "@workspace/lib/db/schema";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { listConflicts, reviewClaim } from "@/server/geo/knowledge-core";
-import { createTasksFromFindings } from "@/server/geo/site-audit-core";
-import { createSite, getKeyUrlCoverage, listSitePages, setKeyUrls } from "@/server/geo/site-core";
+import {
+	getClaimDetail,
+	knowledgeOverview,
+	listConflicts,
+	reviewClaim,
+	searchClaims,
+} from "@/server/geo/knowledge-core";
+import {
+	createTasksFromFindings,
+	getSiteAuditFinding,
+	getSiteAuditOverview,
+	listSiteAuditFindingGroups,
+	listSiteAuditFindings,
+} from "@/server/geo/site-audit-core";
+import {
+	createQaSample,
+	createSite,
+	getKeyUrlCoverage,
+	getPageVersion,
+	getQaSample,
+	getSite,
+	getSitePage,
+	getSnapshotForViewing,
+	labelQaItem,
+	listSitePages,
+	setKeyUrls,
+} from "@/server/geo/site-core";
 import { createGeoOrganization } from "@/test/integration/geo-fixtures";
 
 const HOST = `site-${randomUUID().slice(0, 8)}.example-electric.test`;
@@ -177,6 +201,7 @@ async function voltageAssertions() {
 
 beforeAll(async () => {
 	objectRoot = await mkdtemp(path.join(tmpdir(), "geo-site-objects-"));
+	process.env.GEO_OBJECT_STORE_URL = `file://${objectRoot}`;
 	await startFakeSite();
 	deps = {
 		db,
@@ -314,7 +339,51 @@ describe("crawling an authorized site", () => {
 		expect(coverage).toMatchObject({ covered: 1 });
 	});
 
+	it("shows a page's versions, the diff between them, its snapshot and a QA spot check", async () => {
+		const product = await pageByPath("products/kyn28");
+		const detail = await getSitePage(operator, product.id);
+		expect(detail.versions).toHaveLength(2);
+		expect(detail.assertions.map((row) => row.claimText).sort()).toEqual([
+			"KYN28 高压开关柜｜额定电压：12kV",
+			"KYN28 高压开关柜｜额定电压：24kV",
+		]);
+		const [newest, older] = detail.versions;
+		const version = await getPageVersion(operator, product.id, newest.id);
+		expect(version.compareTo?.id).toBe(older.id);
+		expect(JSON.stringify(version.diff)).toContain("24kV");
+		const snapshot = await getSnapshotForViewing(operator, newest.id);
+		expect(JSON.stringify(snapshot)).toContain("24kV");
+
+		const site = await getSite(operator, siteId);
+		expect(site.metrics.parse.versions).toBeGreaterThanOrEqual(4);
+		const sample = await createQaSample(operator, siteId, 30);
+		const qa = await getQaSample(operator, sample.id);
+		expect(qa.items.length).toBeGreaterThan(0);
+		await labelQaItem(operator, qa.items[0].id, { verdict: "CORRECT" });
+	});
+
+	it("finds facts by Chinese keyword and shows where each came from", async () => {
+		const { rows } = await searchClaims(operator, { q: "开关柜" }, { page: 1, limit: 20, offset: 0 });
+		expect(rows.length).toBe(2);
+		const detail = await getClaimDetail(operator, rows[0].id);
+		expect(JSON.stringify(detail)).toContain(`${BASE}products/kyn28`);
+		const overview = await knowledgeOverview(operator);
+		expect(overview).toBeTruthy();
+	});
+
 	it("audits the stored pages after a crawl and turns a finding into a task", async () => {
+		const overview = await getSiteAuditOverview(operator, siteId);
+		expect(overview).toBeTruthy();
+		const listed = await listSiteAuditFindings(operator, { siteSourceId: siteId }, { page: 1, limit: 50, offset: 0 });
+		expect(listed.total).toBeGreaterThan(0);
+		const groups = await listSiteAuditFindingGroups(
+			operator,
+			{ siteSourceId: siteId },
+			{ page: 1, limit: 50, offset: 0 },
+		);
+		expect(groups.total).toBeGreaterThan(0);
+		await getSiteAuditFinding(operator, listed.rows[0].id);
+
 		const findings = await db
 			.select()
 			.from(geoSiteAuditFindings)
