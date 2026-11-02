@@ -128,6 +128,8 @@ async function main() {
 	if (isGeoWorkspaceEnabled()) {
 		const { createGeoQueues } = await import("./jobs/geo/index.js");
 		await createGeoQueues(boss);
+		const { runGeoBootstrapAtStartup } = await import("./jobs/geo/profile.js");
+		await runGeoBootstrapAtStartup();
 	}
 	console.log("Queues created");
 
