@@ -76,9 +76,10 @@ function streamToClamd(body: Uint8Array, config: ClamdConfig): Promise<string> {
 			finish(new ScanUnavailableError("clamd did not answer in time")),
 		);
 		socket.on("error", (error) => finish(new ScanUnavailableError("clamd is unreachable", { cause: error })));
-		socket.on("data", (data) => {
-			chunks.push(data);
-			if (data.includes(0)) finish(null, Buffer.concat(chunks).toString("utf8"));
+		socket.on("data", (data: Buffer | string) => {
+			const chunk = typeof data === "string" ? Buffer.from(data) : data;
+			chunks.push(chunk);
+			if (chunk.includes(0)) finish(null, Buffer.concat(chunks).toString("utf8"));
 		});
 		socket.on("end", () => finish(null, Buffer.concat(chunks).toString("utf8")));
 		socket.connect(config.port, config.host, () => {

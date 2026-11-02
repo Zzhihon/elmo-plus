@@ -13,8 +13,8 @@ afterEach(async () => {
 async function fakeClamd(reply: (body: Buffer) => string): Promise<number> {
 	server = createServer((socket) => {
 		let buffer = Buffer.alloc(0);
-		socket.on("data", (data) => {
-			buffer = Buffer.concat([buffer, data]);
+		socket.on("data", (data: Buffer | string) => {
+			buffer = Buffer.concat([buffer, typeof data === "string" ? Buffer.from(data) : data]);
 			const command = Buffer.from("zINSTREAM\0");
 			if (buffer.length < command.length) return;
 			const parts: Buffer[] = [];
