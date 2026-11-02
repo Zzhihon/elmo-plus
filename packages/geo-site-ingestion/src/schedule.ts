@@ -17,25 +17,25 @@ const RANGES: Array<[number, number]> = [
 	[0, 7],
 ];
 
-function parseField(spec: string, [min, max]: [number, number]): CronField {
+function rangeOf(range: string, hasStep: boolean, [min, max]: [number, number]): [number, number] {
+	if (range === "*") return [min, max];
+	if (range.includes("-")) {
+		const [from, to] = range.split("-").map(Number);
+		return [from, to];
+	}
+	const from = Number(range);
+	return [from, hasStep ? max : from];
+}
+
+function parseField(spec: string, bounds: [number, number]): CronField {
 	if (spec === "*") return { values: new Set(), any: true };
 	const values = new Set<number>();
 	for (const part of spec.split(",")) {
 		const [range, stepText] = part.split("/");
 		const step = stepText === undefined ? 1 : Number(stepText);
 		if (!Number.isInteger(step) || step < 1) throw new Error(`无效的步长：${part}`);
-		let from: number;
-		let to: number;
-		if (range === "*") {
-			from = min;
-			to = max;
-		} else if (range.includes("-")) {
-			[from, to] = range.split("-").map(Number);
-		} else {
-			from = Number(range);
-			to = stepText === undefined ? from : max;
-		}
-		if (!Number.isInteger(from) || !Number.isInteger(to) || from < min || to > max || from > to) {
+		const [from, to] = rangeOf(range, stepText !== undefined, bounds);
+		if (!Number.isInteger(from) || !Number.isInteger(to) || from < bounds[0] || to > bounds[1] || from > to) {
 			throw new Error(`超出范围：${part}`);
 		}
 		for (let value = from; value <= to; value += step) values.add(value);

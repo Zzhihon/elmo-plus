@@ -3,7 +3,8 @@ import * as cheerio from "cheerio";
 import type { DiscoveredLink, DiscoveredLinkKind, PageDiscovery, SiteDiscoveryAdapter } from "./contracts";
 import type { SiteCategory, SiteProfile } from "./profile";
 
-const PAGINATION_TEXT = /^(\d{1,4}|下一页|上一页|首页|尾页|末页|下页|上页|next|prev|previous|last|first|»|«|>|<|>>|<<)$/i;
+const PAGINATION_TEXT =
+	/^(\d{1,4}|下一页|上一页|首页|尾页|末页|下页|上页|next|prev|previous|last|first|»|«|>|<|>>|<<)$/i;
 const PAGINATION_CONTAINER = /(^|[\s_-])(page|pages|pager|pagination|paging|page_list|pagelist)([\s_-]|$)/i;
 
 function cleanText(value: string): string {
@@ -51,6 +52,40 @@ export function categoryOf(url: string, profile: SiteProfile, $?: cheerio.Cheeri
 	return null;
 }
 
+type Selection = ReturnType<cheerio.CheerioAPI>;
+
+function linkKind(
+	$: cheerio.CheerioAPI,
+	$element: Selection,
+	url: string,
+	rel: string[],
+	text: string,
+	profile: SiteProfile,
+): DiscoveredLinkKind {
+	if (isAssetUrl(url, profile)) return "ASSET";
+	if (isPaginationUrl(url, profile) || rel.includes("next") || rel.includes("prev")) return "PAGINATION";
+	const inPager = $element
+		.parents()
+		.toArray()
+		.some((parent) => PAGINATION_CONTAINER.test($(parent).attr("class") ?? ""));
+	return inPager && PAGINATION_TEXT.test(text) ? "PAGINATION" : "PAGE";
+}
+
+function anchorLink(
+	$: cheerio.CheerioAPI,
+	$element: Selection,
+	baseUrl: string,
+	profile: SiteProfile,
+): DiscoveredLink | null {
+	const href = ($element.attr("href") ?? "").trim();
+	if (!href || href.startsWith("#") || /^(javascript|mailto|tel|data|sms):/i.test(href)) return null;
+	const url = normalizeUrl(href, baseUrl);
+	if (!url) return null;
+	const rel = ($element.attr("rel") ?? "").toLowerCase().split(/\s+/);
+	const text = cleanText($element.text()).slice(0, 120);
+	return { url, kind: linkKind($, $element, url, rel, text, profile), nofollow: rel.includes("nofollow"), text };
+}
+
 export const siteDiscovery: SiteDiscoveryAdapter = {
 	discover(html, pageUrl, profile) {
 		const $ = cheerio.load(html);
@@ -62,27 +97,10 @@ export const siteDiscovery: SiteDiscoveryAdapter = {
 
 		const seen = new Map<string, DiscoveredLink>();
 		$("a[href], area[href]").each((_, element) => {
-			const $element = $(element);
-			const href = ($element.attr("href") ?? "").trim();
-			if (!href || href.startsWith("#") || /^(javascript|mailto|tel|data|sms):/i.test(href)) return;
-			const url = normalizeUrl(href, baseUrl);
-			if (!url) return;
-			const rel = ($element.attr("rel") ?? "").toLowerCase().split(/\s+/);
-			const text = cleanText($element.text()).slice(0, 120);
-			const inPager = $element.parents().toArray().some((parent) => PAGINATION_CONTAINER.test($(parent).attr("class") ?? ""));
-			let kind: DiscoveredLinkKind = "PAGE";
-			if (isAssetUrl(url, profile)) kind = "ASSET";
-			else if (
-				isPaginationUrl(url, profile) ||
-				rel.includes("next") ||
-				rel.includes("prev") ||
-				(inPager && PAGINATION_TEXT.test(text))
-			) {
-				kind = "PAGINATION";
-			}
-			const link: DiscoveredLink = { url, kind, nofollow: rel.includes("nofollow"), text };
-			const existing = seen.get(url);
-			if (!existing || (existing.nofollow && !link.nofollow)) seen.set(url, link);
+			const link = anchorLink($, $(element), baseUrl, profile);
+			if (!link) return;
+			const existing = seen.get(link.url);
+			if (!existing || (existing.nofollow && !link.nofollow)) seen.set(link.url, link);
 		});
 		$('link[rel~="next" i][href], link[rel~="prev" i][href]').each((_, element) => {
 			const url = normalizeUrl($(element).attr("href") ?? "", baseUrl);

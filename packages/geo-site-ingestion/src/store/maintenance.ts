@@ -111,7 +111,12 @@ async function evaluateStandingAlerts(deps: SiteJobDeps, now: Date): Promise<voi
 			{
 				kind: "site.parse_rate",
 				severity: "WARNING",
-				context: { siteSourceId: source.id, versions: parse?.versions, failed: parse?.failed, threshold: profile.alerts.parseSuccessMin },
+				context: {
+					siteSourceId: source.id,
+					versions: parse?.versions,
+					failed: parse?.failed,
+					threshold: profile.alerts.parseSuccessMin,
+				},
 			},
 		);
 		const staleSince = new Date(now.getTime() - 48 * 60 * 60 * 1000);
@@ -223,4 +228,3 @@ export async function tickSiteSchedules(deps: SiteJobDeps): Promise<SiteTickResu
 	await evaluateStandingAlerts(deps, now);
 	return { scheduled, ...recovered };
 }
-

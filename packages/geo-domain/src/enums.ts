@@ -153,7 +153,15 @@ export const GEO_CRAWL_ITEM_OUTCOMES = [
 ] as const;
 export type GeoCrawlItemOutcome = (typeof GEO_CRAWL_ITEM_OUTCOMES)[number];
 
-export const GEO_CRAWL_ITEM_SOURCES = ["SEED", "SITEMAP", "KNOWN", "LINK", "PAGINATION", "CANONICAL", "REDIRECT"] as const;
+export const GEO_CRAWL_ITEM_SOURCES = [
+	"SEED",
+	"SITEMAP",
+	"KNOWN",
+	"LINK",
+	"PAGINATION",
+	"CANONICAL",
+	"REDIRECT",
+] as const;
 export type GeoCrawlItemSource = (typeof GEO_CRAWL_ITEM_SOURCES)[number];
 
 export const GEO_SITE_QA_SAMPLE_STATUSES = ["OPEN", "COMPLETED"] as const;

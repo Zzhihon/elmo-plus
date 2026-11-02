@@ -1,9 +1,15 @@
-import { type GeoCrawlItemOutcome, type GeoCrawlStatus, geoSystemPrincipal } from "@workspace/geo-domain";
+import {
+	type GeoCrawlItemOutcome,
+	type GeoCrawlItemStatus,
+	type GeoCrawlStatus,
+	geoSystemPrincipal,
+} from "@workspace/geo-domain";
 import type { DbConnection } from "@workspace/lib/db/db-connection";
 import { geoSiteCrawlItems, geoSiteCrawlRuns, geoSitePages, geoSiteSources } from "@workspace/lib/db/schema";
 import { raiseGeoAlert, resolveGeoAlert } from "@workspace/lib/geo/alerts";
 import { writeGeoAudit } from "@workspace/lib/geo/audit";
 import { and, count, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import type { SiteProfile } from "../profile";
 import type { SiteJobDeps } from "./deps";
 import { keyUrlCoverageOf } from "./metrics";
 import { loadProfileVersion, profileOfSource } from "./sources";
@@ -33,6 +39,63 @@ export interface CrawlRunSummary {
 	sections: Record<string, number>;
 }
 
+function roundOrNull(value: number | null | undefined): number | null {
+	return value === null || value === undefined ? null : Math.round(Number(value));
+}
+
+function emptySummary(sectionRows: Array<{ category: string | null; pages: number }>): CrawlRunSummary {
+	return {
+		total: 0,
+		queued: 0,
+		done: 0,
+		failed: 0,
+		skipped: 0,
+		outcomes: {},
+		requests: 0,
+		succeeded: 0,
+		newVersions: 0,
+		unchanged: 0,
+		duplicates: 0,
+		gone: 0,
+		status403: 0,
+		status429: 0,
+		p50Ms: null,
+		p95Ms: null,
+		successRate: null,
+		unchangedRate: null,
+		sections: Object.fromEntries(sectionRows.map((row) => [row.category ?? "uncategorized", row.pages])),
+	};
+}
+
+const STATUS_BUCKET: Partial<Record<GeoCrawlItemStatus, "queued" | "done" | "failed" | "skipped">> = {
+	QUEUED: "queued",
+	FETCHING: "queued",
+	DONE: "done",
+	FAILED: "failed",
+	SKIPPED: "skipped",
+};
+
+function tally(
+	summary: CrawlRunSummary,
+	grouped: Array<{ status: GeoCrawlItemStatus; outcome: GeoCrawlItemOutcome | null; items: number; attempts: number }>,
+): void {
+	for (const row of grouped) {
+		summary.total += row.items;
+		summary.requests += Number(row.attempts);
+		const bucket = STATUS_BUCKET[row.status];
+		if (bucket) summary[bucket] += row.items;
+		if (row.outcome) summary.outcomes[row.outcome] = (summary.outcomes[row.outcome] ?? 0) + row.items;
+	}
+	summary.newVersions = summary.outcomes.NEW_VERSION ?? 0;
+	summary.unchanged = summary.outcomes.UNCHANGED ?? 0;
+	summary.duplicates = summary.outcomes.DUPLICATE ?? 0;
+	summary.gone = summary.outcomes.GONE ?? 0;
+	summary.succeeded = summary.newVersions + summary.unchanged + summary.duplicates;
+	const attempted = summary.succeeded + summary.failed + summary.gone;
+	summary.successRate = attempted === 0 ? null : summary.succeeded / attempted;
+	summary.unchangedRate = summary.succeeded === 0 ? null : summary.unchanged / summary.succeeded;
+}
+
 export async function summarizeCrawlRun(db: DbConnection, runId: string): Promise<CrawlRunSummary> {
 	const grouped = await db
 		.select({
@@ -60,44 +123,12 @@ export async function summarizeCrawlRun(db: DbConnection, runId: string): Promis
 		.where(and(eq(geoSiteCrawlItems.runId, runId), inArray(geoSiteCrawlItems.outcome, SUCCESS_OUTCOMES)))
 		.groupBy(geoSitePages.category);
 
-	const summary: CrawlRunSummary = {
-		total: 0,
-		queued: 0,
-		done: 0,
-		failed: 0,
-		skipped: 0,
-		outcomes: {},
-		requests: 0,
-		succeeded: 0,
-		newVersions: 0,
-		unchanged: 0,
-		duplicates: 0,
-		gone: 0,
-		status403: timing?.status403 ?? 0,
-		status429: timing?.status429 ?? 0,
-		p50Ms: timing?.p50 === null || timing?.p50 === undefined ? null : Math.round(Number(timing.p50)),
-		p95Ms: timing?.p95 === null || timing?.p95 === undefined ? null : Math.round(Number(timing.p95)),
-		successRate: null,
-		unchangedRate: null,
-		sections: Object.fromEntries(sectionRows.map((row) => [row.category ?? "uncategorized", row.pages])),
-	};
-	for (const row of grouped) {
-		summary.total += row.items;
-		summary.requests += Number(row.attempts);
-		if (row.status === "QUEUED" || row.status === "FETCHING") summary.queued += row.items;
-		if (row.status === "DONE") summary.done += row.items;
-		if (row.status === "FAILED") summary.failed += row.items;
-		if (row.status === "SKIPPED") summary.skipped += row.items;
-		if (row.outcome) summary.outcomes[row.outcome] = (summary.outcomes[row.outcome] ?? 0) + row.items;
-	}
-	summary.newVersions = summary.outcomes.NEW_VERSION ?? 0;
-	summary.unchanged = summary.outcomes.UNCHANGED ?? 0;
-	summary.duplicates = summary.outcomes.DUPLICATE ?? 0;
-	summary.gone = summary.outcomes.GONE ?? 0;
-	summary.succeeded = summary.newVersions + summary.unchanged + summary.duplicates;
-	const attempted = summary.succeeded + summary.failed + summary.gone;
-	summary.successRate = attempted === 0 ? null : summary.succeeded / attempted;
-	summary.unchangedRate = summary.succeeded === 0 ? null : summary.unchanged / summary.succeeded;
+	const summary = emptySummary(sectionRows);
+	summary.status403 = timing?.status403 ?? 0;
+	summary.status429 = timing?.status429 ?? 0;
+	summary.p50Ms = roundOrNull(timing?.p50);
+	summary.p95Ms = roundOrNull(timing?.p95);
+	tally(summary, grouped);
 	return summary;
 }
 
@@ -121,6 +152,120 @@ async function previousSections(db: DbConnection, sourceId: string, runId: strin
 	> | null;
 }
 
+export function finalStatusOf(
+	summary: CrawlRunSummary,
+	options: { forcedStatus?: GeoCrawlStatus; errorSummary?: string },
+): { status: GeoCrawlStatus; errorSummary: string | null } {
+	const budgetHit = (summary.outcomes.BUDGET_EXCEEDED ?? 0) > 0;
+	let status: GeoCrawlStatus = "SUCCEEDED";
+	let message: string | null = null;
+	if (summary.succeeded === 0 && summary.gone === 0) {
+		status = "FAILED";
+		message = "没有成功采集到任何页面";
+	} else if (budgetHit) {
+		status = "PARTIAL";
+		message = "达到页面预算，剩余网址未采集";
+	} else if (summary.failed > 0) {
+		status = "PARTIAL";
+		message = `${summary.failed} 个网址失败，可重试`;
+	}
+	return { status: options.forcedStatus ?? status, errorSummary: options.errorSummary ?? message };
+}
+
+type RunRow = typeof geoSiteCrawlRuns.$inferSelect;
+type SourceRow = typeof geoSiteSources.$inferSelect;
+
+async function setAlert(
+	db: DbConnection,
+	organizationId: string,
+	dedupeKey: string,
+	raise: boolean,
+	alert: { kind: string; severity: "CRITICAL" | "WARNING"; context: Record<string, unknown> },
+): Promise<void> {
+	if (raise) await raiseGeoAlert(db, { ...alert, organizationId, dedupeKey });
+	else await resolveGeoAlert(db, { organizationId, dedupeKey });
+}
+
+/** Alerts that compare a whole-site run with the previous one; a run limited to chosen URLs says nothing about them. */
+async function evaluateCoverageAlerts(
+	db: DbConnection,
+	run: RunRow,
+	source: SourceRow,
+	summary: CrawlRunSummary,
+	profile: SiteProfile,
+): Promise<void> {
+	const previous = await previousSections(db, source.id, run.id);
+	const drops = previous
+		? profile.categories
+				.filter((category) => category.keySection)
+				.map((category) => ({
+					key: category.key,
+					before: previous[category.key] ?? 0,
+					after: summary.sections[category.key] ?? 0,
+				}))
+				.filter((entry) => entry.before >= 3 && entry.after < entry.before * (1 - profile.alerts.sectionDropRatio))
+		: [];
+	await setAlert(db, run.organizationId, `site-section-drop:${source.id}`, drops.length > 0, {
+		kind: "site.section_drop",
+		severity: "CRITICAL",
+		context: { runId: run.id, drops },
+	});
+	const coverage = await keyUrlCoverageOf(db, run.organizationId, source);
+	await setAlert(
+		db,
+		run.organizationId,
+		`site-key-url-coverage:${source.id}`,
+		coverage.total > 0 && coverage.covered < coverage.total,
+		{
+			kind: "site.key_url_coverage",
+			severity: "WARNING",
+			context: {
+				runId: run.id,
+				total: coverage.total,
+				covered: coverage.covered,
+				missing: coverage.missing.slice(0, 20),
+			},
+		},
+	);
+}
+
+async function evaluateRunAlerts(
+	db: DbConnection,
+	run: RunRow,
+	source: SourceRow,
+	summary: CrawlRunSummary,
+	outcome: { status: GeoCrawlStatus; errorSummary: string | null },
+): Promise<void> {
+	const configVersion = (run.config as { profileVersion?: number } | null)?.profileVersion ?? 1;
+	const profile = await loadProfileVersion(db, run.organizationId, source.id, configVersion).catch(() =>
+		profileOfSource(source),
+	);
+	await setAlert(db, run.organizationId, `site-sync-failed:${source.id}`, outcome.status === "FAILED", {
+		kind: "site.sync_failed",
+		severity: "CRITICAL",
+		context: { runId: run.id, errorSummary: outcome.errorSummary, baseUrl: source.baseUrl },
+	});
+	const blocked = summary.status403 + summary.status429;
+	await setAlert(
+		db,
+		run.organizationId,
+		`site-blocked-responses:${source.id}`,
+		blocked >= 5 && summary.requests > 0 && blocked / summary.requests >= profile.alerts.blockedResponseRatio,
+		{
+			kind: "site.blocked_responses",
+			severity: "WARNING",
+			context: {
+				runId: run.id,
+				status403: summary.status403,
+				status429: summary.status429,
+				requests: summary.requests,
+			},
+		},
+	);
+	const isFullScope = (run.config as { seedUrls?: unknown } | null)?.seedUrls == null;
+	if (isFullScope && outcome.status !== "FAILED") await evaluateCoverageAlerts(db, run, source, summary, profile);
+}
+
 /**
  * Closes a run: summary from its frontier, a final status, the source's last
  * success time, and the alerts PRD 10.4 asks for, raised or cleared.
@@ -134,94 +279,29 @@ export async function finalizeCrawlRun(
 	const [run] = await db.select().from(geoSiteCrawlRuns).where(eq(geoSiteCrawlRuns.id, runId)).limit(1);
 	const [source] = await db.select().from(geoSiteSources).where(eq(geoSiteSources.id, run.siteSourceId)).limit(1);
 	const summary = await summarizeCrawlRun(db, runId);
-	const budgetHit = (summary.outcomes.BUDGET_EXCEEDED ?? 0) > 0;
-	const status: GeoCrawlStatus =
-		options.forcedStatus ??
-		(summary.succeeded === 0 && summary.gone === 0
-			? "FAILED"
-			: summary.failed > 0 || budgetHit
-				? "PARTIAL"
-				: "SUCCEEDED");
-	const errorSummary =
-		options.errorSummary ??
-		(status === "FAILED"
-			? "没有成功采集到任何页面"
-			: budgetHit
-				? "达到页面预算，剩余网址未采集"
-				: summary.failed > 0
-					? `${summary.failed} 个网址失败，可重试`
-					: null);
-	const isFullScope = (run.config as { seedUrls?: unknown } | null)?.seedUrls == null;
+	const outcome = finalStatusOf(summary, options);
 
 	const [finished] = await db
 		.update(geoSiteCrawlRuns)
 		.set({
-			status,
+			status: outcome.status,
 			finishedAt: sql`now()`,
-			errorSummary,
+			errorSummary: outcome.errorSummary,
 			counts: sql`jsonb_set(${geoSiteCrawlRuns.counts}, '{summary}', ${JSON.stringify(summary)}::jsonb, true)`,
 		})
 		.where(and(eq(geoSiteCrawlRuns.id, runId), inArray(geoSiteCrawlRuns.status, ["QUEUED", "RUNNING"])))
 		.returning();
 	if (!finished) return { status: run.status, continued: false, processed: 0 };
-	if (status !== "FAILED") {
+	if (outcome.status !== "FAILED") {
 		await db.update(geoSiteSources).set({ lastSuccessAt: sql`now()` }).where(eq(geoSiteSources.id, source.id));
 	}
-
-	const organizationId = run.organizationId;
-	const configVersion = (run.config as { profileVersion?: number } | null)?.profileVersion ?? 1;
-	const profile = await loadProfileVersion(db, organizationId, source.id, configVersion).catch(() =>
-		profileOfSource(source),
-	);
-	const alert = async (key: string, raise: boolean, input: Omit<Parameters<typeof raiseGeoAlert>[1], "dedupeKey" | "organizationId">) => {
-		const dedupeKey = `${key}:${source.id}`;
-		if (raise) await raiseGeoAlert(db, { ...input, organizationId, dedupeKey });
-		else await resolveGeoAlert(db, { organizationId, dedupeKey });
-	};
-
-	await alert("site-sync-failed", status === "FAILED", {
-		kind: "site.sync_failed",
-		severity: "CRITICAL",
-		context: { runId, errorSummary, baseUrl: source.baseUrl },
-	});
-	const blocked = summary.status403 + summary.status429;
-	await alert(
-		"site-blocked-responses",
-		blocked >= 5 && summary.requests > 0 && blocked / summary.requests >= profile.alerts.blockedResponseRatio,
-		{
-			kind: "site.blocked_responses",
-			severity: "WARNING",
-			context: { runId, status403: summary.status403, status429: summary.status429, requests: summary.requests },
-		},
-	);
-	if (isFullScope && status !== "FAILED") {
-		const previous = await previousSections(db, source.id, runId);
-		const keySections = profile.categories.filter((category) => category.keySection).map((category) => category.key);
-		const drops = previous
-			? keySections
-					.map((key) => ({ key, before: previous[key] ?? 0, after: summary.sections[key] ?? 0 }))
-					.filter(
-						(entry) => entry.before >= 3 && entry.after < entry.before * (1 - profile.alerts.sectionDropRatio),
-					)
-			: [];
-		await alert("site-section-drop", drops.length > 0, {
-			kind: "site.section_drop",
-			severity: "CRITICAL",
-			context: { runId, drops },
-		});
-		const coverage = await keyUrlCoverageOf(db, organizationId, source);
-		await alert("site-key-url-coverage", coverage.total > 0 && coverage.covered < coverage.total, {
-			kind: "site.key_url_coverage",
-			severity: "WARNING",
-			context: { runId, total: coverage.total, covered: coverage.covered, missing: coverage.missing.slice(0, 20) },
-		});
-	}
+	await evaluateRunAlerts(db, run, source, summary, outcome);
 	await writeGeoAudit(db, {
-		principal: geoSystemPrincipal(organizationId, "site-crawl", `crawl-${runId}`),
+		principal: geoSystemPrincipal(run.organizationId, "site-crawl", `crawl-${runId}`),
 		action: "site.crawl.finish",
 		entityType: "site_crawl_run",
 		entityId: runId,
-		after: { status, summary },
+		after: { status: outcome.status, summary },
 	});
-	return { status, continued: false, processed: 0 };
+	return { status: outcome.status, continued: false, processed: 0 };
 }

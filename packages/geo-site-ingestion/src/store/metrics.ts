@@ -64,7 +64,9 @@ export async function keyUrlCoverageOf(
 	source: Pick<SourceRow, "id" | "keyUrls">,
 ) {
 	const statuses = await keyUrlStatuses(db, organizationId, source);
-	const covered = new Set(statuses.filter((entry) => entry.status === "ACTIVE" && entry.parsed).map((entry) => entry.url));
+	const covered = new Set(
+		statuses.filter((entry) => entry.status === "ACTIVE" && entry.parsed).map((entry) => entry.url),
+	);
 	return { ...keyUrlCoverage(source.keyUrls, covered), statuses };
 }
 
@@ -84,10 +86,32 @@ export interface SiteMetrics {
 	} | null;
 	parse: { versions: number; failed: number; failureRate: number | null };
 	approvedEntitiesBySection: Record<string, number>;
-	hosts: Array<{ host: string; consecutiveFailures: number; breakerOpenUntil: Date | null; lastSuccessAt: Date | null }>;
+	hosts: Array<{
+		host: string;
+		consecutiveFailures: number;
+		breakerOpenUntil: Date | null;
+		lastSuccessAt: Date | null;
+	}>;
 	lastSuccessAt: Date | null;
 	configuredRequestsPerSecond: number;
 	keyUrls: { total: number; covered: number; ratio: number | null; missing: string[] };
+}
+
+function lastRunView(lastRun: typeof geoSiteCrawlRuns.$inferSelect | undefined): SiteMetrics["lastRun"] {
+	if (!lastRun) return null;
+	const summary = (lastRun.counts as { summary?: CrawlRunSummary } | undefined)?.summary;
+	const seconds =
+		lastRun.startedAt && lastRun.finishedAt ? (lastRun.finishedAt.getTime() - lastRun.startedAt.getTime()) / 1000 : 0;
+	return {
+		id: lastRun.id,
+		status: lastRun.status,
+		finishedAt: lastRun.finishedAt,
+		successRate: summary?.successRate ?? null,
+		unchangedRate: summary?.unchangedRate ?? null,
+		p95Ms: summary?.p95Ms ?? null,
+		requests: summary?.requests ?? 0,
+		observedRequestsPerSecond: seconds > 0 && summary ? summary.requests / seconds : null,
+	};
 }
 
 /** PRD 10.4: the numbers the site-ingestion acceptance and alerting are judged on. */
@@ -110,10 +134,6 @@ export async function siteMetrics(db: DbConnection, organizationId: string, sour
 		)
 		.orderBy(desc(geoSiteCrawlRuns.finishedAt))
 		.limit(1);
-	const summary = (lastRun?.counts as { summary?: CrawlRunSummary } | undefined)?.summary;
-	const seconds =
-		lastRun?.startedAt && lastRun.finishedAt ? (lastRun.finishedAt.getTime() - lastRun.startedAt.getTime()) / 1000 : 0;
-
 	const [parse] = await db
 		.select({
 			versions: count(),
@@ -154,24 +174,15 @@ export async function siteMetrics(db: DbConnection, organizationId: string, sour
 		discoveredUrls: statusRows.reduce((sum, row) => sum + row.pages, 0),
 		pagesByStatus,
 		suspectedDeadPages: (pagesByStatus.GONE ?? 0) + (pagesByStatus.ERROR ?? 0),
-		lastRun: lastRun
-			? {
-					id: lastRun.id,
-					status: lastRun.status,
-					finishedAt: lastRun.finishedAt,
-					successRate: summary?.successRate ?? null,
-					unchangedRate: summary?.unchangedRate ?? null,
-					p95Ms: summary?.p95Ms ?? null,
-					requests: summary?.requests ?? 0,
-					observedRequestsPerSecond: seconds > 0 && summary ? summary.requests / seconds : null,
-				}
-			: null,
+		lastRun: lastRunView(lastRun),
 		parse: {
 			versions: parse?.versions ?? 0,
 			failed: parse?.failed ?? 0,
 			failureRate: parse && parse.versions > 0 ? parse.failed / parse.versions : null,
 		},
-		approvedEntitiesBySection: Object.fromEntries(approved.map((row) => [row.category ?? "uncategorized", row.entities])),
+		approvedEntitiesBySection: Object.fromEntries(
+			approved.map((row) => [row.category ?? "uncategorized", row.entities]),
+		),
 		hosts: hosts.map((host) => ({
 			host: host.host,
 			consecutiveFailures: host.consecutiveFailures,

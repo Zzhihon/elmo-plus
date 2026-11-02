@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { GEO_QUEUE, GeoError, type GeoCrawlMode, type GeoCrawlStatus, type GeoPrincipal } from "@workspace/geo-domain";
+import { GEO_QUEUE, type GeoCrawlMode, type GeoCrawlStatus, GeoError, type GeoPrincipal } from "@workspace/geo-domain";
 import type { DbConnection } from "@workspace/lib/db/db-connection";
 import { geoSiteCrawlItems, geoSiteCrawlRuns } from "@workspace/lib/db/schema";
 import { writeGeoAudit } from "@workspace/lib/geo/audit";
@@ -51,58 +51,47 @@ export interface CreateCrawlRunInput {
 	retryOf?: string;
 }
 
-/**
- * Only records the run; the caller enqueues it once the transaction commits.
- * One active run per source: asking again returns the run already going.
- */
-export async function createCrawlRun(
-	tx: DbConnection,
-	principal: GeoPrincipal,
-	input: CreateCrawlRunInput,
-): Promise<{ run: CrawlRunRow; created: boolean }> {
-	const { organizationId } = principal;
-	const source = await loadSiteSource(tx, organizationId, input.siteSourceId);
-	if (!source.enabled) throw new GeoError("CONFLICT", "站点采集已暂停，请先恢复站点");
-	const profile = profileOfSource(source);
-
-	let seedUrls: string[] | null = null;
-	if (input.urls?.length) {
-		const policy = urlPolicyOf(source.allowedHosts, profile);
-		const refused: RefusedUrl[] = [];
-		const accepted: string[] = [];
-		for (const url of input.urls) {
-			const decision = checkUrl(url, policy);
-			if (decision.ok) accepted.push(decision.url);
-			else refused.push({ field: "seedUrls", url, reason: decision.reason });
-		}
-		if (refused.length > 0) throw new SiteUrlRefusedError(refused);
-		seedUrls = [...new Set(accepted)];
+function acceptedSeedUrls(urls: string[] | undefined, policy: ReturnType<typeof urlPolicyOf>): string[] | null {
+	if (!urls?.length) return null;
+	const refused: RefusedUrl[] = [];
+	const accepted: string[] = [];
+	for (const url of urls) {
+		const decision = checkUrl(url, policy);
+		if (decision.ok) accepted.push(decision.url);
+		else refused.push({ field: "seedUrls", url, reason: decision.reason });
 	}
+	if (refused.length > 0) throw new SiteUrlRefusedError(refused);
+	return [...new Set(accepted)];
+}
 
-	if (input.idempotencyKey) {
-		const [existing] = await tx
-			.select()
-			.from(geoSiteCrawlRuns)
-			.where(
-				and(eq(geoSiteCrawlRuns.organizationId, organizationId), eq(geoSiteCrawlRuns.idempotencyKey, input.idempotencyKey)),
-			)
-			.limit(1);
-		if (existing) return { run: existing, created: false };
-	}
+async function runByKey(tx: DbConnection, organizationId: string, idempotencyKey: string) {
+	const [existing] = await tx
+		.select()
+		.from(geoSiteCrawlRuns)
+		.where(
+			and(eq(geoSiteCrawlRuns.organizationId, organizationId), eq(geoSiteCrawlRuns.idempotencyKey, idempotencyKey)),
+		)
+		.limit(1);
+	return existing ?? null;
+}
 
+async function activeRunOf(tx: DbConnection, organizationId: string, sourceId: string) {
 	const [active] = await tx
 		.select()
 		.from(geoSiteCrawlRuns)
 		.where(
 			and(
 				eq(geoSiteCrawlRuns.organizationId, organizationId),
-				eq(geoSiteCrawlRuns.siteSourceId, source.id),
+				eq(geoSiteCrawlRuns.siteSourceId, sourceId),
 				inArray(geoSiteCrawlRuns.status, ACTIVE_CRAWL_STATUSES),
 			),
 		)
 		.limit(1);
-	if (active) return { run: active, created: false };
+	return active ?? null;
+}
 
+/** Per-organization concurrency and per-source daily quota (PRD 8.2). */
+async function assertQuota(tx: DbConnection, organizationId: string, sourceId: string): Promise<void> {
 	const [{ value: activeInOrg }] = await tx
 		.select({ value: count() })
 		.from(geoSiteCrawlRuns)
@@ -117,13 +106,35 @@ export async function createCrawlRun(
 		.from(geoSiteCrawlRuns)
 		.where(
 			and(
-				eq(geoSiteCrawlRuns.siteSourceId, source.id),
+				eq(geoSiteCrawlRuns.siteSourceId, sourceId),
 				gte(geoSiteCrawlRuns.createdAt, sql`now() - interval '24 hours'`),
 			),
 		);
 	if (today >= MAX_RUNS_PER_SOURCE_PER_DAY) {
 		throw new GeoError("RATE_LIMITED", `该站点 24 小时内的采集次数已达上限 ${MAX_RUNS_PER_SOURCE_PER_DAY} 次`);
 	}
+}
+
+/**
+ * Only records the run; the caller enqueues it once the transaction commits.
+ * One active run per source: asking again returns the run already going.
+ */
+export async function createCrawlRun(
+	tx: DbConnection,
+	principal: GeoPrincipal,
+	input: CreateCrawlRunInput,
+): Promise<{ run: CrawlRunRow; created: boolean }> {
+	const { organizationId } = principal;
+	const source = await loadSiteSource(tx, organizationId, input.siteSourceId);
+	if (!source.enabled) throw new GeoError("CONFLICT", "站点采集已暂停，请先恢复站点");
+	const profile = profileOfSource(source);
+	const seedUrls = acceptedSeedUrls(input.urls, urlPolicyOf(source.allowedHosts, profile));
+
+	const existing =
+		(input.idempotencyKey ? await runByKey(tx, organizationId, input.idempotencyKey) : null) ??
+		(await activeRunOf(tx, organizationId, source.id));
+	if (existing) return { run: existing, created: false };
+	await assertQuota(tx, organizationId, source.id);
 
 	const config: CrawlRunConfig = {
 		seedUrls,
@@ -148,14 +159,7 @@ export async function createCrawlRun(
 		})
 		.onConflictDoNothing()
 		.returning();
-	if (!run) {
-		const [existing] = await tx
-			.select()
-			.from(geoSiteCrawlRuns)
-			.where(and(eq(geoSiteCrawlRuns.organizationId, organizationId), eq(geoSiteCrawlRuns.idempotencyKey, idempotencyKey)))
-			.limit(1);
-		return { run: existing, created: false };
-	}
+	if (!run) return { run: (await runByKey(tx, organizationId, idempotencyKey)) as CrawlRunRow, created: false };
 	await writeGeoAudit(tx, {
 		principal,
 		action: "site.crawl.create",

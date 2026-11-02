@@ -12,6 +12,18 @@ const URL_ATTRIBUTES = ["href", "src", "action", "formaction", "xlink:href", "po
 export const SNAPSHOT_VIEW_CSP =
 	"default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; form-action 'none'; base-uri 'none'";
 
+/** Event handlers and every URL-bearing attribute go; a link keeps its target only as inert data. */
+function scrubAttributes(attribs: Record<string, string>): void {
+	for (const name of Object.keys(attribs)) {
+		const lower = name.toLowerCase();
+		const value = attribs[name];
+		const dangerousStyle = lower === "style" && /url\s*\(|expression\s*\(|@import/i.test(value);
+		if (lower === "href" && !/^(javascript|data|vbscript):/i.test(value.trim()))
+			attribs["data-original-href"] = value.trim();
+		if (lower.startsWith("on") || URL_ATTRIBUTES.includes(lower) || dangerousStyle) delete attribs[name];
+	}
+}
+
 /**
  * Turns a stored page into something safe to show inside `<iframe sandbox srcdoc>`.
  * The sandbox already blocks script; this removes active content and every
@@ -26,25 +38,7 @@ export function renderSnapshotForViewing(html: string): string {
 		.filter((_, node) => node.type === "comment")
 		.remove();
 	$("*").each((_, element) => {
-		if (!("attribs" in element)) return;
-		for (const name of Object.keys(element.attribs)) {
-			const lower = name.toLowerCase();
-			if (lower.startsWith("on")) {
-				delete element.attribs[name];
-				continue;
-			}
-			if (URL_ATTRIBUTES.includes(lower)) {
-				const value = element.attribs[name].trim();
-				if (lower === "href" && !/^(javascript|data|vbscript):/i.test(value)) {
-					element.attribs["data-original-href"] = value;
-				}
-				delete element.attribs[name];
-				continue;
-			}
-			if (lower === "style" && /url\s*\(|expression\s*\(|@import/i.test(element.attribs[name])) {
-				delete element.attribs[name];
-			}
-		}
+		if ("attribs" in element) scrubAttributes(element.attribs);
 	});
 	$("style").each((_, element) => {
 		const css = $(element).html() ?? "";

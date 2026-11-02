@@ -48,39 +48,62 @@ export interface ParsedSummary {
 	error: string | null;
 }
 
+type SummaryValue = ParsedSummary["fields"][number]["value"];
+
+function shorten(value: SummaryValue): SummaryValue {
+	if (typeof value === "string") return truncate(value, 500);
+	if (!Array.isArray(value)) return value;
+	return value
+		.slice(0, 20)
+		.map((entry) => (Array.isArray(entry) ? entry.map((cell) => truncate(cell, 200)) : truncate(entry, 500))) as
+		| string[]
+		| string[][];
+}
+
+const EMPTY_SUMMARY: Omit<ParsedSummary, "error"> = {
+	category: null,
+	categoryLabel: null,
+	entityKind: null,
+	role: null,
+	title: null,
+	metaDescription: null,
+	h1: null,
+	canonical: null,
+	publishedAt: null,
+	textLength: 0,
+	excerpt: "",
+	imageCount: 0,
+	images: [],
+	tableCount: 0,
+	fields: [],
+	warnings: [],
+};
+
 function summarize(page: ParsedPage | null, error: string | null): ParsedSummary {
-	const shorten = (value: ParsedSummary["fields"][number]["value"]): ParsedSummary["fields"][number]["value"] => {
-		if (typeof value === "string") return truncate(value, 500);
-		if (!Array.isArray(value)) return value;
-		return value
-			.slice(0, 20)
-			.map((entry) => (Array.isArray(entry) ? entry.map((cell) => truncate(cell, 200)) : truncate(entry, 500))) as
-			| string[]
-			| string[][];
-	};
+	if (!page) return { ...EMPTY_SUMMARY, error };
 	return {
-		category: page?.category ?? null,
-		categoryLabel: page?.categoryLabel ?? null,
-		entityKind: page?.entityKind ?? null,
-		role: page?.role ?? null,
-		title: page?.title ?? null,
-		metaDescription: page?.metaDescription ?? null,
-		h1: page?.h1 ?? null,
-		canonical: page?.canonical ?? null,
-		publishedAt: page?.publishedAt ?? null,
-		textLength: page?.text.length ?? 0,
-		excerpt: truncate(page?.text ?? "", 300),
-		imageCount: page?.images.length ?? 0,
-		images: (page?.images ?? []).slice(0, 10).map((image) => image.src),
-		tableCount: page?.tables.length ?? 0,
-		fields: (page?.fields ?? []).map((field) => ({
+		category: page.category,
+		categoryLabel: page.categoryLabel,
+		entityKind: page.entityKind,
+		role: page.role,
+		title: page.title,
+		metaDescription: page.metaDescription,
+		h1: page.h1,
+		canonical: page.canonical,
+		publishedAt: page.publishedAt,
+		textLength: page.text.length,
+		excerpt: truncate(page.text, 300),
+		imageCount: page.images.length,
+		images: page.images.slice(0, 10).map((image) => image.src),
+		tableCount: page.tables.length,
+		fields: page.fields.map((field) => ({
 			path: field.path,
 			label: field.label,
 			type: field.type,
 			value: shorten(field.value),
 			selector: field.locator?.selector ?? null,
 		})),
-		warnings: page?.warnings ?? [],
+		warnings: page.warnings,
 		error,
 	};
 }
@@ -169,10 +192,7 @@ export async function createParsedVersion(
 		.returning();
 	if (inserted) {
 		if (page) {
-			await deps.db
-				.update(geoSitePages)
-				.set({ category: page.category })
-				.where(eq(geoSitePages.id, input.pageId));
+			await deps.db.update(geoSitePages).set({ category: page.category }).where(eq(geoSitePages.id, input.pageId));
 		}
 		return { version: inserted, created: true };
 	}

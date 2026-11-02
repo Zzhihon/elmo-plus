@@ -1,4 +1,10 @@
-import { GeoError, type GeoPrincipal, type GeoRiskLevel, type GeoSiteEntityKind, geoSystemPrincipal } from "@workspace/geo-domain";
+import {
+	GeoError,
+	type GeoPrincipal,
+	type GeoRiskLevel,
+	type GeoSiteEntityKind,
+	geoSystemPrincipal,
+} from "@workspace/geo-domain";
 import type { DbConnection } from "@workspace/lib/db/db-connection";
 import {
 	geoAssertionSources,
@@ -74,6 +80,110 @@ function locatorOf(
 	};
 }
 
+async function upsertEntity(
+	tx: DbConnection,
+	organizationId: string,
+	entity: EntityCandidate,
+): Promise<{ id: string; created: boolean }> {
+	const [inserted] = await tx
+		.insert(geoSiteEntities)
+		.values({
+			organizationId,
+			kind: entity.kind,
+			canonicalKey: entity.canonicalKey,
+			title: entity.title,
+			attributes: entity.attributes,
+			status: "CANDIDATE",
+		})
+		.onConflictDoNothing()
+		.returning({ id: geoSiteEntities.id });
+	if (inserted) return { id: inserted.id, created: true };
+	const sameEntity = and(
+		eq(geoSiteEntities.organizationId, organizationId),
+		eq(geoSiteEntities.kind, entity.kind),
+		eq(geoSiteEntities.canonicalKey, entity.canonicalKey),
+	);
+	const [refreshed] = await tx
+		.update(geoSiteEntities)
+		.set({ title: entity.title, attributes: entity.attributes, status: "CANDIDATE" })
+		.where(and(sameEntity, inArray(geoSiteEntities.status, ["CANDIDATE", "SOURCE_UNAVAILABLE"])))
+		.returning({ id: geoSiteEntities.id });
+	if (refreshed) return { id: refreshed.id, created: false };
+	const [kept] = await tx.select({ id: geoSiteEntities.id }).from(geoSiteEntities).where(sameEntity).limit(1);
+	return { id: kept.id, created: false };
+}
+
+async function upsertAssertion(
+	tx: DbConnection,
+	input: {
+		organizationId: string;
+		entityId: string;
+		entity: EntityCandidate;
+		assertion: AssertionCandidate;
+		version: { id: string; pageId: string; parserVersion: string; url: string };
+	},
+): Promise<UpsertSiteCandidatesResult["assertions"][number]> {
+	const { organizationId, entityId, entity, assertion, version } = input;
+	const normalized = JSON.stringify(assertion.normalizedValue ?? null);
+	const [same] = await tx
+		.select({ id: geoKnowledgeAssertions.id, riskLevel: geoKnowledgeAssertions.riskLevel })
+		.from(geoKnowledgeAssertions)
+		.where(
+			and(
+				eq(geoKnowledgeAssertions.organizationId, organizationId),
+				eq(geoKnowledgeAssertions.entityId, entityId),
+				eq(geoKnowledgeAssertions.fieldPath, assertion.fieldPath),
+				eq(geoKnowledgeAssertions.claimType, assertion.claimType),
+				sql`${geoKnowledgeAssertions.normalizedValue} = ${normalized}::jsonb`,
+			),
+		)
+		.limit(1);
+	let assertionId = same?.id;
+	if (!assertionId) {
+		const [created] = await tx
+			.insert(geoKnowledgeAssertions)
+			.values({
+				organizationId,
+				entityId,
+				claimType: assertion.claimType,
+				fieldPath: assertion.fieldPath,
+				claimText: assertion.claimText,
+				normalizedValue: assertion.normalizedValue ?? null,
+				riskLevel: assertion.riskLevel,
+				status: "PENDING_REVIEW",
+				publicationScope: "INTERNAL",
+				searchTokens: searchTokensOf(`${entity.title} ${assertion.claimText}`),
+				authorId: null,
+			})
+			.returning({ id: geoKnowledgeAssertions.id });
+		assertionId = created.id;
+	}
+	const [linked] = await tx
+		.select({ id: geoAssertionSources.id })
+		.from(geoAssertionSources)
+		.where(and(eq(geoAssertionSources.assertionId, assertionId), eq(geoAssertionSources.pageVersionId, version.id)))
+		.limit(1);
+	if (!linked) {
+		await tx.insert(geoAssertionSources).values({
+			organizationId,
+			assertionId,
+			sourceKind: "PAGE_VERSION",
+			pageVersionId: version.id,
+			locator: locatorOf(version, version.url, assertion.fieldPath, assertion.locator),
+			parserVersion: version.parserVersion,
+			extractedAt: sql`now()`,
+		});
+	}
+	return {
+		id: assertionId,
+		entityId,
+		fieldPath: assertion.fieldPath,
+		claimType: assertion.claimType,
+		riskLevel: same?.riskLevel ?? assertion.riskLevel,
+		created: !same,
+	};
+}
+
 /**
  * Writes what a crawl found as reviewable candidates and nothing more. Entities
  * already confirmed or rejected keep their data; an assertion whose value
@@ -102,50 +212,8 @@ export async function upsertSiteCandidates(
 
 	const result: UpsertSiteCandidatesResult = { pageVersionId: version.id, entities: [], assertions: [] };
 	for (const { entity, assertions } of input.candidates) {
-		const [inserted] = await tx
-			.insert(geoSiteEntities)
-			.values({
-				organizationId,
-				kind: entity.kind,
-				canonicalKey: entity.canonicalKey,
-				title: entity.title,
-				attributes: entity.attributes,
-				status: "CANDIDATE",
-			})
-			.onConflictDoNothing()
-			.returning({ id: geoSiteEntities.id });
-		let entityId = inserted?.id;
-		if (!entityId) {
-			const [existing] = await tx
-				.update(geoSiteEntities)
-				.set({ title: entity.title, attributes: entity.attributes, status: "CANDIDATE" })
-				.where(
-					and(
-						eq(geoSiteEntities.organizationId, organizationId),
-						eq(geoSiteEntities.kind, entity.kind),
-						eq(geoSiteEntities.canonicalKey, entity.canonicalKey),
-						inArray(geoSiteEntities.status, ["CANDIDATE", "SOURCE_UNAVAILABLE"]),
-					),
-				)
-				.returning({ id: geoSiteEntities.id });
-			entityId =
-				existing?.id ??
-				(
-					await tx
-						.select({ id: geoSiteEntities.id })
-						.from(geoSiteEntities)
-						.where(
-							and(
-								eq(geoSiteEntities.organizationId, organizationId),
-								eq(geoSiteEntities.kind, entity.kind),
-								eq(geoSiteEntities.canonicalKey, entity.canonicalKey),
-							),
-						)
-						.limit(1)
-				)[0].id;
-		}
-		result.entities.push({ id: entityId, kind: entity.kind, canonicalKey: entity.canonicalKey, created: Boolean(inserted) });
-
+		const { id: entityId, created } = await upsertEntity(tx, organizationId, entity);
+		result.entities.push({ id: entityId, kind: entity.kind, canonicalKey: entity.canonicalKey, created });
 		const sourceRows = [
 			{ fieldPath: "title", locator: locatorOf(version, version.url, "title", null) },
 			...entity.fields.map((field) => ({
@@ -165,66 +233,8 @@ export async function upsertSiteCandidates(
 				})),
 			)
 			.onConflictDoNothing();
-
 		for (const assertion of assertions) {
-			const normalized = JSON.stringify(assertion.normalizedValue ?? null);
-			const [same] = await tx
-				.select({ id: geoKnowledgeAssertions.id, riskLevel: geoKnowledgeAssertions.riskLevel })
-				.from(geoKnowledgeAssertions)
-				.where(
-					and(
-						eq(geoKnowledgeAssertions.organizationId, organizationId),
-						eq(geoKnowledgeAssertions.entityId, entityId),
-						eq(geoKnowledgeAssertions.fieldPath, assertion.fieldPath),
-						eq(geoKnowledgeAssertions.claimType, assertion.claimType),
-						sql`${geoKnowledgeAssertions.normalizedValue} = ${normalized}::jsonb`,
-					),
-				)
-				.limit(1);
-			let assertionId = same?.id;
-			if (!assertionId) {
-				const [created] = await tx
-					.insert(geoKnowledgeAssertions)
-					.values({
-						organizationId,
-						entityId,
-						claimType: assertion.claimType,
-						fieldPath: assertion.fieldPath,
-						claimText: assertion.claimText,
-						normalizedValue: assertion.normalizedValue ?? null,
-						riskLevel: assertion.riskLevel,
-						status: "PENDING_REVIEW",
-						publicationScope: "INTERNAL",
-						searchTokens: searchTokensOf(`${entity.title} ${assertion.claimText}`),
-						authorId: null,
-					})
-					.returning({ id: geoKnowledgeAssertions.id });
-				assertionId = created.id;
-			}
-			const [linked] = await tx
-				.select({ id: geoAssertionSources.id })
-				.from(geoAssertionSources)
-				.where(and(eq(geoAssertionSources.assertionId, assertionId), eq(geoAssertionSources.pageVersionId, version.id)))
-				.limit(1);
-			if (!linked) {
-				await tx.insert(geoAssertionSources).values({
-					organizationId,
-					assertionId,
-					sourceKind: "PAGE_VERSION",
-					pageVersionId: version.id,
-					locator: locatorOf(version, version.url, assertion.fieldPath, assertion.locator),
-					parserVersion: version.parserVersion,
-					extractedAt: sql`now()`,
-				});
-			}
-			result.assertions.push({
-				id: assertionId,
-				entityId,
-				fieldPath: assertion.fieldPath,
-				claimType: assertion.claimType,
-				riskLevel: same?.riskLevel ?? assertion.riskLevel,
-				created: !same,
-			});
+			result.assertions.push(await upsertAssertion(tx, { organizationId, entityId, entity, assertion, version }));
 		}
 	}
 
@@ -257,7 +267,9 @@ export async function normalizeSiteVersion(
 		.select({ version: geoSitePageVersions, sourceId: geoSitePages.siteSourceId })
 		.from(geoSitePageVersions)
 		.innerJoin(geoSitePages, eq(geoSitePages.id, geoSitePageVersions.pageId))
-		.where(and(eq(geoSitePageVersions.organizationId, input.organizationId), eq(geoSitePageVersions.id, input.versionId)))
+		.where(
+			and(eq(geoSitePageVersions.organizationId, input.organizationId), eq(geoSitePageVersions.id, input.versionId)),
+		)
 		.limit(1);
 	if (!row || row.version.parseStatus !== "PARSED") return null;
 	const parsed = await loadParsedPage(deps, row.version);
@@ -275,5 +287,7 @@ export async function normalizeSiteVersion(
 		assertions: siteKnowledgeMapper.map(entity, effectiveProfile),
 	}));
 	const principal = geoSystemPrincipal(input.organizationId, "site-normalize", `normalize-${row.version.id}`);
-	return deps.db.transaction((tx) => upsertSiteCandidates(tx, principal, { pageVersionId: row.version.id, candidates }));
+	return deps.db.transaction((tx) =>
+		upsertSiteCandidates(tx, principal, { pageVersionId: row.version.id, candidates }),
+	);
 }

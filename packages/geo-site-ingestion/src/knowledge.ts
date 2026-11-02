@@ -40,7 +40,8 @@ function valueText(value: EntityFieldValue["value"]): string {
 
 function normalizedValueOf(value: EntityFieldValue["value"]): unknown {
 	if (typeof value === "string") return normalizeValueText(value);
-	if (value.length > 0 && Array.isArray(value[0])) return (value as string[][]).map((row) => row.map(normalizeValueText));
+	if (value.length > 0 && Array.isArray(value[0]))
+		return (value as string[][]).map((row) => row.map(normalizeValueText));
 	return (value as string[]).map(normalizeValueText);
 }
 

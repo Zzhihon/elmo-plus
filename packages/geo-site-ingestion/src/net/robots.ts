@@ -18,41 +18,54 @@ interface Group {
 	crawlDelay: number | null;
 }
 
-function parseGroups(text: string): { groups: Group[]; sitemaps: string[] } {
-	const groups: Group[] = [];
-	const sitemaps: string[] = [];
-	let current: Group | null = null;
-	let lastWasAgent = false;
-	for (const rawLine of text.split(/\r?\n/)) {
-		const line = rawLine.replace(/#.*$/, "").trim();
-		if (!line) continue;
-		const colon = line.indexOf(":");
-		if (colon < 0) continue;
-		const key = line.slice(0, colon).trim().toLowerCase();
-		const value = line.slice(colon + 1).trim();
-		if (key === "sitemap") {
-			if (value) sitemaps.push(value);
-			continue;
-		}
-		if (key === "user-agent") {
-			if (!current || !lastWasAgent) {
-				current = { agents: [], rules: [], crawlDelay: null };
-				groups.push(current);
-			}
-			current.agents.push(value.toLowerCase());
-			lastWasAgent = true;
-			continue;
-		}
-		lastWasAgent = false;
-		if (!current) continue;
-		if (key === "allow" || key === "disallow") {
-			if (value || key === "allow") current.rules.push({ allow: key === "allow", pattern: value });
-		} else if (key === "crawl-delay") {
-			const delay = Number(value);
-			if (Number.isFinite(delay) && delay >= 0) current.crawlDelay = delay;
-		}
+function parseLine(rawLine: string): { key: string; value: string } | null {
+	const line = rawLine.replace(/#.*$/, "").trim();
+	const colon = line.indexOf(":");
+	if (!line || colon < 0) return null;
+	return { key: line.slice(0, colon).trim().toLowerCase(), value: line.slice(colon + 1).trim() };
+}
+
+function applyDirective(group: Group, key: string, value: string): void {
+	if (key === "allow" || key === "disallow") {
+		if (value || key === "allow") group.rules.push({ allow: key === "allow", pattern: value });
+		return;
 	}
-	return { groups, sitemaps };
+	if (key === "crawl-delay") {
+		const delay = Number(value);
+		if (Number.isFinite(delay) && delay >= 0) group.crawlDelay = delay;
+	}
+}
+
+interface ParseState {
+	groups: Group[];
+	sitemaps: string[];
+	lastWasAgent: boolean;
+}
+
+function handleLine(state: ParseState, key: string, value: string): void {
+	if (key === "sitemap") {
+		if (value) state.sitemaps.push(value);
+		return;
+	}
+	const current = state.groups.at(-1);
+	if (key === "user-agent") {
+		const group = current && state.lastWasAgent ? current : { agents: [], rules: [], crawlDelay: null };
+		if (group !== current) state.groups.push(group);
+		group.agents.push(value.toLowerCase());
+		state.lastWasAgent = true;
+		return;
+	}
+	state.lastWasAgent = false;
+	if (current) applyDirective(current, key, value);
+}
+
+function parseGroups(text: string): { groups: Group[]; sitemaps: string[] } {
+	const state: ParseState = { groups: [], sitemaps: [], lastWasAgent: false };
+	for (const rawLine of text.split(/\r?\n/)) {
+		const parsed = parseLine(rawLine);
+		if (parsed) handleLine(state, parsed.key, parsed.value);
+	}
+	return { groups: state.groups, sitemaps: state.sitemaps };
 }
 
 /** RFC 9309: the most specific matching group for our product token, else the `*` group. */

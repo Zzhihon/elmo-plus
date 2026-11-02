@@ -190,7 +190,10 @@ describe("safeFetch", () => {
 	});
 
 	it("refuses a site whose name resolves to the loopback in production mode", async () => {
-		const result = await safeFetch(`http://${SITE}:${port}/page`, options(toLoopback, { addressAllowed: isPublicAddress }));
+		const result = await safeFetch(
+			`http://${SITE}:${port}/page`,
+			options(toLoopback, { addressAllowed: isPublicAddress }),
+		);
 		expect(result).toMatchObject({ ok: false, code: "ADDRESS_BLOCKED" });
 	});
 
@@ -201,7 +204,12 @@ describe("safeFetch", () => {
 	])("blocks the redirect %s (%s) and reports where it pointed", async (path, reason) => {
 		const before = hits.length;
 		const result = await safeFetch(`http://${SITE}:${port}${path}`, options(toLoopback));
-		expect(result).toMatchObject({ ok: false, code: "REDIRECT_BLOCKED", blockedReason: reason, status: expect.any(Number) });
+		expect(result).toMatchObject({
+			ok: false,
+			code: "REDIRECT_BLOCKED",
+			blockedReason: reason,
+			status: expect.any(Number),
+		});
 		if (!result.ok) expect(result.blockedTarget).toBeTruthy();
 		expect(hits.length).toBe(before + 1);
 	});

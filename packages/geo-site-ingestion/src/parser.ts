@@ -10,7 +10,13 @@ import type {
 	SitePageParser,
 } from "./contracts";
 import { categoryOf } from "./discovery";
-import { parserVersionOf, type SiteFieldRule, type SiteProfile } from "./profile";
+import {
+	parserVersionOf,
+	type SiteCategory,
+	type SiteFieldRule,
+	type SiteFieldType,
+	type SiteProfile,
+} from "./profile";
 import { normalizeDate, truncate } from "./text";
 
 type Selection = ReturnType<cheerio.CheerioAPI>;
@@ -56,13 +62,7 @@ export function blockText($: cheerio.CheerioAPI, root: Selection): string {
 			$(element).prepend("\n").append("\n");
 		}
 	});
-	return clone
-		.text()
-		.split("\n")
-		.map(inline)
-		.filter(Boolean)
-		.join("\n")
-		.slice(0, MAX_TEXT);
+	return clone.text().split("\n").map(inline).filter(Boolean).join("\n").slice(0, MAX_TEXT);
 }
 
 function firstMatch($: cheerio.CheerioAPI, selectors: readonly string[], root?: Selection) {
@@ -111,8 +111,69 @@ function locatorOf(selector: string, ordinal: number, quote: string): FieldLocat
 	return { selector, ordinal, quote: truncate(quote, QUOTE_LENGTH) };
 }
 
+interface FieldContext {
+	$: cheerio.CheerioAPI;
+	rule: SiteFieldRule;
+	pageUrl: string;
+	elements: Selection;
+	first: Selection;
+}
+
+type Extracted = { value: ParsedField["value"]; quote: string | null };
+
+function readText({ rule }: FieldContext, $element: Selection): string {
+	return rule.attr ? ($element.attr(rule.attr) ?? "") : inline($element.text());
+}
+
+function textExtract(ctx: FieldContext): Extracted {
+	const text = applyPattern(readText(ctx, ctx.first), ctx.rule.pattern) || null;
+	return { value: text, quote: text };
+}
+
+function imageExtract(ctx: FieldContext): Extracted {
+	const { $, rule, pageUrl } = ctx;
+	const sources = ctx.elements
+		.toArray()
+		.map((element) => absolute(rule.attr ? ($(element).attr(rule.attr) ?? null) : imageSource($(element)), pageUrl))
+		.filter((src): src is string => Boolean(src));
+	if (sources.length === 0) return { value: null, quote: null };
+	return { value: rule.type === "image" ? sources[0] : sources, quote: sources[0] };
+}
+
+const EXTRACTORS: Record<SiteFieldType, (ctx: FieldContext) => Extracted> = {
+	text: textExtract,
+	multiline: (ctx) => {
+		const text = applyPattern(blockText(ctx.$, ctx.first), ctx.rule.pattern) || null;
+		return { value: text, quote: text };
+	},
+	date: (ctx) => {
+		const raw = applyPattern(readText(ctx, ctx.first), ctx.rule.pattern);
+		const date = raw ? normalizeDate(raw) : null;
+		return { value: date, quote: date ? (raw ?? date) : null };
+	},
+	image: imageExtract,
+	images: imageExtract,
+	link: (ctx) => {
+		const href = absolute(ctx.first.attr(ctx.rule.attr ?? "href") ?? null, ctx.pageUrl);
+		return { value: href, quote: href };
+	},
+	list: (ctx) => {
+		const items = ctx.elements
+			.toArray()
+			.map((element) => applyPattern(readText(ctx, ctx.$(element)), ctx.rule.pattern))
+			.filter((item): item is string => Boolean(item));
+		return items.length ? { value: items, quote: items.join("；") } : { value: null, quote: null };
+	},
+	table: (ctx) => {
+		const rows = tableRows(ctx.$, ctx.first.is("table") ? ctx.first : ctx.first.find("table").first());
+		return rows.length
+			? { value: rows, quote: rows.map((row) => row.join(" | ")).join("\n") }
+			: { value: null, quote: null };
+	},
+};
+
 function extractField($: cheerio.CheerioAPI, rule: SiteFieldRule, pageUrl: string): ParsedField {
-	const base: Omit<ParsedField, "value" | "locator"> = {
+	const base = {
 		path: rule.path,
 		label: rule.label ?? null,
 		type: rule.type,
@@ -121,57 +182,14 @@ function extractField($: cheerio.CheerioAPI, rule: SiteFieldRule, pageUrl: strin
 	};
 	const match = firstMatch($, rule.selector);
 	if (!match) return { ...base, value: null, locator: null };
-	const { selector, elements } = match;
-	const first = elements.first();
-	const read = ($element: Selection) => (rule.attr ? ($element.attr(rule.attr) ?? "") : inline($element.text()));
-
-	switch (rule.type) {
-		case "multiline": {
-			const text = applyPattern(blockText($, first), rule.pattern);
-			return { ...base, value: text || null, locator: text ? locatorOf(selector, 0, text) : null };
-		}
-		case "date": {
-			const raw = applyPattern(read(first), rule.pattern);
-			const date = raw ? normalizeDate(raw) : null;
-			return { ...base, value: date, locator: date ? locatorOf(selector, 0, raw ?? date) : null };
-		}
-		case "image":
-		case "images": {
-			const sources = elements
-				.toArray()
-				.map((element) => absolute(rule.attr ? ($(element).attr(rule.attr) ?? null) : imageSource($(element)), pageUrl))
-				.filter((src): src is string => Boolean(src));
-			const value = rule.type === "image" ? (sources[0] ?? null) : sources.length ? sources : null;
-			return { ...base, value, locator: sources.length ? locatorOf(selector, 0, sources[0]) : null };
-		}
-		case "link": {
-			const href = absolute(first.attr(rule.attr ?? "href") ?? null, pageUrl);
-			return { ...base, value: href, locator: href ? locatorOf(selector, 0, href) : null };
-		}
-		case "list": {
-			const items = elements
-				.toArray()
-				.map((element) => applyPattern(read($(element)), rule.pattern))
-				.filter((item): item is string => Boolean(item));
-			return {
-				...base,
-				value: items.length ? items : null,
-				locator: items.length ? locatorOf(selector, 0, items.join("；")) : null,
-			};
-		}
-		case "table": {
-			const rows = tableRows($, first.is("table") ? first : first.find("table").first());
-			return {
-				...base,
-				value: rows.length ? rows : null,
-				locator: rows.length ? locatorOf(selector, 0, rows.map((row) => row.join(" | ")).join("\n")) : null,
-			};
-		}
-		default: {
-			const text = applyPattern(read(first), rule.pattern);
-			return { ...base, value: text || null, locator: text ? locatorOf(selector, 0, text) : null };
-		}
-	}
+	const { value, quote } = EXTRACTORS[rule.type]({
+		$,
+		rule,
+		pageUrl,
+		elements: match.elements,
+		first: match.elements.first(),
+	});
+	return { ...base, value, locator: quote ? locatorOf(match.selector, 0, quote) : null };
 }
 
 function emptyPage(url: string, profile: SiteProfile): ParsedPage {
@@ -197,33 +215,30 @@ function emptyPage(url: string, profile: SiteProfile): ParsedPage {
 	};
 }
 
-function parsePage(html: string, url: string, profile: SiteProfile): ParseOutcome {
-	const $ = cheerio.load(html);
-	const page = emptyPage(url, profile);
-	const category = categoryOf(url, profile, $);
-	page.category = category?.key ?? null;
-	page.categoryLabel = category?.label ?? null;
-	page.entityKind = category?.entityKind ?? null;
-	page.role = category?.role ?? null;
+function readMeta($: cheerio.CheerioAPI, page: ParsedPage, url: string, profile: SiteProfile): void {
 	page.metaDescription = inline($('meta[name="description" i]').attr("content") ?? "") || null;
 	page.h1 = inline($("h1").first().text()) || null;
 	page.lang = $("html").attr("lang")?.trim() || null;
 	const canonical = $('link[rel~="canonical" i]').attr("href");
 	page.canonical = canonical ? normalizeUrl(canonical, url) : null;
-
-	page.fields = (category?.fields ?? []).map((rule) => extractField($, rule, url));
-
 	if (profile.defaults.publishedAt) {
 		const match = firstMatch($, profile.defaults.publishedAt.selector);
-		const raw = match ? applyPattern(inline(match.elements.first().text()), profile.defaults.publishedAt.pattern) : null;
+		const raw = match
+			? applyPattern(inline(match.elements.first().text()), profile.defaults.publishedAt.pattern)
+			: null;
 		page.publishedAt = raw ? normalizeDate(raw) : null;
 	}
 	const dateField = page.fields.find((field) => field.type === "date" && typeof field.value === "string");
 	if (dateField) page.publishedAt = dateField.value as string;
+}
 
-	const titleMatch = firstMatch($, category?.title ?? profile.defaults.title);
-	page.title = titleMatch ? inline(titleMatch.elements.first().text()) || null : null;
-
+function readContent(
+	$: cheerio.CheerioAPI,
+	page: ParsedPage,
+	url: string,
+	profile: SiteProfile,
+	category: SiteCategory | null,
+): boolean {
 	const removals = [...profile.defaults.remove, ...(category?.remove ?? [])];
 	const contentMatch = firstMatch($, category?.content ?? profile.defaults.content);
 	const root = contentMatch ? contentMatch.elements.first().clone() : $("body").clone();
@@ -238,10 +253,12 @@ function parsePage(html: string, url: string, profile: SiteProfile): ParseOutcom
 	page.tables = root
 		.find("table")
 		.toArray()
-		.map((table): ParsedTable => {
-			const caption = inline($(table).find("caption").first().text()) || null;
-			return { caption, rows: tableRows($, $(table)) };
-		})
+		.map(
+			(table): ParsedTable => ({
+				caption: inline($(table).find("caption").first().text()) || null,
+				rows: tableRows($, $(table)),
+			}),
+		)
 		.filter((table) => table.rows.length > 0);
 	const images = new Map<string, ParsedImage>();
 	for (const image of root.find("img").toArray()) {
@@ -249,10 +266,27 @@ function parsePage(html: string, url: string, profile: SiteProfile): ParseOutcom
 		if (src && !images.has(src)) images.set(src, { src, alt: inline($(image).attr("alt") ?? "") || null });
 	}
 	page.images = [...images.values()];
+	return contentMatch !== null;
+}
+
+function parsePage(html: string, url: string, profile: SiteProfile): ParseOutcome {
+	const $ = cheerio.load(html);
+	const page = emptyPage(url, profile);
+	const category = categoryOf(url, profile, $);
+	page.category = category?.key ?? null;
+	page.categoryLabel = category?.label ?? null;
+	page.entityKind = category?.entityKind ?? null;
+	page.role = category?.role ?? null;
+	page.fields = (category?.fields ?? []).map((rule) => extractField($, rule, url));
+	readMeta($, page, url, profile);
+
+	const titleMatch = firstMatch($, category?.title ?? profile.defaults.title);
+	page.title = titleMatch ? inline(titleMatch.elements.first().text()) || null : null;
+	const contentFound = readContent($, page, url, profile, category);
 
 	if (!page.title) page.warnings.push("TITLE_MISSING");
 	if (!page.text && page.images.length === 0) page.warnings.push("EMPTY_CONTENT");
-	if (contentMatch === null) page.warnings.push("CONTENT_SELECTOR_MISSED");
+	if (!contentFound) page.warnings.push("CONTENT_SELECTOR_MISSED");
 	const missing = (category?.fields ?? [])
 		.filter((rule, index) => rule.required && page.fields[index].value === null)
 		.map((rule) => rule.path);

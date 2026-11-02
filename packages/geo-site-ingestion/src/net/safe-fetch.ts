@@ -210,6 +210,119 @@ function readBody(response: IncomingMessage, maxBytes: number, register: (destro
 	});
 }
 
+interface Deadline {
+	register: (destroy: (error: Error) => void) => void;
+	expired: () => boolean;
+	error: FetchAbort;
+	clear: () => void;
+}
+
+/** One timer for the whole exchange; when it fires it destroys whichever socket or stream is active. */
+function startDeadline(options: SafeFetchOptions): Deadline {
+	let destroyActive: ((error: Error) => void) | null = null;
+	let expired = false;
+	const error = new FetchAbort("TIMEOUT", `超过 ${options.timeoutMs} 毫秒未完成`);
+	const timer = setTimeout(() => {
+		expired = true;
+		destroyActive?.(error);
+	}, options.timeoutMs);
+	const onAbort = () => destroyActive?.(new FetchAbort("NETWORK", "已取消"));
+	options.signal?.addEventListener("abort", onAbort, { once: true });
+	return {
+		register: (destroy) => {
+			destroyActive = destroy;
+		},
+		expired: () => expired,
+		error,
+		clear: () => {
+			clearTimeout(timer);
+			options.signal?.removeEventListener("abort", onAbort);
+		},
+	};
+}
+
+function flatHeaders(response: IncomingMessage): Record<string, string> {
+	const headers: Record<string, string> = {};
+	for (const [name, value] of Object.entries(response.headers)) {
+		if (typeof value === "string") headers[name] = value;
+		else if (Array.isArray(value)) headers[name] = value.join(", ");
+	}
+	return headers;
+}
+
+type HopOutcome =
+	| { kind: "redirect"; next: string }
+	| { kind: "refused"; code: SafeFetchFailure; detail: string; extra: Partial<SafeFetchError> }
+	| { kind: "response"; response: IncomingMessage; address: string; status: number };
+
+async function hop(
+	current: string,
+	hopIndex: number,
+	options: SafeFetchOptions,
+	deadline: Deadline,
+	redirects: RedirectHop[],
+): Promise<HopOutcome> {
+	const url = new URL(current);
+	const pinned = await resolvePinned(
+		url.hostname,
+		options.resolve ?? systemResolver,
+		options.addressAllowed ?? isPublicAddress,
+	);
+	if (deadline.expired()) throw deadline.error;
+	const { response, address } = await request(url, pinned, options, deadline.register);
+	const status = response.statusCode ?? 0;
+	if (!REDIRECT_STATUSES.has(status) || !response.headers.location)
+		return { kind: "response", response, address, status };
+
+	response.resume();
+	const target = new URL(response.headers.location, url).toString();
+	const decision = checkUrl(target, redirectPolicyOf(options.allowedHosts, options.allowedPorts));
+	redirects.push({ from: current, to: decision.ok ? decision.url : target, status });
+	if (!decision.ok) {
+		return {
+			kind: "refused",
+			code: "REDIRECT_BLOCKED",
+			detail: `重定向目标被拒绝：${decision.reason}`,
+			extra: { status, blockedTarget: target, blockedReason: decision.reason },
+		};
+	}
+	const maxRedirects = options.maxRedirects ?? 5;
+	if (hopIndex + 1 > maxRedirects) {
+		return { kind: "refused", code: "TOO_MANY_REDIRECTS", detail: `重定向超过 ${maxRedirects} 次`, extra: { status } };
+	}
+	return { kind: "redirect", next: decision.url };
+}
+
+async function finishResponse(
+	outcome: Extract<HopOutcome, { kind: "response" }>,
+	options: SafeFetchOptions,
+	deadline: Deadline,
+	fail: (code: SafeFetchFailure, detail: string, extra?: Partial<SafeFetchError>) => SafeFetchError,
+	context: { url: string; finalUrl: string; redirects: RedirectHop[]; started: number },
+): Promise<SafeFetchResult> {
+	const { response, address, status } = outcome;
+	const { mimeType, charset } = parseContentType(response.headers["content-type"]);
+	const isSuccess = status >= 200 && status < 300;
+	if (isSuccess && options.allowedMimeTypes.length > 0 && !options.allowedMimeTypes.includes(mimeType ?? "")) {
+		response.destroy();
+		return fail("MIME_REJECTED", `内容类型 ${mimeType ?? "未声明"} 不在允许范围`, { status });
+	}
+	const body = await readBody(response, options.maxBytes, deadline.register);
+	return {
+		ok: true,
+		url: context.url,
+		finalUrl: context.finalUrl,
+		status,
+		headers: flatHeaders(response),
+		mimeType,
+		charset,
+		body,
+		redirects: context.redirects,
+		durationMs: Date.now() - context.started,
+		address,
+	};
+}
+
 /**
  * The only way the crawler talks to the network. Every hop is checked against the
  * host allowlist, resolved once, refused if any answer is not a public address,
@@ -219,23 +332,8 @@ function readBody(response: IncomingMessage, maxBytes: number, register: (destro
 export async function safeFetch(input: string, options: SafeFetchOptions): Promise<SafeFetchResult> {
 	const started = Date.now();
 	const redirects: RedirectHop[] = [];
-	const resolve = options.resolve ?? systemResolver;
-	const addressAllowed = options.addressAllowed ?? isPublicAddress;
-	const maxRedirects = options.maxRedirects ?? 5;
 	let current = input;
-	let destroyActive: ((error: Error) => void) | null = null;
-	const register = (destroy: (error: Error) => void) => {
-		destroyActive = destroy;
-	};
-	const timeout = new FetchAbort("TIMEOUT", `超过 ${options.timeoutMs} 毫秒未完成`);
-	let timedOut = false;
-	const timer = setTimeout(() => {
-		timedOut = true;
-		destroyActive?.(timeout);
-	}, options.timeoutMs);
-	const onAbort = () => destroyActive?.(new FetchAbort("NETWORK", "已取消"));
-	options.signal?.addEventListener("abort", onAbort, { once: true });
-
+	const deadline = startDeadline(options);
 	const fail = (code: SafeFetchFailure, detail: string, extra: Partial<SafeFetchError> = {}): SafeFetchError => ({
 		ok: false,
 		code,
@@ -251,55 +349,19 @@ export async function safeFetch(input: string, options: SafeFetchOptions): Promi
 		const first = checkUrl(current, redirectPolicyOf(options.allowedHosts, options.allowedPorts));
 		if (!first.ok) return fail("URL_REFUSED", `网址被拒绝：${first.reason}`, { blockedReason: first.reason });
 
-		for (let hop = 0; ; hop++) {
-			const url = new URL(current);
-			const pinned = await resolvePinned(url.hostname, resolve, addressAllowed);
-			if (timedOut) throw timeout;
-			const { response, address } = await request(url, pinned, options, register);
-			const status = response.statusCode ?? 0;
-
-			if (REDIRECT_STATUSES.has(status) && response.headers.location) {
-				response.resume();
-				const target = new URL(response.headers.location, url).toString();
-				const decision = checkUrl(target, redirectPolicyOf(options.allowedHosts, options.allowedPorts));
-				redirects.push({ from: current, to: decision.ok ? decision.url : target, status });
-				if (!decision.ok) {
-					return fail("REDIRECT_BLOCKED", `重定向目标被拒绝：${decision.reason}`, {
-						status,
-						blockedTarget: target,
-						blockedReason: decision.reason,
-					});
-				}
-				if (hop + 1 > maxRedirects) return fail("TOO_MANY_REDIRECTS", `重定向超过 ${maxRedirects} 次`, { status });
-				current = decision.url;
+		for (let index = 0; ; index++) {
+			const outcome = await hop(current, index, options, deadline, redirects);
+			if (outcome.kind === "refused") return fail(outcome.code, outcome.detail, outcome.extra);
+			if (outcome.kind === "redirect") {
+				current = outcome.next;
 				continue;
 			}
-
-			const { mimeType, charset } = parseContentType(response.headers["content-type"]);
-			const isSuccess = status >= 200 && status < 300;
-			if (isSuccess && options.allowedMimeTypes.length > 0 && !options.allowedMimeTypes.includes(mimeType ?? "")) {
-				response.destroy();
-				return fail("MIME_REJECTED", `内容类型 ${mimeType ?? "未声明"} 不在允许范围`, { status });
-			}
-			const body = await readBody(response, options.maxBytes, register);
-			const headers: Record<string, string> = {};
-			for (const [name, value] of Object.entries(response.headers)) {
-				if (typeof value === "string") headers[name] = value;
-				else if (Array.isArray(value)) headers[name] = value.join(", ");
-			}
-			return {
-				ok: true,
+			return await finishResponse(outcome, options, deadline, fail, {
 				url: input,
 				finalUrl: current,
-				status,
-				headers,
-				mimeType,
-				charset,
-				body,
 				redirects,
-				durationMs: Date.now() - started,
-				address,
-			};
+				started,
+			});
 		}
 	} catch (error) {
 		if (error instanceof FetchAbort) {
@@ -307,10 +369,9 @@ export async function safeFetch(input: string, options: SafeFetchOptions): Promi
 			if (error.code === "ADDRESS_BLOCKED") extra.blockedReason = "PRIVATE_ADDRESS";
 			return fail(error.code, error.message, extra);
 		}
-		if (timedOut) return fail("TIMEOUT", timeout.message);
+		if (deadline.expired()) return fail("TIMEOUT", deadline.error.message);
 		return fail("NETWORK", (error as Error).message);
 	} finally {
-		clearTimeout(timer);
-		options.signal?.removeEventListener("abort", onAbort);
+		deadline.clear();
 	}
 }

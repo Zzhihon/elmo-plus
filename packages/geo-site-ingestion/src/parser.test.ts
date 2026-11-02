@@ -4,7 +4,7 @@ import { siteDiscovery } from "./discovery";
 import { contentHashOf } from "./hash";
 import { siteContentNormalizer, siteKnowledgeMapper } from "./knowledge";
 import { parseSitePage } from "./parser";
-import { parseSiteProfile, parserVersionOf, type SiteProfileInput } from "./profile";
+import { parserVersionOf, parseSiteProfile, type SiteProfileInput } from "./profile";
 import { renderSnapshotForViewing } from "./snapshot-view";
 
 const BASE = "http://www.example-electric.test";
@@ -26,8 +26,21 @@ const profileInput: SiteProfileInput = {
 			title: [".product-name"],
 			content: [".product-body"],
 			fields: [
-				{ path: "model", label: "型号", selector: [".product-name"], pattern: "^([A-Z0-9-]+)", required: true, claimType: "MODEL" },
-				{ path: "summary", label: "产品概况", selector: [".product-summary"], type: "multiline", claimType: "DESCRIPTION" },
+				{
+					path: "model",
+					label: "型号",
+					selector: [".product-name"],
+					pattern: "^([A-Z0-9-]+)",
+					required: true,
+					claimType: "MODEL",
+				},
+				{
+					path: "summary",
+					label: "产品概况",
+					selector: [".product-summary"],
+					type: "multiline",
+					claimType: "DESCRIPTION",
+				},
 				{ path: "ratedVoltage", label: "额定电压", selector: [".spec-voltage"], claimType: "TECH_PARAMETER" },
 				{ path: "images", selector: [".gallery img"], type: "images" },
 				{ path: "parameters", selector: [".spec-table"], type: "table" },
@@ -197,7 +210,9 @@ describe("snapshot viewing", () => {
 			<iframe src="http://attacker.test"></iframe><form action="http://attacker.test"><input name="q"></form>
 			<svg><script>alert(4)</script></svg><div style="background:url(javascript:alert(5))">正文</div></body></html>`;
 		const safe = renderSnapshotForViewing(hostile);
-		expect(safe).not.toMatch(/<script|onerror|onload|javascript:|<iframe|<form|<base|attacker\.test|http-equiv="refresh"/i);
+		expect(safe).not.toMatch(
+			/<script|onerror|onload|javascript:|<iframe|<form|<base|attacker\.test|http-equiv="refresh"/i,
+		);
 		expect(safe).toContain("Content-Security-Policy");
 		expect(safe).toContain("[产品图]");
 		expect(safe).toContain('data-original-href="/products/xg-12.html"');
