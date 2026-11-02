@@ -1,5 +1,5 @@
 {
-  "id": "acf6c184-4588-43aa-bb82-575d6216bc43",
+  "id": "0d394a90-cfe1-4459-8691-0c2e0f48824b",
   "prevId": "e722f334-35fb-4e21-bca1-c1df49c725c8",
   "version": "7",
   "dialect": "postgresql",
@@ -5238,7 +5238,7 @@
       "checkConstraints": {
         "geo_assertion_reviews_decision_check": {
           "name": "geo_assertion_reviews_decision_check",
-          "value": "\"geo_assertion_reviews\".\"decision\" in ('APPROVE', 'REJECT', 'REQUEST_EVIDENCE', 'INVALIDATE')"
+          "value": "\"geo_assertion_reviews\".\"decision\" in ('APPROVE', 'REJECT', 'REQUEST_EVIDENCE', 'INVALIDATE', 'FREEZE', 'UNFREEZE')"
         },
         "geo_assertion_reviews_scope_check": {
           "name": "geo_assertion_reviews_scope_check",
@@ -6190,6 +6190,143 @@
       },
       "isRLSEnabled": true
     },
+    "public.geo_content_reviews": {
+      "name": "geo_content_reviews",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "item_id": {
+          "name": "item_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "from_state": {
+          "name": "from_state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "to_state": {
+          "name": "to_state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "actor_id": {
+          "name": "actor_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "comment": {
+          "name": "comment",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "geo_content_reviews_item_created_idx": {
+          "name": "geo_content_reviews_item_created_idx",
+          "columns": [
+            {
+              "expression": "item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "geo_content_reviews_organization_id_organization_id_fk": {
+          "name": "geo_content_reviews_organization_id_organization_id_fk",
+          "tableFrom": "geo_content_reviews",
+          "tableTo": "organization",
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "geo_content_reviews_item_id_geo_content_items_id_fk": {
+          "name": "geo_content_reviews_item_id_geo_content_items_id_fk",
+          "tableFrom": "geo_content_reviews",
+          "tableTo": "geo_content_items",
+          "columnsFrom": [
+            "item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "geo_content_reviews_action_check": {
+          "name": "geo_content_reviews_action_check",
+          "value": "\"geo_content_reviews\".\"action\" in ('SUBMIT', 'APPROVE_TECH', 'APPROVE_MARKETING', 'REJECT', 'REVISE', 'PUBLISH')"
+        },
+        "geo_content_reviews_from_state_check": {
+          "name": "geo_content_reviews_from_state_check",
+          "value": "\"geo_content_reviews\".\"from_state\" in ('DRAFT', 'PENDING_TECH_REVIEW', 'PENDING_MARKETING_REVIEW', 'APPROVED', 'REJECTED', 'PUBLISHED')"
+        },
+        "geo_content_reviews_to_state_check": {
+          "name": "geo_content_reviews_to_state_check",
+          "value": "\"geo_content_reviews\".\"to_state\" in ('DRAFT', 'PENDING_TECH_REVIEW', 'PENDING_MARKETING_REVIEW', 'APPROVED', 'REJECTED', 'PUBLISHED')"
+        }
+      },
+      "isRLSEnabled": true
+    },
     "public.geo_content_versions": {
       "name": "geo_content_versions",
       "schema": "",
@@ -6508,6 +6645,19 @@
           "notNull": true,
           "default": "'[]'::jsonb"
         },
+        "citation_attribution": {
+          "name": "citation_attribution",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "signals": {
+          "name": "signals",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "confidence": {
           "name": "confidence",
           "type": "double precision",
@@ -6519,6 +6669,20 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "review_reasons": {
+          "name": "review_reasons",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'"
+        },
+        "review_priority": {
+          "name": "review_priority",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
         },
         "is_current": {
           "name": "is_current",
@@ -6611,6 +6775,34 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "geo_evaluations_review_pool_idx": {
+          "name": "geo_evaluations_review_pool_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "review_priority",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"geo_evaluations\".\"is_current\" = true and \"geo_evaluations\".\"review_status\" = 'PENDING_REVIEW'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -6671,6 +6863,10 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
+        "geo_evaluations_review_reasons_check": {
+          "name": "geo_evaluations_review_reasons_check",
+          "value": "\"geo_evaluations\".\"review_reasons\" <@ array['LLM_DISAGREES', 'LOW_CONFIDENCE', 'HIGH_PRIORITY_PROMPT', 'TECHNICAL_CLAIM', 'CLAIM_MISMATCH', 'RULES_ONLY_JUDGEMENT']::text[]"
+        },
         "geo_evaluations_recommendation_check": {
           "name": "geo_evaluations_recommendation_check",
           "value": "\"geo_evaluations\".\"recommendation\" in ('RECOMMENDED', 'MENTIONED_ONLY', 'NEGATIVE', 'NOT_MENTIONED')"
@@ -6761,6 +6957,26 @@
           "primaryKey": false,
           "notNull": true
         },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "review_status": {
+          "name": "review_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'PENDING'"
+        },
+        "review_note": {
+          "name": "review_note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "reviewed_by": {
           "name": "reviewed_by",
           "type": "text",
@@ -6833,6 +7049,10 @@
         "geo_generated_reports_status_check": {
           "name": "geo_generated_reports_status_check",
           "value": "\"geo_generated_reports\".\"status\" in ('QUEUED', 'RUNNING', 'SUCCEEDED', 'FAILED')"
+        },
+        "geo_generated_reports_review_status_check": {
+          "name": "geo_generated_reports_review_status_check",
+          "value": "\"geo_generated_reports\".\"review_status\" in ('PENDING', 'APPROVED', 'REJECTED')"
         }
       },
       "isRLSEnabled": true
@@ -7021,6 +7241,24 @@
         },
         "author_id": {
           "name": "author_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "frozen_at": {
+          "name": "frozen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "frozen_by": {
+          "name": "frozen_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "frozen_reason": {
+          "name": "frozen_reason",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -7246,11 +7484,41 @@
           "notNull": true,
           "default": "'INTERNAL'"
         },
+        "file_name": {
+          "name": "file_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "uploaded_by": {
           "name": "uploaded_by",
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "review_note": {
+          "name": "review_note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reviewed_by": {
+          "name": "reviewed_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reviewed_at": {
+          "name": "reviewed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -7539,6 +7807,32 @@
           "primaryKey": false,
           "notNull": false
         },
+        "claim_kind": {
+          "name": "claim_kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'NUMBER'"
+        },
+        "extracted_value": {
+          "name": "extracted_value",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reference_value": {
+          "name": "reference_value",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "match_status": {
+          "name": "match_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'NO_REFERENCE'"
+        },
         "assertion_id": {
           "name": "assertion_id",
           "type": "uuid",
@@ -7561,6 +7855,12 @@
         "reviewed_at": {
           "name": "reviewed_at",
           "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "review_note": {
+          "name": "review_note",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
@@ -7671,6 +7971,14 @@
         "geo_observation_claims_verdict_check": {
           "name": "geo_observation_claims_verdict_check",
           "value": "\"geo_observation_claims\".\"verdict\" in ('UNVERIFIED', 'CORRECT', 'ERROR')"
+        },
+        "geo_observation_claims_kind_check": {
+          "name": "geo_observation_claims_kind_check",
+          "value": "\"geo_observation_claims\".\"claim_kind\" in ('NUMBER', 'MODEL', 'CERTIFICATE')"
+        },
+        "geo_observation_claims_match_check": {
+          "name": "geo_observation_claims_match_check",
+          "value": "\"geo_observation_claims\".\"match_status\" in ('MATCHED', 'MISMATCH', 'NO_REFERENCE')"
         }
       },
       "isRLSEnabled": true
@@ -10432,11 +10740,23 @@
           "primaryKey": false,
           "notNull": true
         },
+        "site_source_id": {
+          "name": "site_source_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
         "page_id": {
           "name": "page_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
+        },
+        "subject_key": {
+          "name": "subject_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
         },
         "rule_id": {
           "name": "rule_id",
@@ -10444,11 +10764,25 @@
           "primaryKey": false,
           "notNull": true
         },
+        "rule_version": {
+          "name": "rule_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
         "severity": {
           "name": "severity",
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "priority": {
+          "name": "priority",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'P2'"
         },
         "status": {
           "name": "status",
@@ -10456,6 +10790,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'OPEN'"
+        },
+        "page_version_id": {
+          "name": "page_version_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         },
         "evidence": {
           "name": "evidence",
@@ -10486,6 +10826,56 @@
         "task_id": {
           "name": "task_id",
           "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_run_id": {
+          "name": "last_run_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "first_seen_at": {
+          "name": "first_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "last_seen_at": {
+          "name": "last_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "resolved_at": {
+          "name": "resolved_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resolved_run_id": {
+          "name": "resolved_run_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status_note": {
+          "name": "status_note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "triaged_by": {
+          "name": "triaged_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "triaged_at": {
+          "name": "triaged_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -10528,6 +10918,48 @@
             }
           ],
           "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "geo_site_audit_findings_subject_idx": {
+          "name": "geo_site_audit_findings_subject_idx",
+          "columns": [
+            {
+              "expression": "site_source_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "rule_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "subject_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "geo_site_audit_findings_version_idx": {
+          "name": "geo_site_audit_findings_version_idx",
+          "columns": [
+            {
+              "expression": "page_version_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -10596,12 +11028,38 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
+        "geo_site_audit_findings_site_source_id_geo_site_sources_id_fk": {
+          "name": "geo_site_audit_findings_site_source_id_geo_site_sources_id_fk",
+          "tableFrom": "geo_site_audit_findings",
+          "tableTo": "geo_site_sources",
+          "columnsFrom": [
+            "site_source_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "geo_site_audit_findings_page_id_geo_site_pages_id_fk": {
           "name": "geo_site_audit_findings_page_id_geo_site_pages_id_fk",
           "tableFrom": "geo_site_audit_findings",
           "tableTo": "geo_site_pages",
           "columnsFrom": [
             "page_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "geo_site_audit_findings_page_version_id_geo_site_page_versions_id_fk": {
+          "name": "geo_site_audit_findings_page_version_id_geo_site_page_versions_id_fk",
+          "tableFrom": "geo_site_audit_findings",
+          "tableTo": "geo_site_page_versions",
+          "columnsFrom": [
+            "page_version_id"
           ],
           "columnsTo": [
             "id"
@@ -10621,6 +11079,32 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "geo_site_audit_findings_last_run_id_geo_site_audit_runs_id_fk": {
+          "name": "geo_site_audit_findings_last_run_id_geo_site_audit_runs_id_fk",
+          "tableFrom": "geo_site_audit_findings",
+          "tableTo": "geo_site_audit_runs",
+          "columnsFrom": [
+            "last_run_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "geo_site_audit_findings_resolved_run_id_geo_site_audit_runs_id_fk": {
+          "name": "geo_site_audit_findings_resolved_run_id_geo_site_audit_runs_id_fk",
+          "tableFrom": "geo_site_audit_findings",
+          "tableTo": "geo_site_audit_runs",
+          "columnsFrom": [
+            "resolved_run_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -10634,6 +11118,10 @@
         "geo_site_audit_findings_status_check": {
           "name": "geo_site_audit_findings_status_check",
           "value": "\"geo_site_audit_findings\".\"status\" in ('OPEN', 'TASKED', 'RESOLVED', 'DISMISSED')"
+        },
+        "geo_site_audit_findings_priority_check": {
+          "name": "geo_site_audit_findings_priority_check",
+          "value": "\"geo_site_audit_findings\".\"priority\" in ('P0', 'P1', 'P2', 'P3')"
         }
       },
       "isRLSEnabled": true
@@ -10692,6 +11180,19 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "crawl_run_id": {
+          "name": "crawl_run_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "site_checks": {
+          "name": "site_checks",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
         },
         "error_summary": {
           "name": "error_summary",
@@ -10783,6 +11284,19 @@
           "tableTo": "geo_site_sources",
           "columnsFrom": [
             "site_source_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "geo_site_audit_runs_crawl_run_id_geo_site_crawl_runs_id_fk": {
+          "name": "geo_site_audit_runs_crawl_run_id_geo_site_crawl_runs_id_fk",
+          "tableFrom": "geo_site_audit_runs",
+          "tableTo": "geo_site_crawl_runs",
+          "columnsFrom": [
+            "crawl_run_id"
           ],
           "columnsTo": [
             "id"
