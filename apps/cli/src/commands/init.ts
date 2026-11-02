@@ -116,7 +116,7 @@ async function resolveDockerLocation(
 async function configureGeo(options: InitOptions, env: EnvMap): Promise<GeoComposeOptions | undefined> {
 	if (!options.geo) return undefined;
 	const clamav = await p.confirm({
-		message: "Run ClamAV to scan GEO uploads? (about 1 GiB of RAM; without it uploads are marked unscanned)",
+		message: "Run ClamAV to scan GEO uploads? (about 1 GiB of RAM; without it uploads are marked unscanned and cannot back high-risk facts)",
 		initialValue: true,
 	});
 	assertNotCancelled(clamav);

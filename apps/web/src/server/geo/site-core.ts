@@ -66,6 +66,7 @@ import { writeGeoAudit } from "@workspace/lib/geo/audit";
 import { and, asc, count, desc, eq, getTableName, ilike, inArray, isNull, ne, or, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
 import { enqueueGeoJob } from "@/lib/geo/enqueue";
+import { hiddenFromReader } from "./knowledge-shared";
 
 const send: SendJob = (queue, data, options) => enqueueGeoJob(queue, data, options);
 
@@ -516,6 +517,7 @@ export async function getSitePage(principal: GeoPrincipal, pageId: string) {
 				fieldPath: geoKnowledgeAssertions.fieldPath,
 				claimType: geoKnowledgeAssertions.claimType,
 				claimText: geoKnowledgeAssertions.claimText,
+				publicationScope: geoKnowledgeAssertions.publicationScope,
 				status: geoKnowledgeAssertions.status,
 				riskLevel: geoKnowledgeAssertions.riskLevel,
 				pageVersionId: geoAssertionSources.pageVersionId,
@@ -546,7 +548,10 @@ export async function getSitePage(principal: GeoPrincipal, pageId: string) {
 		},
 		versions: versions.map(versionView),
 		entities,
-		assertions,
+		assertions: assertions.map(({ publicationScope, ...assertion }) => ({
+			...assertion,
+			claimText: hiddenFromReader(principal, publicationScope) ? null : assertion.claimText,
+		})),
 		profileVersions,
 	};
 }

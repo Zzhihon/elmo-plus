@@ -44,6 +44,7 @@ import {
 	type GeoAssertionSourceRow,
 	loadAssertionSources,
 	loadFactStates,
+	lockClaimField,
 } from "@workspace/lib/geo/knowledge";
 import {
 	aliasedTable,
@@ -68,6 +69,7 @@ import {
 	displayNames,
 	iso,
 	knowledgeValue,
+	hiddenFromReader,
 	type LocatorFields,
 	locatorFields,
 	nameOf,
@@ -383,6 +385,9 @@ export function pendingClaimFilters(filters: ClaimFilters): ClaimFilters {
 export async function knowledgeOverview(principal: GeoPrincipal) {
 	assertGeoPermission(principal, "knowledge.read");
 	const visible = visibleClaims(principal);
+	const showConfidential = canReadConfidential(principal);
+	const candidate = aliasedTable(geoKnowledgeAssertions, "candidate");
+	const approved = aliasedTable(geoKnowledgeAssertions, "approved");
 	const [statuses, [conflicts], [assets]] = await Promise.all([
 		db
 			.select({ status: geoKnowledgeAssertions.status, total: count() })
@@ -392,10 +397,15 @@ export async function knowledgeOverview(principal: GeoPrincipal) {
 		db
 			.select({ total: count() })
 			.from(geoAssertionConflicts)
+			.innerJoin(candidate, eq(candidate.id, geoAssertionConflicts.candidateId))
+			.innerJoin(approved, eq(approved.id, geoAssertionConflicts.approvedId))
 			.where(
 				and(
 					eq(geoAssertionConflicts.organizationId, principal.organizationId),
 					eq(geoAssertionConflicts.status, "OPEN"),
+					...(showConfidential
+						? []
+						: [ne(candidate.publicationScope, "CONFIDENTIAL"), ne(approved.publicationScope, "CONFIDENTIAL")]),
 				),
 			),
 		db
@@ -405,6 +415,7 @@ export async function knowledgeOverview(principal: GeoPrincipal) {
 				and(
 					eq(geoKnowledgeAssets.organizationId, principal.organizationId),
 					eq(geoKnowledgeAssets.approvalStatus, "PENDING"),
+					...(showConfidential ? [] : [ne(geoKnowledgeAssets.confidentiality, "CONFIDENTIAL")]),
 				),
 			),
 	]);
@@ -425,20 +436,50 @@ interface ReviewSourceRef {
 	url: string | null;
 	assetId: string | null;
 	locator: LocatorFields;
+	hidden: boolean;
 }
 
-function reviewSources(value: unknown): ReviewSourceRef[] {
+function reviewedAssetIds(reviews: readonly { sourceRef: unknown }[]): string[] {
+	return reviews.flatMap((review) =>
+		Array.isArray(review.sourceRef)
+			? review.sourceRef.flatMap((entry) => {
+					const assetId = locatorFields(entry).assetId;
+					return typeof assetId === "string" ? [assetId] : [];
+				})
+			: [],
+	);
+}
+
+/** Which of these documents the reader may be told about, by their classification as it stands now. */
+async function readableAssetIds(principal: GeoPrincipal, assetIds: readonly string[]): Promise<ReadonlySet<string>> {
+	if (assetIds.length === 0) return new Set();
+	const rows = await db
+		.select({ id: geoKnowledgeAssets.id, confidentiality: geoKnowledgeAssets.confidentiality })
+		.from(geoKnowledgeAssets)
+		.where(
+			and(
+				eq(geoKnowledgeAssets.organizationId, principal.organizationId),
+				inArray(geoKnowledgeAssets.id, [...new Set(assetIds)]),
+			),
+		);
+	return new Set(rows.filter((row) => !hiddenFromReader(principal, row.confidentiality)).map((row) => row.id));
+}
+
+function reviewSources(value: unknown, readableAssets: ReadonlySet<string>): ReviewSourceRef[] {
 	if (!Array.isArray(value)) return [];
 	return value.map((entry) => {
 		const fields = locatorFields(entry);
 		const text = (key: string) => (typeof fields[key] === "string" ? (fields[key] as string) : null);
+		const assetId = text("assetId");
+		const hidden = assetId !== null && !readableAssets.has(assetId);
 		return {
 			kind: text("kind") ?? "UNKNOWN",
-			sourceId: text("sourceId"),
+			sourceId: hidden ? null : text("sourceId"),
 			pageVersionId: text("pageVersionId"),
 			url: text("url"),
-			assetId: text("assetId"),
-			locator: locatorFields((entry as Record<string, unknown> | null)?.locator),
+			assetId: hidden ? null : assetId,
+			locator: hidden ? {} : locatorFields((entry as Record<string, unknown> | null)?.locator),
+			hidden,
 		};
 	});
 }
@@ -544,7 +585,10 @@ export async function getClaimDetail(principal: GeoPrincipal, id: string) {
 		...siblings.map((row) => row.id),
 		...conflicts.flatMap((row) => [row.candidate.id, row.approved.id]),
 	];
-	const sources = await loadAssertionSources(db, principal.organizationId, [...new Set(relatedIds)]);
+	const [sources, readableAssets] = await Promise.all([
+		loadAssertionSources(db, principal.organizationId, [...new Set(relatedIds)]),
+		readableAssetIds(principal, reviewedAssetIds(reviews)),
+	]);
 	const own = sources.get(id) ?? [];
 	const names = await displayNames([
 		...reviews.map((review) => review.reviewerId),
@@ -562,7 +606,7 @@ export async function getClaimDetail(principal: GeoPrincipal, id: string) {
 		status: GeoAssertionStatus;
 		scope: GeoPublicationScope;
 	}) =>
-		side.scope === "CONFIDENTIAL" && !showConfidential
+		hiddenFromReader(principal, side.scope)
 			? { id: side.id, claimText: null, value: null, status: side.status, citations: [] }
 			: {
 					id: side.id,
@@ -597,13 +641,17 @@ export async function getClaimDetail(principal: GeoPrincipal, id: string) {
 			reviewerName: nameOf(names, review.reviewerId),
 			basis: review.basis,
 			publicationScope: review.publicationScope,
-			sourceRef: reviewSources(review.sourceRef),
+			sourceRef: reviewSources(review.sourceRef, readableAssets),
 			reviewedAt: iso(review.reviewedAt) as string,
 		})),
 		conflicts: conflicts.map((row) => ({
 			id: row.conflict.id,
 			status: row.conflict.status,
-			resolution: row.conflict.resolution,
+			// A resolution carries the reviewer's basis, which can quote a side this reader may not see.
+			resolution:
+				hiddenFromReader(principal, row.candidate.scope) || hiddenFromReader(principal, row.approved.scope)
+					? (row.conflict.resolution?.split(":")[0] ?? null)
+					: row.conflict.resolution,
 			resolvedByName: nameOf(names, row.conflict.resolvedBy),
 			resolvedAt: iso(row.conflict.resolvedAt),
 			createdAt: iso(row.conflict.createdAt) as string,
@@ -628,16 +676,20 @@ export type KnowledgeClaimDetail = Awaited<ReturnType<typeof getClaimDetail>>;
 // Review
 // ---------------------------------------------------------------------------
 
+/** The review keeps where its evidence sat. A document's words stay with the document, under its own access rules. */
 function sourceRefOf(sources: GeoAssertionSourceRow[]) {
-	return sources.map((source) => ({
-		kind: source.kind,
-		sourceId: source.id,
-		pageVersionId: source.pageVersionId,
-		url: source.url,
-		assetId: source.assetId,
-		locator: source.locator,
-		parserVersion: source.parserVersion,
-	}));
+	return sources.map((source) => {
+		const { quote: _quote, ...withoutQuote } = locatorFields(source.locator);
+		return {
+			kind: source.kind,
+			sourceId: source.id,
+			pageVersionId: source.pageVersionId,
+			url: source.url,
+			assetId: source.assetId,
+			locator: source.kind === "ASSET" ? withoutQuote : source.locator,
+			parserVersion: source.parserVersion,
+		};
+	});
 }
 
 async function recordReview(
@@ -789,6 +841,10 @@ async function afterReview(tx: DbConnection, principal: GeoPrincipal, action: Ge
  * by a named reviewer, never during a crawl.
  */
 async function applyClaimReview(tx: DbConnection, principal: GeoPrincipal, id: string, input: ClaimReviewInput) {
+	const { entityId, fieldPath, claimType } = await loadClaim(tx, principal, id);
+	// Taken before the row lock so two approvals of one field run one after the other,
+	// and the second sees the first as a conflict instead of a second approved value.
+	if (entityId && fieldPath) await lockClaimField(tx, { entityId, fieldPath, claimType });
 	const current = await loadClaim(tx, principal, id, true);
 	const sources = (await loadAssertionSources(tx, principal.organizationId, [id])).get(id) ?? [];
 	if (input.decision === "FREEZE" || input.decision === "UNFREEZE") {
@@ -949,17 +1005,25 @@ export type KnowledgeConflictRow = Awaited<ReturnType<typeof listConflicts>>["ro
 export async function resolveConflict(principal: GeoPrincipal, conflictId: string, input: ConflictResolutionInput) {
 	assertGeoPermission(principal, "knowledge.review");
 	return db.transaction(async (tx) => {
-		const [conflict] = await tx
-			.select()
+		const scoped = and(
+			eq(geoAssertionConflicts.organizationId, principal.organizationId),
+			eq(geoAssertionConflicts.id, conflictId),
+		);
+		// The field lock comes before the conflict row, in the order a review of the candidate takes them.
+		const [field] = await tx
+			.select({
+				entityId: geoKnowledgeAssertions.entityId,
+				fieldPath: geoKnowledgeAssertions.fieldPath,
+				claimType: geoKnowledgeAssertions.claimType,
+			})
 			.from(geoAssertionConflicts)
-			.where(
-				and(
-					eq(geoAssertionConflicts.organizationId, principal.organizationId),
-					eq(geoAssertionConflicts.id, conflictId),
-				),
-			)
-			.for("update")
+			.innerJoin(geoKnowledgeAssertions, eq(geoKnowledgeAssertions.id, geoAssertionConflicts.candidateId))
+			.where(scoped)
 			.limit(1);
+		if (field?.entityId && field.fieldPath) {
+			await lockClaimField(tx, { entityId: field.entityId, fieldPath: field.fieldPath, claimType: field.claimType });
+		}
+		const [conflict] = await tx.select().from(geoAssertionConflicts).where(scoped).for("update").limit(1);
 		if (!conflict) throw new GeoError("NOT_FOUND", "冲突不存在");
 		if (conflict.status !== "OPEN") throw new GeoError("CONFLICT", "该冲突已处理");
 		await tx

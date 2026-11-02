@@ -10,6 +10,7 @@ import {
 	geoContentReviews,
 	geoContentVersions,
 	geoKnowledgeAssertions,
+	geoKnowledgeAssets,
 	geoPublicationRecords,
 	geoSitePages,
 	geoSitePageVersions,
@@ -66,6 +67,7 @@ beforeAll(async () => {
 		publicationScope: "PUBLIC",
 	});
 	assetId = asset.id;
+	await db.update(geoKnowledgeAssets).set({ scanStatus: "CLEAN" }).where(eq(geoKnowledgeAssets.id, assetId));
 	await expectGeoError(reviewKnowledgeAsset(operator, assetId, { decision: "APPROVE", note: "本人上传" }), "FORBIDDEN");
 	await reviewKnowledgeAsset(knowledgeReviewer, assetId, { decision: "APPROVE", note: "原件核对无误" });
 });

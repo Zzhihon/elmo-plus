@@ -420,7 +420,9 @@ export function AssetDetailView({ detail }: { detail: AssetDetail }) {
 					{asset.scanStatus === "UNSCANNED" && (
 						<Alert>
 							<AlertTitle>未经恶意文件扫描</AlertTitle>
-							<AlertDescription>上传时部署没有配置扫描服务。打开前请确认来源可信。</AlertDescription>
+							<AlertDescription>
+								上传时部署没有配置扫描服务，这份资料不能作为高风险事实的原件。配置扫描服务后重新上传同一文件即可补做扫描。
+							</AlertDescription>
 						</Alert>
 					)}
 					<dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -475,13 +477,17 @@ export function AssetDetailView({ detail }: { detail: AssetDetail }) {
 								<li key={claim.id} className="flex flex-col gap-1 py-2 text-sm">
 									<div className="flex flex-wrap items-center gap-2">
 										<GeoAssertionStatusBadge status={claim.status} />
-										<Link
-											to="/app/org/$org/geo/knowledge/$id"
-											params={{ org: organization.slug, id: claim.id }}
-											className="font-medium hover:underline"
-										>
-											{claim.claimText}
-										</Link>
+										{claim.claimText === null ? (
+											<span className="text-muted-foreground">保密内容（无权查看）</span>
+										) : (
+											<Link
+												to="/app/org/$org/geo/knowledge/$id"
+												params={{ org: organization.slug, id: claim.id }}
+												className="font-medium hover:underline"
+											>
+												{claim.claimText}
+											</Link>
+										)}
 									</div>
 									<span className="text-xs text-muted-foreground">
 										{claim.entityTitle ?? "—"} · {claimTypeLabel(claim.claimType)} · {claim.fieldPath ?? "—"}

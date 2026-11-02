@@ -163,7 +163,7 @@ function CandidatesCard({
 					>
 						<GeoAssertionStatusBadge status={assertion.status as GeoAssertionStatus} />
 						{assertion.riskLevel === "HIGH" && <GeoStatusBadge label="高风险，需原件核对" tone="danger" />}
-						<span className="min-w-0 flex-1 break-all">{assertion.claimText}</span>
+						<span className="min-w-0 flex-1 break-all">{assertion.claimText ?? "保密内容（无权查看）"}</span>
 						<span className="text-xs text-muted-foreground">
 							{GEO_ASSERTION_STATUS_LABELS[assertion.status as GeoAssertionStatus]} · {assertion.fieldPath}
 						</span>

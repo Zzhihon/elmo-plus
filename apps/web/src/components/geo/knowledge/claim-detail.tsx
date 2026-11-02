@@ -150,9 +150,11 @@ function Reviews({ detail }: { detail: KnowledgeClaimDetail }) {
 							? "无"
 							: review.sourceRef
 									.map((source) =>
-										source.kind === "PAGE_VERSION"
-											? `页面版本 ${source.pageVersionId?.slice(0, 8) ?? "—"}（${source.url ?? ""}）`
-											: `客户原件 ${source.assetId?.slice(0, 8) ?? "—"}${typeof source.locator.page === "number" ? ` 第 ${source.locator.page} 页` : ""}`,
+										source.hidden
+											? "保密原件（无权查看）"
+											: source.kind === "PAGE_VERSION"
+												? `页面版本 ${source.pageVersionId?.slice(0, 8) ?? "—"}（${source.url ?? ""}）`
+												: `客户原件 ${source.assetId?.slice(0, 8) ?? "—"}${typeof source.locator.page === "number" ? ` 第 ${source.locator.page} 页` : ""}`,
 									)
 									.join("；")}
 					</p>
@@ -202,7 +204,7 @@ export function ClaimDetailView({ detail }: { detail: KnowledgeClaimDetail }) {
 						sourceKind="ASSERTION"
 						sourceRef={`assertion:${claim.id}`}
 						evidence={{ assertionIds: [claim.id] }}
-						defaultTitle={`核对事实：${claim.claimText}`.slice(0, 200)}
+						defaultTitle={claim.publicationScope === "CONFIDENTIAL" ? "核对保密事实" : `核对事实：${claim.claimText}`.slice(0, 200)}
 						defaultKind="FACT_CORRECTION"
 						defaultRiskLevel={claim.riskLevel}
 						size="sm"

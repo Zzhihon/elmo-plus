@@ -84,9 +84,20 @@ export function isLiveSource(source: GeoKnowledgeSourceFacts, now: Date = new Da
 	);
 }
 
-/** The customer original a high-risk fact needs: confirmed by a reviewer, scanned or knowingly unscanned, in date. */
+/** The customer original a high-risk fact needs: confirmed by a reviewer, found clean by the scanner, in date. */
 export function isUsableOriginal(source: GeoKnowledgeSourceFacts, now: Date = new Date()): boolean {
-	return source.kind === "ASSET" && source.assetApproval === "APPROVED" && isLiveSource(source, now);
+	return (
+		source.kind === "ASSET" &&
+		source.assetApproval === "APPROVED" &&
+		source.assetScan === "CLEAN" &&
+		isLiveSource(source, now)
+	);
+}
+
+/** Moving an expiry later vouches for the document all over again; a reviewer has to look at it again too. */
+export function validityExtended(before: Date | null, after: Date | null): boolean {
+	if (!before) return false;
+	return !after || after.getTime() > before.getTime();
 }
 
 export function hasValidOriginalDocument(sources: readonly GeoKnowledgeSourceFacts[], now: Date = new Date()): boolean {

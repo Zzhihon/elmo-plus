@@ -8,7 +8,10 @@ import {
 	type GeoConflictCandidate,
 	type GeoFactState,
 	type GeoKnowledgeSourceFacts,
+	hasValidOriginalDocument,
+	isLiveSource,
 	knowledgeApprovalProblem,
+	validityExtended,
 } from "./knowledge-gates";
 
 const now = new Date("2026-06-01T00:00:00Z");
@@ -64,6 +67,23 @@ describe("conflict detection", () => {
 			candidate({ id: "no-field", fieldPath: null, normalizedValue: "24kV" }),
 		]);
 		expect(pairs).toEqual([]);
+	});
+});
+
+describe("customer originals", () => {
+	it("does not accept an unscanned document as the original behind a high-risk fact", () => {
+		expect(hasValidOriginalDocument([manual], now)).toBe(true);
+		expect(hasValidOriginalDocument([{ ...manual, assetScan: "UNSCANNED" }], now)).toBe(false);
+		expect(isLiveSource({ ...manual, assetScan: "UNSCANNED" }, now)).toBe(true);
+	});
+
+	it("treats only a later or removed expiry as an extension", () => {
+		const date = new Date("2030-01-01T00:00:00Z");
+		const earlier = new Date("2029-01-01T00:00:00Z");
+		expect(validityExtended(earlier, date)).toBe(true);
+		expect(validityExtended(date, null)).toBe(true);
+		expect(validityExtended(date, earlier)).toBe(false);
+		expect(validityExtended(null, date)).toBe(false);
 	});
 });
 
