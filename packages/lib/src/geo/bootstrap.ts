@@ -14,7 +14,7 @@ import {
 	normalizeBrandDomain,
 	normalizePromptQuestion,
 } from "@workspace/geo-domain";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { DbConnection } from "../db/db-connection";
 import { organization } from "../db/schema-auth";
@@ -165,6 +165,10 @@ export async function applyGeoBootstrapBrands(
 	});
 }
 
+/**
+ * Roles have no editor in the product, so the file is their only source and may
+ * reorder or retitle them; the customer's priority order is part of that config.
+ */
 export async function applyGeoBootstrapRoles(
 	db: DbConnection,
 	organizationId: string,
@@ -174,12 +178,20 @@ export async function applyGeoBootstrapRoles(
 	await seedDefaultBuyerRoles(db, organizationId);
 	if (roles.length === 0) return { created: 0, skipped: 0 };
 
-	const created = await db
+	const before = await db
+		.select({ code: geoBuyerRoles.code })
+		.from(geoBuyerRoles)
+		.where(eq(geoBuyerRoles.organizationId, organizationId));
+	const known = new Set(before.map((role) => role.code));
+	await db
 		.insert(geoBuyerRoles)
 		.values(roles.map((role) => ({ ...role, organizationId })))
-		.onConflictDoNothing()
-		.returning({ id: geoBuyerRoles.id });
-	return { created: created.length, skipped: roles.length - created.length };
+		.onConflictDoUpdate({
+			target: [geoBuyerRoles.organizationId, geoBuyerRoles.code],
+			set: { title: sql`excluded.title`, priority: sql`excluded.priority`, updatedAt: new Date() },
+		});
+	const created = roles.filter((role) => !known.has(role.code)).length;
+	return { created, skipped: roles.length - created };
 }
 
 /** Always drafts: an imported question still has to pass a person's business review. */
