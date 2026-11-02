@@ -55,7 +55,10 @@
 		"./rollups/fanout": "./src/rollups/fanout.ts",
 		"./geo/alerts": "./src/geo/alerts.ts",
 		"./geo/audit": "./src/geo/audit.ts",
+		"./geo/credentials": "./src/geo/credentials.ts",
 		"./geo/idempotency": "./src/geo/idempotency.ts",
+		"./geo/maintenance": "./src/geo/maintenance.ts",
+		"./geo/retention": "./src/geo/retention.ts",
 		"./geo/roles": "./src/geo/roles.ts",
 		"./geo/tasks": "./src/geo/tasks.ts"
 	},
