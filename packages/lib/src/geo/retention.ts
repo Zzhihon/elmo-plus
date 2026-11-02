@@ -210,7 +210,7 @@ async function purgeEvidence(
 				geo_observation_citations: citations.length,
 				geo_observation_claims: claims.length,
 				geo_task_evidence: taskEvidence.length,
-				geo_evidence_uploads: uploads,
+				...(uploads > 0 ? { geo_evidence_uploads: uploads } : {}),
 			};
 			await summarize(tx, organizationId, "evidence", cutoff, rows, requestId);
 			return { rows, keys, size: batch.length };
