@@ -1,5 +1,5 @@
 import { GEO_QUEUE, GeoError, type GeoParseStatus } from "@workspace/geo-domain";
-import { geoObjectKey } from "@workspace/geo-evidence";
+import { geoObjectKey, normalizeUrl } from "@workspace/geo-evidence";
 import type { DbConnection } from "@workspace/lib/db/db-connection";
 import {
 	geoSiteCrawlItems,
@@ -122,6 +122,20 @@ export async function loadParsedPage(
 }
 
 /**
+ * A parse of what the page serves now becomes its current version; one of older
+ * content, finishing late or asked for on purpose, stays in the history.
+ */
+async function showIfCurrentContent(
+	db: DbConnection,
+	version: Pick<PageVersionRow, "id" | "pageId" | "contentHash">,
+): Promise<void> {
+	await db
+		.update(geoSitePages)
+		.set({ currentVersionId: version.id })
+		.where(and(eq(geoSitePages.id, version.pageId), eq(geoSitePages.currentContentHash, version.contentHash)));
+}
+
+/**
  * Parses stored HTML into a new immutable version. The unique key on page,
  * content hash and parser version makes a repeat a no-op, which is what keeps
  * repeated runs and repeated re-parses from minting duplicate versions.
@@ -133,6 +147,7 @@ export async function createParsedVersion(
 		siteSourceId: string;
 		pageId: string;
 		url: string;
+		fetchedUrl: string | null;
 		rawObjectKey: string;
 		contentHash: string;
 		fetchedAt: Date;
@@ -151,12 +166,15 @@ export async function createParsedVersion(
 			),
 		)
 		.limit(1);
-	if (existing) return { version: existing, created: false };
+	if (existing) {
+		await showIfCurrentContent(deps.db, existing);
+		return { version: existing, created: false };
+	}
 
 	const raw = await deps.objectStore.get(input.rawObjectKey);
 	if (!raw) throw new GeoError("NOT_FOUND", "原始快照不存在，无法解析");
 	const html = decodeStoredHtml(raw.body, raw.contentType);
-	const outcome = parseSitePage(html, input.url, input.profile);
+	const outcome = parseSitePage(html, input.url, input.profile, input.fetchedUrl ?? input.url);
 	const page = outcome.page;
 	const parseStatus: GeoParseStatus = outcome.status === "PARSED" ? "PARSED" : "FAILED";
 	const error = outcome.status === "FAILED" ? outcome.message : null;
@@ -181,6 +199,7 @@ export async function createParsedVersion(
 			parserVersion,
 			htmlObjectKey: input.rawObjectKey,
 			parsedObjectKey,
+			fetchedUrl: input.fetchedUrl,
 			title: page?.title ?? null,
 			parsed: summarize(page, error),
 			fetchedAt: input.fetchedAt,
@@ -193,6 +212,7 @@ export async function createParsedVersion(
 		if (page) {
 			await deps.db.update(geoSitePages).set({ category: page.category }).where(eq(geoSitePages.id, input.pageId));
 		}
+		await showIfCurrentContent(deps.db, inserted);
 		return { version: inserted, created: true };
 	}
 	const [raced] = await deps.db
@@ -206,6 +226,7 @@ export async function createParsedVersion(
 			),
 		)
 		.limit(1);
+	await showIfCurrentContent(deps.db, raced);
 	return { version: raced, created: false };
 }
 
@@ -239,7 +260,8 @@ export async function parseCrawlItem(deps: SiteJobDeps, input: { organizationId:
 		organizationId: input.organizationId,
 		siteSourceId: source.id,
 		pageId: item.pageId,
-		url: item.finalUrl ?? item.url,
+		url: normalizeUrl(item.finalUrl ?? item.url) ?? item.url,
+		fetchedUrl: item.finalUrl ?? item.url,
 		rawObjectKey: item.rawObjectKey,
 		contentHash: item.contentHash,
 		fetchedAt: item.fetchedAt,
@@ -250,11 +272,19 @@ export async function parseCrawlItem(deps: SiteJobDeps, input: { organizationId:
 	return version;
 }
 
-export async function latestVersionOf(db: DbConnection, pageId: string): Promise<PageVersionRow | null> {
+/** What the page shows now, or until its first parse lands, the newest version it has. */
+export async function currentVersionOf(
+	db: DbConnection,
+	page: { id: string; currentVersionId: string | null },
+): Promise<PageVersionRow | null> {
 	const [version] = await db
 		.select()
 		.from(geoSitePageVersions)
-		.where(eq(geoSitePageVersions.pageId, pageId))
+		.where(
+			page.currentVersionId
+				? eq(geoSitePageVersions.id, page.currentVersionId)
+				: eq(geoSitePageVersions.pageId, page.id),
+		)
 		.orderBy(desc(geoSitePageVersions.fetchedAt), desc(geoSitePageVersions.createdAt))
 		.limit(1);
 	return version ?? null;
@@ -262,7 +292,7 @@ export async function latestVersionOf(db: DbConnection, pageId: string): Promise
 
 /**
  * Re-parses stored HTML with a chosen profile version. Nothing is downloaded:
- * the raw snapshot of the chosen (or latest) version is the input.
+ * the raw snapshot of the chosen (or current) version is the input.
  */
 export async function reparseSitePage(
 	deps: SiteJobDeps,
@@ -282,7 +312,7 @@ export async function reparseSitePage(
 					.where(and(eq(geoSitePageVersions.pageId, page.id), eq(geoSitePageVersions.id, input.versionId)))
 					.limit(1)
 			)[0]
-		: await latestVersionOf(deps.db, page.id);
+		: await currentVersionOf(deps.db, page);
 	if (!base) throw new GeoError("NOT_FOUND", "页面还没有可重新解析的版本");
 	if (base.parseStatus === "SKIPPED") throw new GeoError("VALIDATION_ERROR", "附件版本不需要解析");
 	const [source] = await deps.db.select().from(geoSiteSources).where(eq(geoSiteSources.id, page.siteSourceId)).limit(1);
@@ -294,6 +324,7 @@ export async function reparseSitePage(
 		siteSourceId: source.id,
 		pageId: page.id,
 		url: page.normalizedUrl,
+		fetchedUrl: base.fetchedUrl,
 		rawObjectKey: base.htmlObjectKey,
 		contentHash: base.contentHash,
 		fetchedAt: base.fetchedAt,

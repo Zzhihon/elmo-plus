@@ -3,11 +3,11 @@ import { GEO_QUEUE, type GeoCrawlMode, type GeoCrawlStatus, GeoError, type GeoPr
 import type { DbConnection } from "@workspace/lib/db/db-connection";
 import { geoSiteCrawlItems, geoSiteCrawlRuns } from "@workspace/lib/db/schema";
 import { writeGeoAudit } from "@workspace/lib/geo/audit";
-import { and, count, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, count, eq, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { LIMITS } from "../crawl-policy";
 import { checkUrl, urlPolicyOf } from "../net/url-policy";
 import type { RefusedUrl } from "../source-config";
-import type { SendJob } from "./deps";
+import type { SendJob, SiteJobDeps } from "./deps";
 import { loadSiteSource, profileOfSource, SiteUrlRefusedError } from "./sources";
 
 export type CrawlRunRow = typeof geoSiteCrawlRuns.$inferSelect;
@@ -15,6 +15,11 @@ export type CrawlRunRow = typeof geoSiteCrawlRuns.$inferSelect;
 export const ACTIVE_CRAWL_STATUSES: GeoCrawlStatus[] = ["QUEUED", "RUNNING", "PAUSED"];
 const MAX_ACTIVE_RUNS_PER_ORG = 3;
 const MAX_RUNS_PER_SOURCE_PER_DAY = 48;
+const CRAWL_LEASE_MINUTES = 10;
+
+function leaseExpiry() {
+	return sql`now() + (${CRAWL_LEASE_MINUTES} * interval '1 minute')`;
+}
 
 export type CrawlTrigger = "MANUAL" | "SCHEDULE" | "RETRY";
 
@@ -130,6 +135,8 @@ export async function createCrawlRun(
 	const profile = profileOfSource(source);
 	const seedUrls = acceptedSeedUrls(input.urls, urlPolicyOf(source.allowedHosts, profile));
 
+	// Serializes the quota check below; the unique index alone only covers one source.
+	await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`geo-crawl-run:${organizationId}`}, 0))`);
 	const existing =
 		(input.idempotencyKey ? await runByKey(tx, organizationId, input.idempotencyKey) : null) ??
 		(await activeRunOf(tx, organizationId, source.id));
@@ -159,7 +166,12 @@ export async function createCrawlRun(
 		})
 		.onConflictDoNothing()
 		.returning();
-	if (!run) return { run: (await runByKey(tx, organizationId, idempotencyKey)) as CrawlRunRow, created: false };
+	if (!run) {
+		const raced =
+			(await runByKey(tx, organizationId, idempotencyKey)) ?? (await activeRunOf(tx, organizationId, source.id));
+		if (!raced) throw new GeoError("CONFLICT", "采集任务状态已变化，请重试");
+		return { run: raced, created: false };
+	}
 	await writeGeoAudit(tx, {
 		principal,
 		action: "site.crawl.create",
@@ -171,12 +183,51 @@ export async function createCrawlRun(
 	return { run, created: true };
 }
 
-export function crawlJobOptions(runId: string) {
-	return { singletonKey: `crawl:${runId}` };
+/** Repeated sends are harmless: whichever job holds the run's lease works it, and the others return. */
+export async function enqueueCrawlRun(send: SendJob, run: Pick<CrawlRunRow, "id" | "organizationId">) {
+	return send(GEO_QUEUE.siteCrawl, { organizationId: run.organizationId, runId: run.id });
 }
 
-export async function enqueueCrawlRun(send: SendJob, run: Pick<CrawlRunRow, "id" | "organizationId">) {
-	return send(GEO_QUEUE.siteCrawl, { organizationId: run.organizationId, runId: run.id }, crawlJobOptions(run.id));
+/**
+ * Takes the run for one chunk. The lease outlasts any stretch between renewals
+ * (a host slot wait, a request, a backoff), so it only lapses if the holder died.
+ */
+export async function claimCrawlRun(
+	deps: Pick<SiteJobDeps, "db" | "workerId">,
+	organizationId: string,
+	runId: string,
+): Promise<{ run: CrawlRunRow; holder: string } | null> {
+	const holder = `${deps.workerId ?? `pid-${process.pid}`}:${randomUUID()}`;
+	const [run] = await deps.db
+		.update(geoSiteCrawlRuns)
+		.set({ leaseHolder: holder, leaseUntil: leaseExpiry() })
+		.where(
+			and(
+				eq(geoSiteCrawlRuns.organizationId, organizationId),
+				eq(geoSiteCrawlRuns.id, runId),
+				inArray(geoSiteCrawlRuns.status, ["QUEUED", "RUNNING"]),
+				or(isNull(geoSiteCrawlRuns.leaseUntil), lt(geoSiteCrawlRuns.leaseUntil, sql`now()`)),
+			),
+		)
+		.returning();
+	return run ? { run, holder } : null;
+}
+
+/** False when the lease is no longer this holder's: another chunk has taken the run over. */
+export async function renewCrawlRunLease(db: DbConnection, runId: string, holder: string): Promise<boolean> {
+	const [row] = await db
+		.update(geoSiteCrawlRuns)
+		.set({ leaseUntil: leaseExpiry() })
+		.where(and(eq(geoSiteCrawlRuns.id, runId), eq(geoSiteCrawlRuns.leaseHolder, holder)))
+		.returning({ id: geoSiteCrawlRuns.id });
+	return Boolean(row);
+}
+
+export async function releaseCrawlRun(db: DbConnection, runId: string, holder: string): Promise<void> {
+	await db
+		.update(geoSiteCrawlRuns)
+		.set({ leaseHolder: null, leaseUntil: null })
+		.where(and(eq(geoSiteCrawlRuns.id, runId), eq(geoSiteCrawlRuns.leaseHolder, holder)));
 }
 
 export async function loadCrawlRun(db: DbConnection, organizationId: string, runId: string): Promise<CrawlRunRow> {
@@ -206,12 +257,6 @@ export async function setCrawlRunPaused(
 		.where(and(eq(geoSiteCrawlRuns.id, run.id), inArray(geoSiteCrawlRuns.status, from)))
 		.returning();
 	if (!updated) throw new GeoError("CONFLICT", "任务状态已变化，请刷新后重试");
-	if (!paused) {
-		await tx
-			.update(geoSiteCrawlItems)
-			.set({ status: "QUEUED" })
-			.where(and(eq(geoSiteCrawlItems.runId, run.id), eq(geoSiteCrawlItems.status, "FETCHING")));
-	}
 	await writeGeoAudit(tx, {
 		principal,
 		action: paused ? "site.crawl.pause" : "site.crawl.resume",

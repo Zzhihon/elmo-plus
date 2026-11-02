@@ -391,11 +391,11 @@ export type SitePageFilters = z.infer<typeof sitePageFilterSchema>;
  * single-table selection, and a bare "id" inside a subquery means the subquery's own.
  */
 const outerPageId = sql`${sql.identifier(getTableName(geoSitePages))}.${sql.identifier(geoSitePages.id.name)}`;
+const outerCurrentVersionId = sql`${sql.identifier(getTableName(geoSitePages))}.${sql.identifier(geoSitePages.currentVersionId.name)}`;
 
-/** A column of the page's newest version, newest by fetch time and then by parse time. */
-function latest(column: "id" | "title" | "parse_status" | "parser_version") {
-	return sql`(select v.${sql.raw(column)} from ${geoSitePageVersions} v
-		where v.page_id = ${outerPageId} order by v.fetched_at desc, v.created_at desc limit 1)`;
+/** A column of the version the page shows now. */
+function current(column: "title" | "parse_status" | "parser_version") {
+	return sql`(select v.${sql.raw(column)} from ${geoSitePageVersions} v where v.id = ${outerCurrentVersionId})`;
 }
 
 function assertionExists(status: "PENDING_REVIEW" | "APPROVED") {
@@ -421,10 +421,10 @@ export async function listSitePages(principal: GeoPrincipal, filters: SitePageFi
 	if (filters.q) conditions.push(ilike(geoSitePages.normalizedUrl, `%${filters.q.replace(/[%_\\]/g, "\\$&")}%`));
 	if (filters.hasError) {
 		conditions.push(
-			sql`(${geoSitePages.status} in ('ERROR', 'GONE', 'BLOCKED') or ${latest("parse_status")} = 'FAILED')`,
+			sql`(${geoSitePages.status} in ('ERROR', 'GONE', 'BLOCKED') or ${current("parse_status")} = 'FAILED')`,
 		);
 	}
-	if (filters.parseStatus) conditions.push(sql`${latest("parse_status")} = ${filters.parseStatus}`);
+	if (filters.parseStatus) conditions.push(sql`${current("parse_status")} = ${filters.parseStatus}`);
 	if (filters.reviewStatus === "PENDING_REVIEW") conditions.push(assertionExists("PENDING_REVIEW"));
 	if (filters.reviewStatus === "APPROVED") conditions.push(assertionExists("APPROVED"));
 	if (filters.reviewStatus === "NONE") {
@@ -449,10 +449,10 @@ export async function listSitePages(principal: GeoPrincipal, filters: SitePageFi
 				lastSeenAt: geoSitePages.lastSeenAt,
 				lastFetchedAt: geoSitePages.lastFetchedAt,
 				consecutiveFailures: geoSitePages.consecutiveFailures,
-				latestVersionId: sql<string | null>`${latest("id")}`,
-				title: sql<string | null>`${latest("title")}`,
-				parseStatus: sql<string | null>`${latest("parse_status")}`,
-				parserVersion: sql<string | null>`${latest("parser_version")}`,
+				currentVersionId: geoSitePages.currentVersionId,
+				title: sql<string | null>`${current("title")}`,
+				parseStatus: sql<string | null>`${current("parse_status")}`,
+				parserVersion: sql<string | null>`${current("parser_version")}`,
 				versionCount: sql<number>`(select count(*)::int from ${geoSitePageVersions} v where v.page_id = ${outerPageId})`,
 			})
 			.from(geoSitePages)
@@ -543,6 +543,7 @@ export async function getSitePage(principal: GeoPrincipal, pageId: string) {
 			lastSeenAt: page.lastSeenAt,
 			lastFetchedAt: page.lastFetchedAt,
 			consecutiveFailures: page.consecutiveFailures,
+			currentVersionId: page.currentVersionId,
 			createdAt: page.createdAt,
 		},
 		versions: versions.map(versionView),
@@ -559,7 +560,8 @@ export async function listPageVersions(principal: GeoPrincipal, pageId: string) 
 
 /**
  * One version with its full parse, and a line diff of its text against the
- * version given in `compareTo`, or the previous distinct content otherwise.
+ * version given in `compareTo`, or the previous distinct content otherwise. For
+ * content that changed back, "previous" is what it replaced, which is newer.
  */
 export async function getPageVersion(
 	principal: GeoPrincipal,
@@ -583,7 +585,7 @@ export async function getPageVersion(
 		: versions.find(
 				(entry) =>
 					entry.contentHash !== version.contentHash &&
-					entry.fetchedAt.getTime() <= version.fetchedAt.getTime() &&
+					(version.id === page.currentVersionId || entry.fetchedAt.getTime() <= version.fetchedAt.getTime()) &&
 					entry.parseStatus === "PARSED",
 			);
 	const baselineParsed = baseline ? await loadParsedPage({ objectStore: store }, baseline) : null;
@@ -760,13 +762,13 @@ export async function createQaSample(principal: GeoPrincipal, siteId: string, si
 	const source = await loadSiteSource(db, principal.organizationId, siteId);
 	const profile = profileOfSource(source);
 	const population = await db
-		.selectDistinctOn([geoSitePageVersions.pageId], {
+		.select({
 			id: geoSitePageVersions.id,
 			pageId: geoSitePageVersions.pageId,
 			parsed: geoSitePageVersions.parsed,
 		})
-		.from(geoSitePageVersions)
-		.innerJoin(geoSitePages, eq(geoSitePages.id, geoSitePageVersions.pageId))
+		.from(geoSitePages)
+		.innerJoin(geoSitePageVersions, eq(geoSitePageVersions.id, geoSitePages.currentVersionId))
 		.where(
 			and(
 				eq(geoSitePages.organizationId, principal.organizationId),
@@ -775,7 +777,7 @@ export async function createQaSample(principal: GeoPrincipal, siteId: string, si
 				eq(geoSitePageVersions.parseStatus, "PARSED"),
 			),
 		)
-		.orderBy(geoSitePageVersions.pageId, desc(geoSitePageVersions.fetchedAt), desc(geoSitePageVersions.createdAt));
+		.orderBy(geoSitePageVersions.pageId);
 	if (population.length === 0) throw new GeoError("VALIDATION_ERROR", "还没有解析成功的页面可供抽检");
 	const seed = randomUUID();
 	const chosen = drawSample(population, sampleSizeFor(population.length, size), seed);

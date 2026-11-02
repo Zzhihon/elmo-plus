@@ -5074,7 +5074,7 @@
 					"consecutiveFailures": {
 						"type": "integer"
 					},
-					"latestVersionId": {
+					"currentVersionId": {
 						"type": ["string", "null"]
 					},
 					"title": {

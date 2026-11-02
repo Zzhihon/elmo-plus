@@ -289,6 +289,10 @@ export async function normalizeSiteVersion(
 	}));
 	const principal = geoSystemPrincipal(input.organizationId, "site-normalize", `normalize-${row.version.id}`);
 	return deps.db.transaction(async (tx) => {
+		// Assertions are matched by value before insert, with no unique key to fall back on.
+		await tx.execute(
+			sql`select pg_advisory_xact_lock(hashtextextended(${`geo-site-normalize:${input.organizationId}`}, 0))`,
+		);
 		const result = await upsertSiteCandidates(tx, principal, { pageVersionId: row.version.id, candidates });
 		await detectAssertionConflicts(tx, principal, {
 			assertionIds: result.assertions.filter((assertion) => assertion.created).map((assertion) => assertion.id),

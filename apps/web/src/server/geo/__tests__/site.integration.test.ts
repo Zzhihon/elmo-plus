@@ -326,7 +326,7 @@ describe("crawling an authorized site", () => {
 			.orderBy(desc(geoSitePageVersions.fetchedAt))
 			.limit(1);
 		expect(product).toMatchObject({
-			latestVersionId: latest?.id,
+			currentVersionId: latest?.id,
 			title: "KYN28 高压开关柜",
 			parseStatus: "PARSED",
 			versionCount: 2,
