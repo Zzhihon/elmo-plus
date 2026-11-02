@@ -101,13 +101,26 @@ export function robotsFromStatus(httpStatus: number | null): RobotsPolicy {
 	};
 }
 
-function patternToRegex(pattern: string): RegExp {
+/**
+ * `*` and a trailing `$` by plain substring search: a robots.txt can hold tens of
+ * thousands of rules, checked for every URL, and its content is not ours to trust
+ * with a backtracking regular expression.
+ */
+function matchesPattern(pattern: string, path: string): boolean {
 	const anchored = pattern.endsWith("$");
-	const body = (anchored ? pattern.slice(0, -1) : pattern)
-		.split("*")
-		.map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
-		.join(".*");
-	return new RegExp(`^${body}${anchored ? "$" : ""}`);
+	const parts = (anchored ? pattern.slice(0, -1) : pattern).split("*");
+	const first = parts[0];
+	if (!path.startsWith(first)) return false;
+	if (parts.length === 1) return !anchored || path.length === first.length;
+	let position = first.length;
+	for (const part of parts.slice(1, -1)) {
+		const found = path.indexOf(part, position);
+		if (found < 0) return false;
+		position = found + part.length;
+	}
+	const last = parts[parts.length - 1];
+	if (anchored) return path.endsWith(last) && path.length - last.length >= position;
+	return path.indexOf(last, position) >= 0;
 }
 
 /** Longest match wins; on a tie, allow wins. */
@@ -115,7 +128,7 @@ export function isAllowedByRobots(policy: RobotsPolicy, pathAndQuery: string): b
 	let best: RobotsRule | null = null;
 	for (const rule of policy.rules) {
 		if (rule.pattern === "") continue;
-		if (!patternToRegex(rule.pattern).test(pathAndQuery)) continue;
+		if (!matchesPattern(rule.pattern, pathAndQuery)) continue;
 		if (
 			!best ||
 			rule.pattern.length > best.pattern.length ||
