@@ -259,6 +259,9 @@ export async function sweepUnevaluated(): Promise<{ queued: number }> {
 				sql`${geoObservations.responseText} is not null`,
 				isNull(geoEvaluations.id),
 				lt(geoObservations.createdAt, cutoff),
+				// Without a dictionary the answer cannot be read yet; resending it every tick would
+				// fill the batch and keep other organizations' lost answers waiting.
+				sql`exists (select 1 from ${geoDictionaryVersions} d where d.organization_id = ${geoObservations.organizationId})`,
 			),
 		)
 		.orderBy(asc(geoObservations.createdAt))
