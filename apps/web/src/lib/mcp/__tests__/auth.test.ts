@@ -4,7 +4,7 @@
  * through to the OAuth path and coming back as "invalid".
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { API_SCOPES } from "@/lib/api/scopes";
+import { ALL_API_SCOPES } from "@/lib/api/scopes";
 import type { AdminAuth, ApiAuthResult, OrganizationAuth, UserAuth } from "@/lib/auth/api-auth";
 
 const resolveApiAuth = vi.hoisted(() => vi.fn<(request: Request) => Promise<ApiAuthResult>>());
@@ -90,11 +90,11 @@ describe("principalScopes", () => {
 	});
 
 	it("gives an admin key everything", () => {
-		expect([...principalScopes(adminKey)].sort()).toEqual([...API_SCOPES].sort());
+		expect([...principalScopes(adminKey)].sort()).toEqual([...ALL_API_SCOPES].sort());
 	});
 
 	it("gives a signed-in person everything, since scopes narrow keys and not people", () => {
-		expect([...principalScopes(oauthSession)].sort()).toEqual([...API_SCOPES].sort());
+		expect([...principalScopes(oauthSession)].sort()).toEqual([...ALL_API_SCOPES].sort());
 	});
 });
 
@@ -114,7 +114,7 @@ describe("mcp scopes are not oauth scopes", () => {
 		expect(provider, "the MCP plugin is what serves OAuth here").toBeDefined();
 
 		const offered = new Set(provider?.options.scopes ?? []);
-		expect(API_SCOPES.filter((scope) => offered.has(scope))).toEqual([]);
+		expect(ALL_API_SCOPES.filter((scope) => offered.has(scope))).toEqual([]);
 		vi.unstubAllEnvs();
 	});
 });

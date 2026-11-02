@@ -2,7 +2,7 @@
  * — including by a key that turns out to hold nothing. */
 import { createFileRoute } from "@tanstack/react-router";
 import { createApiHandler, withMethodGuard } from "@/lib/api/handler";
-import { API_SCOPES } from "@/lib/api/scopes";
+import { ALL_API_SCOPES } from "@/lib/api/scopes";
 
 export const Route = createFileRoute("/api/v1/me")({
 	server: {
@@ -14,7 +14,7 @@ export const Route = createFileRoute("/api/v1/me")({
 							keyType: "admin",
 							organizationId: null,
 							organizationName: null,
-							scopes: [...API_SCOPES],
+							scopes: [...ALL_API_SCOPES],
 							brandIds: null,
 							createdBy: null,
 							createdAt: null,
