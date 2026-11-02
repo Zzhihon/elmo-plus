@@ -18,6 +18,7 @@ export type ApiKeysPageData = {
 	keys: ApiKeySummary[];
 	brands: { id: string; name: string }[];
 	expiryOptions: readonly number[];
+	geoWorkspaceEnabled: boolean;
 };
 
 const DEFAULT: ApiKeysPageData = {
@@ -30,6 +31,7 @@ const DEFAULT: ApiKeysPageData = {
 		{ id: "brand-3", name: "Acme Studio" },
 	],
 	expiryOptions: [30, 90, 180, 365],
+	geoWorkspaceEnabled: false,
 };
 
 let _page: ApiKeysPageData = DEFAULT;

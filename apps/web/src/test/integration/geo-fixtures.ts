@@ -26,7 +26,14 @@ export async function createGeoOrganization(): Promise<GeoTestOrganization> {
 				role: "member",
 				createdAt: new Date(),
 			});
-			return { organizationId, actorId: userId, actorKind: "user", roles, requestId: `req-${randomUUID()}` };
+			return {
+				organizationId,
+				actorId: userId,
+				actorKind: "user",
+				roles,
+				requestId: `req-${randomUUID()}`,
+				secondFactorSatisfied: true,
+			};
 		},
 	};
 }

@@ -48,7 +48,6 @@ export async function displayNames(ids: readonly (string | null | undefined)[]):
 export function nameOf(names: Record<string, string>, id: string | null | undefined): string | null {
 	if (!id) return null;
 	if (id.startsWith("system:")) return "系统";
-	if (id.startsWith("apikey:")) return "API Key";
 	return names[id] ?? id;
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { can, GEO_PERMISSIONS, GEO_ROLES, type GeoPermission, permissionAccess } from "./permissions";
-import { type GeoPrincipal, principalCan, rolesForApiKeyScopes, rolesForMember } from "./principal";
+import { assertGeoPermission, type GeoPrincipal, principalCan, rolesForApiKeyScopes, rolesForMember } from "./principal";
 
 const REVIEW_OR_ADMIN: GeoPermission[] = GEO_PERMISSIONS.filter(
 	(permission) =>
@@ -16,7 +16,7 @@ const REVIEW_OR_ADMIN: GeoPermission[] = GEO_PERMISSIONS.filter(
 function keyPrincipal(scopes: ("read" | "write")[]): GeoPrincipal {
 	return {
 		organizationId: "org",
-		actorId: "apikey:1",
+		actorId: "user-admin",
 		actorKind: "api_key",
 		roles: rolesForApiKeyScopes(scopes),
 		requestId: "req",
@@ -104,5 +104,40 @@ describe("separation of duties", () => {
 	it("grants every permission to at least one role", () => {
 		const unreachable = GEO_PERMISSIONS.filter((permission) => !GEO_ROLES.some((role) => can([role], permission)));
 		expect(unreachable).toEqual([]);
+	});
+});
+
+describe("a session's second factor", () => {
+	const admin = (secondFactorSatisfied?: boolean): GeoPrincipal => ({
+		organizationId: "org",
+		actorId: "user",
+		actorKind: "user",
+		roles: ["platform_admin"],
+		requestId: "req",
+		secondFactorSatisfied,
+	});
+
+	it.each([
+		"brand.manage",
+		"target.manage",
+		"site.manage",
+		"settings.manage",
+		"rbac.manage",
+		"secret.manage",
+		"llm.approve",
+	] as const)("guards %s", (permission) => {
+		expect(principalCan(admin(), permission)).toBe(false);
+		expect(() => assertGeoPermission(admin(false), permission)).toThrow(/两步验证/);
+		expect(principalCan(admin(true), permission)).toBe(true);
+	});
+
+	it("does not stand in the way of ordinary reads and work", () => {
+		expect(principalCan(admin(), "brand.read")).toBe(true);
+		expect(principalCan(admin(), "site.crawl")).toBe(true);
+	});
+
+	it("still says no first to someone without the role", () => {
+		const viewer: GeoPrincipal = { ...admin(true), roles: ["viewer"] };
+		expect(() => assertGeoPermission(viewer, "secret.manage")).toThrow(/没有执行此操作的权限/);
 	});
 });

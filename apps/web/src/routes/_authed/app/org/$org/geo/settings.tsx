@@ -53,8 +53,8 @@ function GeoSettingsPage() {
 			)}
 			{isAdmin && security.data && !security.data.mfaSatisfied && (
 				<Alert variant="destructive">
-					<AlertTitle>请先启用两步验证</AlertTitle>
-					<AlertDescription>本组织要求平台管理员启用两步验证后才能使用管理设置。</AlertDescription>
+					<AlertTitle>请先完成两步验证</AlertTitle>
+					<AlertDescription>本组织要求平台管理员在本次登录中完成两步验证后才能使用管理设置。</AlertDescription>
 				</Alert>
 			)}
 			{security.data && (

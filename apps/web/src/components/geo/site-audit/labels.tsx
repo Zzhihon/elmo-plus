@@ -63,6 +63,5 @@ export function departmentLabel(value: string | null | undefined): string {
 export function requesterLabel(actorId: string): string {
 	if (actorId === "system:site-audit") return "官网采集完成后自动执行";
 	if (actorId.startsWith("system:")) return "系统";
-	if (actorId.startsWith("apikey:")) return "API 调用";
 	return "手动发起";
 }

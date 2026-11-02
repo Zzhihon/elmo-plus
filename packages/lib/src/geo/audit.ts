@@ -39,7 +39,7 @@ function redact(value: unknown): unknown {
 }
 
 export interface GeoAuditEntry {
-	principal: Pick<GeoPrincipal, "organizationId" | "actorId" | "actorKind" | "requestId">;
+	principal: Pick<GeoPrincipal, "organizationId" | "actorId" | "actorKind" | "requestId" | "apiKeyId">;
 	action: string;
 	entityType: string;
 	entityId: string;
@@ -51,6 +51,8 @@ export interface GeoAuditEntry {
 /** Pass the transaction doing the business write: a change and its audit row commit or fail together. */
 export async function writeGeoAudit(tx: DbConnection, entry: GeoAuditEntry): Promise<{ id: string }> {
 	const { principal } = entry;
+	// Spelled `keyRef` so it survives redaction: it names the key and reveals nothing of its value.
+	const metadata = principal.apiKeyId ? { ...entry.metadata, keyRef: principal.apiKeyId } : entry.metadata;
 	const [row] = await tx
 		.insert(geoAuditLogs)
 		.values({
@@ -62,7 +64,7 @@ export async function writeGeoAudit(tx: DbConnection, entry: GeoAuditEntry): Pro
 			entityId: entry.entityId,
 			beforeHash: geoAuditHash(entry.before),
 			afterHash: geoAuditHash(entry.after),
-			metadata: entry.metadata === undefined ? null : redact(entry.metadata),
+			metadata: metadata === undefined ? null : redact(metadata),
 			requestId: principal.requestId,
 		})
 		.returning({ id: geoAuditLogs.id });

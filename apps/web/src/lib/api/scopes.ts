@@ -15,7 +15,20 @@
 
 export const API_SCOPES = ["read", "write"] as const;
 
-export type ApiScope = (typeof API_SCOPES)[number];
+/**
+ * The GEO workspace is a separate grant, because keys issued before an organization
+ * turned it on must not gain sampling spend or publishing when it does. Neither plain
+ * scope implies these.
+ */
+export const GEO_API_SCOPES = ["geo:read", "geo:write"] as const;
+
+export const ALL_API_SCOPES = [...API_SCOPES, ...GEO_API_SCOPES] as const;
+
+export type ApiScope = (typeof ALL_API_SCOPES)[number];
+
+export function geoApiScope(access: "read" | "write"): ApiScope {
+	return access === "read" ? "geo:read" : "geo:write";
+}
 
 /** The single resource better-auth files every grant under. */
 const RESOURCE = "api";
@@ -24,10 +37,10 @@ export function permissionsToScopes(permissions: unknown): ApiScope[] {
 	if (!permissions || typeof permissions !== "object") return [];
 	const actions = (permissions as Record<string, unknown>)[RESOURCE];
 	if (!Array.isArray(actions)) return [];
-	return API_SCOPES.filter((scope) => actions.includes(scope));
+	return ALL_API_SCOPES.filter((scope) => actions.includes(scope));
 }
 
 /** Unknown scopes are dropped, not trusted. */
 export function scopesToPermissions(scopes: readonly string[]): Record<string, string[]> {
-	return { [RESOURCE]: API_SCOPES.filter((scope) => scopes.includes(scope)) };
+	return { [RESOURCE]: ALL_API_SCOPES.filter((scope) => scopes.includes(scope)) };
 }

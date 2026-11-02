@@ -87,6 +87,23 @@ const PERMISSIONS = {
 
 export type GeoPermission = keyof typeof PERMISSIONS;
 
+/** What a platform administrator does to the workspace itself: only from a session that proved a second factor. */
+const SECOND_FACTOR_PERMISSIONS: readonly GeoPermission[] = [
+	"brand.manage",
+	"target.manage",
+	"site.manage",
+	"settings.read",
+	"settings.manage",
+	"rbac.manage",
+	"secret.manage",
+	"llm.approve",
+	"audit.read",
+];
+
+export function permissionNeedsSecondFactor(permission: GeoPermission): boolean {
+	return SECOND_FACTOR_PERMISSIONS.includes(permission);
+}
+
 export const GEO_PERMISSIONS = Object.keys(PERMISSIONS) as GeoPermission[];
 
 export function can(roles: readonly GeoRole[], permission: GeoPermission): boolean {

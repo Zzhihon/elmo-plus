@@ -11,8 +11,11 @@ import {
 } from "@workspace/geo-domain";
 import { db } from "@workspace/lib/db/db";
 import { member, organization } from "@workspace/lib/db/schema";
+import { resolveGeoApiKeyOwner } from "@workspace/lib/geo/api-key-owners";
 import { loadGeoMemberRoles } from "@workspace/lib/geo/roles";
+import { loadGeoSecondFactorState } from "@workspace/lib/geo/session-factor";
 import { and, eq, or } from "drizzle-orm";
+import { geoApiScope } from "@/lib/api/scopes";
 import type { ApiAuth } from "@/lib/auth/api-auth";
 import { READ_ONLY_MESSAGE } from "@/lib/read-only-errors";
 
@@ -29,10 +32,12 @@ function assertEnabled(): void {
 }
 
 /**
- * Neither kind of key has a person behind it, so each gets the operator's hands at
- * most, however broad the key. An instance admin key reaches every organization, so
- * it has to name the one it is acting in, and a key narrowed to some brands gets no
- * GEO access: everything here is organization-wide and would overstep the narrowing.
+ * An organization key gets the operator's hands at most, however broad, and writes as
+ * the admin who issued it, so what it enters is that person's to answer for and not
+ * theirs to approve. An instance admin key has nobody to answer for it, so it only
+ * reads; it reaches every organization, so it has to name the one it is reading. A key
+ * narrowed to some brands gets no GEO access: everything here is organization-wide and
+ * would overstep the narrowing.
  */
 export async function resolveGeoApiPrincipal(
 	auth: ApiAuth,
@@ -54,20 +59,23 @@ export async function resolveGeoApiPrincipal(
 			organizationId,
 			actorId: "instance-admin",
 			actorKind: "instance_admin_key",
-			roles: rolesForApiKeyScopes(["read", "write"]),
+			roles: rolesForApiKeyScopes(["read"]),
 			requestId,
-			scopes: ["read", "write"],
+			scopes: ["read"],
 		};
 	}
 
 	if (auth.brandIds !== null) {
 		throw new GeoError("FORBIDDEN", "限定品牌范围的 API Key 不能访问 GEO 工作台");
 	}
-	const scopes = [...auth.scopes];
+	const ownerId = await resolveGeoApiKeyOwner(db, auth.keyId, auth.organizationId);
+	if (!ownerId) throw new GeoError("FORBIDDEN", "此 API Key 的签发人已不是本组织管理员，不能访问 GEO 工作台");
+	const scopes = (["read", "write"] as const).filter((access) => auth.scopes.has(geoApiScope(access)));
 	return {
 		organizationId: auth.organizationId,
-		actorId: `apikey:${auth.keyId}`,
+		actorId: ownerId,
 		actorKind: "api_key",
+		apiKeyId: auth.keyId,
 		roles: rolesForApiKeyScopes(scopes),
 		requestId,
 		scopes,
@@ -98,12 +106,18 @@ export async function resolveGeoSessionPrincipal(idOrSlug: string, request?: Req
 	const roles = await loadGeoMemberRoles(db, organizationId, session.user.id);
 	if (!roles) throw notReachable();
 
+	const sessionId = session.session.id;
+	const secondFactor = roles.includes("platform_admin")
+		? await loadGeoSecondFactorState(db, { organizationId, userId: session.user.id, sessionId })
+		: null;
 	return {
 		organizationId,
 		actorId: session.user.id,
 		actorKind: "user",
 		roles,
 		requestId: geoRequestId(request),
+		sessionId,
+		secondFactorSatisfied: secondFactor?.satisfied ?? false,
 	};
 }
 

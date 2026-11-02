@@ -64,7 +64,9 @@
 		"./geo/maintenance": "./src/geo/maintenance.ts",
 		"./geo/prompt-sets": "./src/geo/prompt-sets.ts",
 		"./geo/retention": "./src/geo/retention.ts",
+		"./geo/api-key-owners": "./src/geo/api-key-owners.ts",
 		"./geo/roles": "./src/geo/roles.ts",
+		"./geo/session-factor": "./src/geo/session-factor.ts",
 		"./geo/tasks": "./src/geo/tasks.ts"
 	},
 	"dependencies": {

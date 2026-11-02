@@ -42,6 +42,9 @@ vi.mock("@workspace/lib/geo/idempotency", () => {
 	};
 });
 
+const keyOwner = vi.hoisted(() => vi.fn());
+vi.mock("@workspace/lib/geo/api-key-owners", () => ({ resolveGeoApiKeyOwner: keyOwner }));
+
 function keyAuth(overrides: Partial<OrganizationAuth> = {}): ApiAuth {
 	return {
 		kind: "organization",
@@ -49,7 +52,7 @@ function keyAuth(overrides: Partial<OrganizationAuth> = {}): ApiAuth {
 		name: "ci",
 		organizationId: "org-1",
 		organizationName: "示例电气",
-		scopes: new Set(["read", "write"]),
+		scopes: new Set(["read", "write", "geo:read", "geo:write"]),
 		brandIds: null,
 		createdAt: null,
 		lastUsedAt: null,
@@ -78,6 +81,7 @@ describe("createGeoApiHandler", () => {
 		vi.stubEnv("DEPLOYMENT_MODE", "local");
 		resetDeploymentCache();
 		resolveApiAuth.mockResolvedValue({ auth: keyAuth() });
+		keyOwner.mockResolvedValue("user-admin");
 		idempotency.clear();
 	});
 
@@ -111,8 +115,9 @@ describe("createGeoApiHandler", () => {
 		const body = (await response.json()) as { principal: Record<string, unknown>; requestId: string };
 		expect(body.principal).toMatchObject({
 			organizationId: "org-1",
-			actorId: "apikey:key-1",
+			actorId: "user-admin",
 			actorKind: "api_key",
+			apiKeyId: "key-1",
 			roles: ["viewer", "geo_operator"],
 		});
 		expect(response.headers.get("X-Request-Id")).toBe(body.requestId);
@@ -128,8 +133,30 @@ describe("createGeoApiHandler", () => {
 		expect(handle).not.toHaveBeenCalled();
 	});
 
+	it("gives a plain read-write key no GEO access, however it was issued", async () => {
+		resolveApiAuth.mockResolvedValue({ auth: keyAuth({ scopes: new Set(["read", "write"]) }) });
+		const handle = vi.fn();
+		for (const permission of ["sampling.run", "observation.read"] as const) {
+			const response = await createGeoApiHandler({ permission, handle })({ request: request(), params: {} });
+			expect(response.status, permission).toBe(403);
+			expect((await errorOf(response)).code).toBe("FORBIDDEN");
+		}
+		expect(handle).not.toHaveBeenCalled();
+	});
+
+	it("stops a key whose issuer no longer answers for it", async () => {
+		keyOwner.mockResolvedValue(null);
+		const handle = vi.fn();
+		const response = await createGeoApiHandler({ permission: "observation.read", handle })({
+			request: request({ method: "GET" }),
+			params: {},
+		});
+		expect(response.status).toBe(403);
+		expect(handle).not.toHaveBeenCalled();
+	});
+
 	it("refuses a read-only key on a write in the GEO envelope", async () => {
-		resolveApiAuth.mockResolvedValue({ auth: keyAuth({ scopes: new Set(["read"]) }) });
+		resolveApiAuth.mockResolvedValue({ auth: keyAuth({ scopes: new Set(["read", "write", "geo:read"]) }) });
 		const response = await createGeoApiHandler({ permission: "sampling.run", handle: vi.fn() })({
 			request: request(),
 			params: {},
@@ -247,6 +274,15 @@ describe("createGeoApiHandler", () => {
 			expect(handle).toHaveBeenCalledTimes(1);
 		});
 
+		it("does not run again after an unexpected failure, which may have come after a commit", async () => {
+			const handle = vi.fn().mockRejectedValueOnce(new Error("connection lost")).mockResolvedValueOnce({ id: "x" });
+			const handler = createGeoApiHandler({ permission: "sampling.run", idempotent: true, handle });
+			expect((await handler({ request: withKey("{}"), params: {} })).status).toBe(500);
+			const retry = await handler({ request: withKey("{}"), params: {} });
+			expect(retry.status).toBe(409);
+			expect(handle).toHaveBeenCalledTimes(1);
+		});
+
 		it("lets a failed attempt be retried under the same key", async () => {
 			const handle = vi
 				.fn()
@@ -268,8 +304,8 @@ describe("createGeoApiHandler", () => {
 	it("stays visible to the route conformance checks, scope included", () => {
 		const read = createGeoApiHandler({ permission: "observation.read", handle: async () => ({}) });
 		const write = createGeoApiHandler({ permission: "sampling.run", handle: async () => ({}) });
-		expect(apiHandlerMeta(read)).toEqual({ kind: "endpoint", scopes: ["read"], adminOnly: false });
-		expect(apiHandlerMeta(write)).toEqual({ kind: "endpoint", scopes: ["write"], adminOnly: false });
+		expect(apiHandlerMeta(read)).toEqual({ kind: "endpoint", scopes: ["geo:read"], adminOnly: false });
+		expect(apiHandlerMeta(write)).toEqual({ kind: "endpoint", scopes: ["geo:write"], adminOnly: false });
 	});
 });
 
