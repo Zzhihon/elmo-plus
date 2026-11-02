@@ -23,40 +23,38 @@ export async function buildDictionarySnapshot(
 	tx: DbConnection,
 	organizationId: string,
 ): Promise<GeoDictionarySnapshot> {
-	const [entities, products] = await Promise.all([
-		tx
-			.select({
-				id: geoBrandEntities.id,
-				kind: geoBrandEntities.kind,
-				displayName: geoBrandEntities.displayName,
-				legalName: geoBrandEntities.legalName,
-				shortName: geoBrandEntities.shortName,
-				aliases: geoBrandEntities.aliases,
-				historicalNames: geoBrandEntities.historicalNames,
-				domains: geoBrandEntities.domains,
-				officialUrl: geoBrandEntities.officialUrl,
-				regions: geoBrandEntities.regions,
-				status: geoBrandEntities.status,
-				factStatus: geoBrandEntities.factStatus,
-			})
-			.from(geoBrandEntities)
-			.where(eq(geoBrandEntities.organizationId, organizationId))
-			.orderBy(asc(geoBrandEntities.createdAt), asc(geoBrandEntities.id)),
-		tx
-			.select({
-				id: geoProducts.id,
-				brandEntityId: geoProducts.brandEntityId,
-				model: geoProducts.model,
-				name: geoProducts.name,
-				category: geoProducts.category,
-				termKind: geoProducts.termKind,
-				factStatus: geoProducts.factStatus,
-				status: geoProducts.status,
-			})
-			.from(geoProducts)
-			.where(eq(geoProducts.organizationId, organizationId))
-			.orderBy(asc(geoProducts.createdAt), asc(geoProducts.id)),
-	]);
+	const entities = await tx
+		.select({
+			id: geoBrandEntities.id,
+			kind: geoBrandEntities.kind,
+			displayName: geoBrandEntities.displayName,
+			legalName: geoBrandEntities.legalName,
+			shortName: geoBrandEntities.shortName,
+			aliases: geoBrandEntities.aliases,
+			historicalNames: geoBrandEntities.historicalNames,
+			domains: geoBrandEntities.domains,
+			officialUrl: geoBrandEntities.officialUrl,
+			regions: geoBrandEntities.regions,
+			status: geoBrandEntities.status,
+			factStatus: geoBrandEntities.factStatus,
+		})
+		.from(geoBrandEntities)
+		.where(eq(geoBrandEntities.organizationId, organizationId))
+		.orderBy(asc(geoBrandEntities.createdAt), asc(geoBrandEntities.id));
+	const products = await tx
+		.select({
+			id: geoProducts.id,
+			brandEntityId: geoProducts.brandEntityId,
+			model: geoProducts.model,
+			name: geoProducts.name,
+			category: geoProducts.category,
+			termKind: geoProducts.termKind,
+			factStatus: geoProducts.factStatus,
+			status: geoProducts.status,
+		})
+		.from(geoProducts)
+		.where(eq(geoProducts.organizationId, organizationId))
+		.orderBy(asc(geoProducts.createdAt), asc(geoProducts.id));
 	return { entities, products };
 }
 
