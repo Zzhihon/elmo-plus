@@ -60,6 +60,7 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
 	CREATE: "创建工单",
 	UPDATE: "修改工单",
 	LINK_RETEST_BATCH: "关联复测批次",
+	EVIDENCE_EXPIRED: "证据超过保留期",
 };
 
 export const BOARD_COLUMNS: GeoTaskState[] = [

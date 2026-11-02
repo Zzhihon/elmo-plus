@@ -6,12 +6,15 @@ import {
 	GEO_SURFACE_MODE_LABELS,
 	GEO_SURFACE_MODES,
 	GeoError,
+	type GeoObservationEvidencePointer,
 	type GeoPrincipal,
+	observationEvidenceOwnership,
 } from "@workspace/geo-domain";
 import { getObjectStore } from "@workspace/geo-evidence";
 import { db } from "@workspace/lib/db/db";
 import {
 	geoEvaluations,
+	geoEvidenceUploads,
 	geoObservationCitations,
 	geoObservations,
 	geoPromptSets,
@@ -146,11 +149,30 @@ export async function listObservations(
 
 export type EvidenceKind = "object" | "url" | "note" | "none";
 
-export function evidenceKind(organizationId: string, uri: string | null): EvidenceKind {
+/** The object an observation really owns, or null when its pointer is only text or a link. */
+async function ownedEvidenceObject(observation: GeoObservationEvidencePointer): Promise<string | null> {
+	const ownership = observationEvidenceOwnership(observation);
+	if (!ownership || !observation.evidenceUri) return null;
+	if (ownership === "RUN") return observation.evidenceUri;
+	if (!observation.importBatchId) return null;
+	const [upload] = await db
+		.select({ id: geoEvidenceUploads.id })
+		.from(geoEvidenceUploads)
+		.where(
+			and(
+				eq(geoEvidenceUploads.organizationId, observation.organizationId),
+				eq(geoEvidenceUploads.objectKey, observation.evidenceUri),
+				eq(geoEvidenceUploads.importBatchId, observation.importBatchId),
+			),
+		)
+		.limit(1);
+	return upload ? observation.evidenceUri : null;
+}
+
+function evidenceKind(uri: string | null, ownedObject: string | null): EvidenceKind {
 	if (!uri) return "none";
-	if (uri.startsWith(`geo/${organizationId}/`)) return "object";
-	if (/^https?:\/\//i.test(uri)) return "url";
-	return "note";
+	if (ownedObject) return "object";
+	return /^https?:\/\//i.test(uri) ? "url" : "note";
 }
 
 export interface ObservationDetail {
@@ -295,7 +317,7 @@ export async function getObservation(principal: GeoPrincipal, observationId: str
 	if (!row) throw new GeoError("NOT_FOUND", "证据不存在");
 	const { observation, target } = row;
 
-	const [citations, evaluations, run, links] = await Promise.all([
+	const [citations, evaluations, run, links, ownedObject] = await Promise.all([
 		db
 			.select()
 			.from(geoObservationCitations)
@@ -308,6 +330,7 @@ export async function getObservation(principal: GeoPrincipal, observationId: str
 			.orderBy(desc(geoEvaluations.version)),
 		loadRun(observation.runId),
 		retryLinks(principal.organizationId, observation.id, observation.retryOfObservationId),
+		ownedEvidenceObject(observation),
 	]);
 
 	return {
@@ -337,7 +360,7 @@ export async function getObservation(principal: GeoPrincipal, observationId: str
 		sourceMethodVersion: observation.sourceMethodVersion,
 		errorCode: observation.errorCode,
 		evidence: {
-			kind: evidenceKind(principal.organizationId, observation.evidenceUri),
+			kind: evidenceKind(observation.evidenceUri, ownedObject),
 			location: observation.evidenceUri,
 		},
 		citations: citations.map((citation) => ({
@@ -404,15 +427,19 @@ export async function exportObservation(principal: GeoPrincipal, observationId: 
 export async function readObservationEvidence(principal: GeoPrincipal, observationId: string) {
 	assertGeoPermission(principal, "observation.read");
 	const [row] = await db
-		.select({ evidenceUri: geoObservations.evidenceUri })
+		.select({
+			organizationId: geoObservations.organizationId,
+			runId: geoObservations.runId,
+			importBatchId: geoObservations.importBatchId,
+			evidenceUri: geoObservations.evidenceUri,
+		})
 		.from(geoObservations)
 		.where(and(eq(geoObservations.id, observationId), eq(geoObservations.organizationId, principal.organizationId)));
 	if (!row) throw new GeoError("NOT_FOUND", "证据不存在");
-	if (evidenceKind(principal.organizationId, row.evidenceUri) !== "object" || !row.evidenceUri) {
-		throw new GeoError("NOT_FOUND", "该证据没有存储在对象存储中");
-	}
-	const object = await getObjectStore().get(row.evidenceUri);
+	const key = await ownedEvidenceObject(row);
+	if (!key) throw new GeoError("NOT_FOUND", "该证据没有存储在对象存储中");
+	const object = await getObjectStore().get(key);
 	if (!object) throw new GeoError("NOT_FOUND", "证据文件已不存在");
-	const name = row.evidenceUri.split("/").pop() ?? "evidence";
+	const name = key.split("/").pop() ?? "evidence";
 	return { ...object, name };
 }
