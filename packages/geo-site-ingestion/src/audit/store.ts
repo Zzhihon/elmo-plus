@@ -38,7 +38,8 @@ import { decodeHtml } from "../net/charset";
 import { isAllowedByRobots, parseRobots } from "../net/robots";
 import { parseContentType, type SafeFetchOptions, type SafeFetchResult, safeFetch } from "../net/safe-fetch";
 import { isAllowedHost } from "../net/url-policy";
-import type { SiteProfile } from "../profile";
+import { parseOpWindow, type SiteProfile } from "../profile";
+import { isWithinWindow } from "../schedule";
 import { nowOf, type SendJob, type SiteJobDeps } from "../store/deps";
 import { loadParsedPage } from "../store/parse";
 import { loadSiteSource, profileOfSource, type SiteSourceRow } from "../store/sources";
@@ -409,6 +410,19 @@ async function runSiteProbes(deps: SiteJobDeps, source: SiteSourceRow, organizat
 	return { baseUrl: source.baseUrl, robots, sitemap, https };
 }
 
+/** A paused source or one outside its operating window gets no requests; the run says why. */
+async function siteProbesFor(deps: SiteJobDeps, source: SiteSourceRow, organizationId: string): Promise<SiteProbes> {
+	const window = parseOpWindow(source.opWindow);
+	const reason = !source.enabled
+		? "站点已暂停采集，本次不请求源站"
+		: window && !isWithinWindow(window, nowOf(deps))
+			? "当前不在站点允许的运营时窗内，本次不请求源站"
+			: null;
+	if (!reason) return runSiteProbes(deps, source, organizationId);
+	const skipped = { kind: "SKIPPED" as const, reason };
+	return { baseUrl: source.baseUrl, robots: skipped, sitemap: skipped, https: skipped };
+}
+
 /** The probe results with page lists and robots text cut out, small enough to keep on the run. */
 function probeSummary(probes: SiteProbes, now: Date): SiteProbeSummary {
 	const { robots } = probes;
@@ -739,7 +753,7 @@ async function auditSite(deps: SiteJobDeps, run: SiteAuditRunRow, pendingParse: 
 		pageCategories: new Map(pages.map((page) => [page.id, page.category])),
 	});
 
-	const probes: SiteProbes | null = run.siteChecks ? await runSiteProbes(deps, source, run.organizationId) : null;
+	const probes: SiteProbes | null = run.siteChecks ? await siteProbesFor(deps, source, run.organizationId) : null;
 	const siteResult = probes
 		? evaluateSiteChecks(probes, {
 				config,
