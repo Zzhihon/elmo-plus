@@ -91,7 +91,7 @@ ClamAV 常驻约 1 GiB 内存，首次启动要下载病毒库，几分钟后才
 
 ## 中文字体
 
-PDF 报告需要中日韩字体。`docker/Dockerfile` 在 web 与 worker 镜像中安装 Noto CJK，并设置 `GEO_PDF_FONT_PATH=/usr/share/fonts/noto/NotoSansCJK-Regular.ttc`。自行构建镜像或更换字体时覆盖这个变量；找不到字体时报告任务明确失败，不会输出乱码文件。
+PDF 报告需要中日韩字体。`docker/Dockerfile` 在 web 与 worker 镜像中安装 Noto CJK，并设置 `GEO_PDF_FONT_PATH=/usr/share/fonts/noto/NotoSansCJK-Regular.ttc`。自行构建镜像或更换字体时覆盖这个变量；找不到字体时，报告的指标快照与 CSV 照常生成，PDF 标记为不可用并在界面说明原因，不会输出乱码文件。
 
 ## 环境变量
 
