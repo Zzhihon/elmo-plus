@@ -1,6 +1,9 @@
 export const GEO_ACTOR_KINDS = ["user", "api_key", "instance_admin_key", "system"] as const;
 export type GeoActorKind = (typeof GEO_ACTOR_KINDS)[number];
 
+export const GEO_SESSION_FACTORS = ["TWO_FACTOR", "SSO"] as const;
+export type GeoSessionFactor = (typeof GEO_SESSION_FACTORS)[number];
+
 export const GEO_BRAND_KINDS = ["OWN", "COMPETITOR"] as const;
 export type GeoBrandKind = (typeof GEO_BRAND_KINDS)[number];
 
