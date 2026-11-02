@@ -8,12 +8,17 @@
 		"test": "vitest run"
 	},
 	"exports": {
-		".": "./src/index.ts"
+		".": "./src/index.ts",
+		"./store": "./src/store/index.ts",
+		"./snapshot": "./src/snapshot-view.ts"
 	},
 	"dependencies": {
 		"@workspace/geo-domain": "workspace:*",
 		"@workspace/geo-evidence": "workspace:*",
-		"cheerio": "^1.2.0"
+		"@workspace/lib": "workspace:*",
+		"cheerio": "^1.2.0",
+		"drizzle-orm": "catalog:",
+		"zod": "catalog:"
 	},
 	"devDependencies": {
 		"@types/node": "catalog:",

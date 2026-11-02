@@ -1001,9 +1001,18 @@ importers:
       '@workspace/geo-evidence':
         specifier: workspace:*
         version: link:../geo-evidence
+      '@workspace/lib':
+        specifier: workspace:*
+        version: link:../lib
       cheerio:
         specifier: ^1.2.0
         version: 1.2.0
+      drizzle-orm:
+        specifier: 'catalog:'
+        version: 0.45.4(@opentelemetry/api@1.9.1)(@prisma/client@5.22.0)(@types/pg@8.23.1)(@upstash/redis@1.39.0)(better-sqlite3@12.11.1)(kysely@0.28.17)(pg@8.23.1)
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
