@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { samplingRunIdempotencyKey } from "./queues";
-import { countsAsValidSample, deriveBatchStatus, pickCountedSamples, samplingSlotKey, summarizeBatch } from "./sampling";
+import {
+	countsAsValidSample,
+	deriveBatchStatus,
+	pickCountedSamples,
+	samplingSlotKey,
+	summarizeBatch,
+} from "./sampling";
 
 const slot = { batchId: "b1", promptId: "p1", targetId: "t1", repeatIndex: 0 };
 
@@ -31,7 +37,15 @@ describe("sampling idempotency keys", () => {
 describe("denominator", () => {
 	it("counts only complete answers", () => {
 		expect(countsAsValidSample("VALID")).toBe(true);
-		for (const status of ["PARTIAL", "FAILED", "TIMEOUT", "CAPTCHA", "RATE_LIMITED", "UNAVAILABLE", "NETWORK_ERROR"] as const) {
+		for (const status of [
+			"PARTIAL",
+			"FAILED",
+			"TIMEOUT",
+			"CAPTCHA",
+			"RATE_LIMITED",
+			"UNAVAILABLE",
+			"NETWORK_ERROR",
+		] as const) {
 			expect(countsAsValidSample(status)).toBe(false);
 		}
 	});

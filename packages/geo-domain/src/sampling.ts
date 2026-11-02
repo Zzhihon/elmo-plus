@@ -33,7 +33,10 @@ export function isTerminalRunStatus(status: GeoRunStatus): boolean {
 export const GEO_DENOMINATOR_STATUSES = ["VALID"] as const satisfies readonly GeoObservationStatus[];
 
 /** Anything with answer text can be evaluated and reviewed, even if it stays out of the rates. */
-export const GEO_EVALUABLE_OBSERVATION_STATUSES = ["VALID", "PARTIAL"] as const satisfies readonly GeoObservationStatus[];
+export const GEO_EVALUABLE_OBSERVATION_STATUSES = [
+	"VALID",
+	"PARTIAL",
+] as const satisfies readonly GeoObservationStatus[];
 
 export function countsAsValidSample(status: GeoObservationStatus | GeoRunStatus): boolean {
 	return (GEO_DENOMINATOR_STATUSES as readonly string[]).includes(status);
@@ -112,7 +115,14 @@ export function runStatusBucket(status: GeoRunStatus): keyof Omit<GeoBatchCounts
 
 /** `statuses` holds one entry per slot, already collapsed with the same rule as `pickCountedSamples`. */
 export function summarizeBatch(statuses: readonly GeoRunStatus[]): GeoBatchCounts {
-	const counts: GeoBatchCounts = { planned: statuses.length, valid: 0, partial: 0, unavailable: 0, failed: 0, pending: 0 };
+	const counts: GeoBatchCounts = {
+		planned: statuses.length,
+		valid: 0,
+		partial: 0,
+		unavailable: 0,
+		failed: 0,
+		pending: 0,
+	};
 	for (const status of statuses) counts[runStatusBucket(status)] += 1;
 	return counts;
 }
