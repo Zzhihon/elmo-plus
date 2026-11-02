@@ -19,6 +19,7 @@ import {
 	geoGeneratedReports,
 	geoObservationCitations,
 	geoObservations,
+	geoOptimizationTasks,
 	geoPromptSetItems,
 	geoPromptSets,
 	geoPrompts,
@@ -31,6 +32,7 @@ import {
 	secrets,
 } from "@workspace/lib/db/schema";
 import { runGeoBootstrap } from "@workspace/lib/geo/bootstrap";
+import { linkGeoRetestBatches } from "@workspace/lib/geo/maintenance";
 import { encryptSecret, getKeyring } from "@workspace/lib/secrets";
 import { and, eq, inArray } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -726,7 +728,7 @@ describe("batch status under concurrent completion", () => {
 		promptSetId = set.id;
 	});
 
-	async function planBatchOf(count: number): Promise<{ batch: string; runs: string[] }> {
+	async function planBatchOf(count: number, setId = promptSetId): Promise<{ batch: string; runs: string[] }> {
 		const [prompt] = await db
 			.insert(geoPrompts)
 			.values({ organizationId, question: `高低压开关柜怎么选 ${randomUUID()}`, createdBy: "user-op" })
@@ -735,7 +737,7 @@ describe("batch status under concurrent completion", () => {
 			.insert(geoSamplingBatches)
 			.values({
 				organizationId,
-				promptSetId,
+				promptSetId: setId,
 				status: "RUNNING",
 				repeatCount: count,
 				plannedCount: count,
@@ -791,6 +793,39 @@ describe("batch status under concurrent completion", () => {
 		const [row] = await db.select().from(geoSamplingBatches).where(eq(geoSamplingBatches.id, batch));
 		expect(row).toMatchObject({ status: "COMPLETED", validCount: 2 });
 		expect(row?.finishedAt).not.toBeNull();
+	});
+
+	it("links such a batch to the work order waiting for its retest", async () => {
+		const [set] = await db
+			.insert(geoPromptSets)
+			.values({ organizationId, name: "复测", status: "FROZEN", frozenAt: new Date(), createdBy: "user-op" })
+			.returning();
+		const baseline = await planBatchOf(1, set.id);
+		const [task] = await db
+			.insert(geoOptimizationTasks)
+			.values({
+				organizationId,
+				title: "补充参数说明",
+				kind: "FAQ",
+				sourceKind: "OBSERVATION",
+				state: "PENDING_RETEST",
+				beforeBatchId: baseline.batch,
+				publishedAt: new Date(Date.now() - 60_000),
+				createdBy: "user-op",
+			})
+			.returning();
+		const retest = await planBatchOf(2, set.id);
+		await Promise.all(
+			retest.runs.map((runId) =>
+				db.transaction(async (tx) => {
+					await tx.update(geoSamplingRuns).set({ status: "VALID" }).where(eq(geoSamplingRuns.id, runId));
+					await recountBatch(tx, retest.batch);
+				}),
+			),
+		);
+		await linkGeoRetestBatches(db, new Date());
+		const [linked] = await db.select().from(geoOptimizationTasks).where(eq(geoOptimizationTasks.id, task.id));
+		expect(linked?.afterBatchId).toBe(retest.batch);
 	});
 
 	it("settles a batch left marked running with no run still to finish", async () => {
