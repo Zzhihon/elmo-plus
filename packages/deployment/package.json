@@ -13,6 +13,7 @@
 	"exports": {
 		".": "./src/index.ts",
 		"./client": "./src/client.ts",
+		"./email": "./src/email.ts",
 		"./optimize-button": "./src/optimize-button.tsx",
 		"./billing": "./src/billing/index.ts",
 		"./auth-hooks/cloud": "./src/auth-hooks/cloud.ts",
