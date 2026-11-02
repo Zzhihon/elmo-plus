@@ -267,6 +267,10 @@ export async function importManualObservations(
 	});
 
 	const result = await db.transaction(async (tx) => {
+		// Nothing unique backs the fingerprint, so a double submit must queue behind the first import.
+		await tx.execute(
+			sql`select pg_advisory_xact_lock(hashtextextended(${`geo-manual-import:${principal.organizationId}`}, 0))`,
+		);
 		const fingerprints = prepared.map((item) => item.fingerprint);
 		const existing = await tx
 			.select({ fingerprint: sql<string>`${geoObservations.responseMetadata}->>'importFingerprint'` })
