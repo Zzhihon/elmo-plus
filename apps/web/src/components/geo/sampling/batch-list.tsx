@@ -204,7 +204,12 @@ export function BatchList() {
 			header: "问法集",
 			cell: (batch) => `${batch.promptSet.name} · v${batch.promptSet.version}`,
 		},
-		{ key: "plan", header: "计划", cell: (batch) => `${batch.targetCount} 个目标 × ${batch.repeatCount} 次` },
+		{
+			key: "plan",
+			header: "计划",
+			cell: (batch) =>
+				`${batch.targetCount} 个目标 × ${batch.repeatCount} 次${batch.includesExtended ? " · 含扩展问法" : ""}`,
+		},
 		{ key: "status", header: "状态", cell: (batch) => <GeoBatchStatusBadge status={batch.status} /> },
 		{ key: "counts", header: "结果", cell: (batch) => <Counts batch={batch} /> },
 		{ key: "cost", header: "费用估算", cell: (batch) => formatCost(batch.costEstimate), className: "tabular-nums" },

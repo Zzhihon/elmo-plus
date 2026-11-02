@@ -99,19 +99,21 @@ async function acquireSlot(ctx: RunContext, probe: boolean, now: Date): Promise<
 			.from(a)
 			.where(and(eq(a.targetId, target.id), gt(a.startedAt, at(30 * 86_400_000))));
 
+		const nextCostEstimate = estimatedCostPerRun(target.surfaceMode, target.config);
 		const quota = checkQuota(
 			{
 				maxConcurrency: probe ? 1 : target.maxConcurrency,
 				perMinuteQuota: target.perMinuteQuota,
 				perDayQuota: target.perDayQuota,
 				costBudget: target.costBudget === null ? null : Number(target.costBudget),
-				nextCostEstimate: estimatedCostPerRun(target.surfaceMode, target.config),
+				nextCostEstimate,
 			},
 			{
 				running: usage.running,
 				lastMinute: usage.lastMinute,
 				lastDay: usage.lastDay,
-				costLast30Days: Number(usage.cost),
+				// An attempt in flight has no recorded cost yet; without its estimate the budget could be overrun.
+				costLast30Days: Number(usage.cost) + usage.running * nextCostEstimate,
 			},
 		);
 		if (!quota.ok)

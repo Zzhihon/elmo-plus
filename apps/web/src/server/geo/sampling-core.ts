@@ -12,6 +12,7 @@ import {
 	samplingRunIdempotencyKey,
 } from "@workspace/geo-domain";
 import { db } from "@workspace/lib/db/db";
+import type { DbConnection } from "@workspace/lib/db/db-connection";
 import {
 	geoObservations,
 	geoOrgSettings,
@@ -35,9 +36,11 @@ export const createBatchInputSchema = z.object({
 	promptSetId: z.guid("问法集 ID 无效"),
 	targetIds: z.array(z.guid("目标 ID 无效")).min(1, "至少选择一个采样目标").max(50),
 	repeatCount: z.number().int().min(1).max(10).default(3),
+	/** Extended questions stay out of routine monitoring unless someone explicitly asks for them. */
+	includeExtended: z.boolean().default(false),
 	idempotencyKey: z.string().trim().min(1).max(200).optional(),
 });
-export type CreateBatchInput = z.infer<typeof createBatchInputSchema>;
+export type CreateBatchInput = z.input<typeof createBatchInputSchema>;
 
 export const resampleInputSchema = z.object({ reason: z.string().trim().min(2, "请填写重采原因").max(500) });
 
@@ -49,6 +52,8 @@ export interface FrozenPromptSetView {
 	version: number;
 	frozenAt: string | null;
 	itemCount: number;
+	coreCount: number;
+	extendedCount: number;
 }
 
 /** Only a frozen set is a fixed, comparable question list, so only frozen sets can be sampled. */
@@ -61,11 +66,16 @@ export async function listFrozenPromptSets(principal: GeoPrincipal): Promise<Fro
 			version: geoPromptSets.version,
 			frozenAt: geoPromptSets.frozenAt,
 			itemCount: sql<number>`(select count(*)::int from ${geoPromptSetItems} where ${geoPromptSetItems.setId} = ${geoPromptSets.id})`,
+			coreCount: sql<number>`(select count(*)::int from ${geoPromptSetItems} where ${geoPromptSetItems.setId} = ${geoPromptSets.id} and ${geoPromptSetItems.labels}->>'tier' = 'CORE')`,
 		})
 		.from(geoPromptSets)
 		.where(and(eq(geoPromptSets.organizationId, principal.organizationId), eq(geoPromptSets.status, "FROZEN")))
 		.orderBy(desc(geoPromptSets.frozenAt));
-	return rows.map((row) => ({ ...row, frozenAt: row.frozenAt?.toISOString() ?? null }));
+	return rows.map((row) => ({
+		...row,
+		frozenAt: row.frozenAt?.toISOString() ?? null,
+		extendedCount: row.itemCount - row.coreCount,
+	}));
 }
 
 const RUNNABLE_VERIFICATION = new Set(["PASSED", "LIMITED"]);
@@ -87,7 +97,7 @@ export function assertTargetRunnable(target: SamplingTargetRow): void {
 	if (!config.ok) throw new GeoError("TARGET_UNAVAILABLE", `${label} 配置不完整：${config.errors.join("；")}`);
 }
 
-async function loadFrozenSet(principal: GeoPrincipal, promptSetId: string) {
+async function loadFrozenSet(principal: GeoPrincipal, promptSetId: string, includeExtended: boolean) {
 	const [set] = await db
 		.select()
 		.from(geoPromptSets)
@@ -95,17 +105,41 @@ async function loadFrozenSet(principal: GeoPrincipal, promptSetId: string) {
 	if (!set) throw new GeoError("NOT_FOUND", "问法集不存在");
 	if (set.status !== "FROZEN") throw new GeoError("CONFLICT", "只能对已冻结的问法集发起采样");
 	const items = await db
-		.select({ promptId: geoPromptSetItems.promptId })
+		.select({ promptId: geoPromptSetItems.promptId, labels: geoPromptSetItems.labels })
 		.from(geoPromptSetItems)
 		.where(eq(geoPromptSetItems.setId, set.id))
 		.orderBy(asc(geoPromptSetItems.createdAt));
 	if (items.length === 0) throw new GeoError("VALIDATION_ERROR", "问法集为空");
-	return { set, promptIds: items.map((item) => item.promptId) };
+	const chosen = includeExtended ? items : items.filter((item) => item.labels.tier === "CORE");
+	if (chosen.length === 0) {
+		throw new GeoError("VALIDATION_ERROR", "问法集中没有核心问法；如需采样扩展问法，请明确选择包含扩展问法");
+	}
+	return { set, promptIds: chosen.map((item) => item.promptId) };
+}
+
+/** What started runs have not yet recorded and planned runs have not yet spent, as if each costs its estimate. */
+async function reservedCost(tx: DbConnection, organizationId: string): Promise<number> {
+	const rows = await tx
+		.select({
+			surfaceMode: geoSamplingTargets.surfaceMode,
+			config: geoSamplingTargets.config,
+			runs: count(),
+		})
+		.from(geoSamplingRuns)
+		.innerJoin(geoSamplingTargets, eq(geoSamplingTargets.id, geoSamplingRuns.targetId))
+		.where(and(eq(geoSamplingRuns.organizationId, organizationId), inArray(geoSamplingRuns.status, ["PLANNED", "RUNNING"])))
+		.groupBy(geoSamplingTargets.id);
+	return rows.reduce((sum, row) => sum + estimatedCostPerRun(row.surfaceMode, row.config) * row.runs, 0);
 }
 
 /** Org-wide limits from settings: runs per batch, runs per rolling day, and estimated cost per rolling 30 days. */
-async function assertWithinOrgLimits(principal: GeoPrincipal, planned: number, estimatedCost: number): Promise<void> {
-	const [settings] = await db
+async function assertWithinOrgLimits(
+	tx: DbConnection,
+	principal: GeoPrincipal,
+	planned: number,
+	estimatedCost: number,
+): Promise<void> {
+	const [settings] = await tx
 		.select()
 		.from(geoOrgSettings)
 		.where(eq(geoOrgSettings.organizationId, principal.organizationId));
@@ -114,7 +148,7 @@ async function assertWithinOrgLimits(principal: GeoPrincipal, planned: number, e
 		throw new GeoError("RATE_LIMITED", `本批次计划 ${planned} 次，超过单批上限 ${settings.samplingBatchLimit}`);
 	}
 	if (settings.samplingDailyLimit !== null) {
-		const [today] = await db
+		const [today] = await tx
 			.select({ value: count() })
 			.from(geoSamplingRuns)
 			.where(
@@ -131,7 +165,7 @@ async function assertWithinOrgLimits(principal: GeoPrincipal, planned: number, e
 		}
 	}
 	if (settings.samplingCostBudget !== null) {
-		const [spent] = await db
+		const [spent] = await tx
 			.select({ total: sql<string>`coalesce(sum(${geoSamplingAttempts.costEstimate}), 0)` })
 			.from(geoSamplingAttempts)
 			.where(
@@ -141,7 +175,8 @@ async function assertWithinOrgLimits(principal: GeoPrincipal, planned: number, e
 				),
 			);
 		const budget = Number(settings.samplingCostBudget);
-		if (Number(spent.total) + estimatedCost > budget) {
+		const committed = Number(spent.total) + (await reservedCost(tx, principal.organizationId));
+		if (committed + estimatedCost > budget) {
 			throw new GeoError("RATE_LIMITED", `预计费用将超过近 30 天采样成本预算 ${budget}`);
 		}
 	}
@@ -196,29 +231,45 @@ export async function createSamplingBatch(
 	if (existing)
 		return { batch: existing, created: false, jobId: null, estimatedCost: Number(existing.costEstimate ?? 0) };
 
-	const { set, promptIds } = await loadFrozenSet(principal, input.promptSetId);
+	const includeExtended = input.includeExtended ?? false;
+	const repeatCount = input.repeatCount ?? 3;
+	const { set, promptIds } = await loadFrozenSet(principal, input.promptSetId, includeExtended);
 	const targetIds = [...new Set(input.targetIds)];
 	const targets = await Promise.all(targetIds.map((id) => loadTarget(principal, id)));
 	for (const target of targets) assertTargetRunnable(target);
 
-	const planned = promptIds.length * targets.length * input.repeatCount;
+	const planned = promptIds.length * targets.length * repeatCount;
 	if (planned > MAX_RUNS_PER_BATCH) {
 		throw new GeoError("VALIDATION_ERROR", `本批次计划 ${planned} 次，超过系统上限 ${MAX_RUNS_PER_BATCH}`);
 	}
 	const estimatedCost = targets.reduce(
-		(sum, target) =>
-			sum + estimatedCostPerRun(target.surfaceMode, target.config) * promptIds.length * input.repeatCount,
+		(sum, target) => sum + estimatedCostPerRun(target.surfaceMode, target.config) * promptIds.length * repeatCount,
 		0,
 	);
-	await assertWithinOrgLimits(principal, planned, estimatedCost);
 
 	const batch = await db.transaction(async (tx) => {
+		// Limits are checked against what earlier batches planned, so two at once must take turns.
+		await tx.execute(
+			sql`select pg_advisory_xact_lock(hashtextextended(${`geo-sampling-plan:${principal.organizationId}`}, 0))`,
+		);
+		const [duplicate] = await tx
+			.select({ id: geoSamplingBatches.id })
+			.from(geoSamplingBatches)
+			.where(
+				and(
+					eq(geoSamplingBatches.organizationId, principal.organizationId),
+					eq(geoSamplingBatches.idempotencyKey, idempotencyKey),
+				),
+			);
+		if (duplicate) return null;
+		await assertWithinOrgLimits(tx, principal, planned, estimatedCost);
 		const [row] = await tx
 			.insert(geoSamplingBatches)
 			.values({
 				organizationId: principal.organizationId,
 				promptSetId: set.id,
-				repeatCount: input.repeatCount,
+				repeatCount,
+				includesExtended: includeExtended,
 				plannedCount: planned,
 				costEstimate: "0",
 				requestedBy: principal.actorId,
@@ -229,7 +280,7 @@ export async function createSamplingBatch(
 		if (!row) return null;
 		const runs = promptIds.flatMap((promptId) =>
 			targets.flatMap((target) =>
-				Array.from({ length: input.repeatCount }, (_, repeatIndex) => ({
+				Array.from({ length: repeatCount }, (_, repeatIndex) => ({
 					organizationId: principal.organizationId,
 					batchId: row.id,
 					promptId,
@@ -255,7 +306,8 @@ export async function createSamplingBatch(
 				promptSetId: set.id,
 				promptSetVersion: set.version,
 				targetIds,
-				repeatCount: input.repeatCount,
+				repeatCount,
+				includeExtended,
 				planned,
 				estimatedCost,
 			},
@@ -272,6 +324,7 @@ export interface BatchListItem {
 	status: BatchRow["status"];
 	promptSet: { id: string; name: string; version: number };
 	repeatCount: number;
+	includesExtended: boolean;
 	plannedCount: number;
 	validCount: number;
 	partialCount: number;
@@ -295,6 +348,7 @@ function toListItem(
 		status: row.status,
 		promptSet: set,
 		repeatCount: row.repeatCount,
+		includesExtended: row.includesExtended,
 		plannedCount: row.plannedCount,
 		validCount: row.validCount,
 		partialCount: row.partialCount,
