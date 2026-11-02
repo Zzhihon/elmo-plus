@@ -87,6 +87,12 @@ function mcpResourceDefault(resource: string) {
 	} satisfies BetterAuthPlugin;
 }
 
+/** GEO administrators must hold a second factor; outside GEO nothing asks for one. */
+function geoAuthPlugins(): BetterAuthPlugin[] {
+	if (!isGeoWorkspaceEnabled()) return [];
+	return [twoFactor({ issuer: process.env.VITE_APP_NAME || "Elmo" })];
+}
+
 export function createAuth(options?: CreateAuthOptions) {
 	const appUrl = process.env.APP_URL || process.env.VITE_APP_URL;
 	if (!appUrl) {
@@ -193,8 +199,7 @@ export function createAuth(options?: CreateAuthOptions) {
 				allowUnauthenticatedClientRegistration: true,
 			}),
 			sso(options?.sso),
-			// GEO administrators must hold a second factor; outside GEO nothing asks for one.
-			...(isGeoWorkspaceEnabled() ? [twoFactor({ issuer: process.env.VITE_APP_NAME || "Elmo" })] : []),
+			...geoAuthPlugins(),
 			...(options?.extraPlugins ?? []),
 			// Runs on every session read, including cookie-cache hits. Keep it free
 			// of queries.

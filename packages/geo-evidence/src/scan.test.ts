@@ -9,26 +9,30 @@ afterEach(async () => {
 	server = null;
 });
 
+/** The streamed body once the zero-length terminator has arrived, otherwise null. */
+function readInstream(buffer: Buffer): Buffer | null {
+	const command = Buffer.from("zINSTREAM\0");
+	if (buffer.length < command.length) return null;
+	const parts: Buffer[] = [];
+	let offset = command.length;
+	while (offset + 4 <= buffer.length) {
+		const length = buffer.readUInt32BE(offset);
+		if (length === 0) return Buffer.concat(parts);
+		if (offset + 4 + length > buffer.length) return null;
+		parts.push(buffer.subarray(offset + 4, offset + 4 + length));
+		offset += 4 + length;
+	}
+	return null;
+}
+
 /** A stand-in clamd that reads the INSTREAM frames and answers with `reply(body)`. */
 async function fakeClamd(reply: (body: Buffer) => string): Promise<number> {
 	server = createServer((socket) => {
 		let buffer = Buffer.alloc(0);
 		socket.on("data", (data: Buffer | string) => {
 			buffer = Buffer.concat([buffer, typeof data === "string" ? Buffer.from(data) : data]);
-			const command = Buffer.from("zINSTREAM\0");
-			if (buffer.length < command.length) return;
-			const parts: Buffer[] = [];
-			let offset = command.length;
-			while (offset + 4 <= buffer.length) {
-				const length = buffer.readUInt32BE(offset);
-				if (length === 0) {
-					socket.end(`${reply(Buffer.concat(parts))}\0`);
-					return;
-				}
-				if (offset + 4 + length > buffer.length) return;
-				parts.push(buffer.subarray(offset + 4, offset + 4 + length));
-				offset += 4 + length;
-			}
+			const body = readInstream(buffer);
+			if (body) socket.end(`${reply(body)}\0`);
 		});
 	});
 	await new Promise<void>((resolve) => server?.listen(0, "127.0.0.1", () => resolve()));

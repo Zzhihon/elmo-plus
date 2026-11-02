@@ -267,9 +267,9 @@ async function purgeSnapshots(
 				.returning({ id: geoSitePageVersions.id });
 
 			// A reparse keeps the same HTML object, so a key leaves only once no version uses it.
-			const candidateKeys = [
-				...new Set(batch.flatMap((row) => [row.html_object_key, row.parsed_object_key])),
-			].filter((key) => ownedKey(organizationId, key));
+			const candidateKeys = [...new Set(batch.flatMap((row) => [row.html_object_key, row.parsed_object_key]))].filter(
+				(key) => ownedKey(organizationId, key),
+			);
 			const stillUsed =
 				candidateKeys.length === 0
 					? []

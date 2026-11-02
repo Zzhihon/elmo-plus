@@ -186,7 +186,10 @@ export async function syncGeoBackupAlerts(db: DbConnection, organizationIds: str
 				kind: "backup-failed",
 				severity: "CRITICAL",
 				dedupeKey: "backup-failed",
-				context: { failedAt: health.failedAt.toISOString(), lastSuccessAt: health.lastSuccessAt?.toISOString() ?? null },
+				context: {
+					failedAt: health.failedAt.toISOString(),
+					lastSuccessAt: health.lastSuccessAt?.toISOString() ?? null,
+				},
 			});
 		} else {
 			await resolveGeoAlert(db, { organizationId, dedupeKey: "backup-failed" });
@@ -197,7 +200,10 @@ export async function syncGeoBackupAlerts(db: DbConnection, organizationIds: str
 				kind: "backup-stale",
 				severity: "CRITICAL",
 				dedupeKey: "backup-stale",
-				context: { lastSuccessAt: health.lastSuccessAt?.toISOString() ?? null, staleAfterHours: GEO_BACKUP_STALE_HOURS },
+				context: {
+					lastSuccessAt: health.lastSuccessAt?.toISOString() ?? null,
+					staleAfterHours: GEO_BACKUP_STALE_HOURS,
+				},
 			});
 		} else if (health.state === "ok") {
 			await resolveGeoAlert(db, { organizationId, dedupeKey: "backup-stale" });

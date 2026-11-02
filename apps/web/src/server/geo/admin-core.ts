@@ -64,7 +64,11 @@ export interface GeoSecurityStatus {
 }
 
 async function settingsRow(tx: DbConnection, organizationId: string): Promise<Settings | null> {
-	const [row] = await tx.select().from(geoOrgSettings).where(eq(geoOrgSettings.organizationId, organizationId)).limit(1);
+	const [row] = await tx
+		.select()
+		.from(geoOrgSettings)
+		.where(eq(geoOrgSettings.organizationId, organizationId))
+		.limit(1);
 	return row ?? null;
 }
 
@@ -341,7 +345,9 @@ export async function decideRequest(principal: GeoPrincipal, input: z.infer<type
 		const [request] = await tx
 			.select()
 			.from(geoAdminRequests)
-			.where(and(eq(geoAdminRequests.organizationId, principal.organizationId), eq(geoAdminRequests.id, input.requestId)))
+			.where(
+				and(eq(geoAdminRequests.organizationId, principal.organizationId), eq(geoAdminRequests.id, input.requestId)),
+			)
 			.for("update")
 			.limit(1);
 		if (!request) throw new GeoError("NOT_FOUND", "申请不存在");
@@ -512,7 +518,12 @@ export async function listCredentials(principal: GeoPrincipal) {
 		db
 			.select({ credentialRef: geoSamplingTargets.credentialRef, platform: geoSamplingTargets.platform })
 			.from(geoSamplingTargets)
-			.where(and(eq(geoSamplingTargets.organizationId, principal.organizationId), isNotNull(geoSamplingTargets.credentialRef))),
+			.where(
+				and(
+					eq(geoSamplingTargets.organizationId, principal.organizationId),
+					isNotNull(geoSamplingTargets.credentialRef),
+				),
+			),
 	]);
 	const configured = new Set(credentials.map((credential) => credential.ref));
 	return {
@@ -596,7 +607,11 @@ export const auditQuerySchema = z.object({
 });
 export type AuditQuery = z.infer<typeof auditQuerySchema>;
 
-export async function listAuditLogs(principal: GeoPrincipal, filters: AuditQuery, paging: { limit: number; offset: number }) {
+export async function listAuditLogs(
+	principal: GeoPrincipal,
+	filters: AuditQuery,
+	paging: { limit: number; offset: number },
+) {
 	assertGeoPermission(principal, "audit.read");
 	const conditions = [eq(geoAuditLogs.organizationId, principal.organizationId)];
 	if (filters.actorId) conditions.push(eq(geoAuditLogs.actorId, filters.actorId));
@@ -738,12 +753,13 @@ export async function getOpsMetrics(principal: GeoPrincipal) {
 	const organizationId = principal.organizationId;
 	const since = sql`now() - make_interval(days => ${WINDOW_DAYS})`;
 
-	const [runs, durations, retries, reviews, reports, timeouts, alertCounts, backups, health, queues] = await Promise.all([
-		rows<{ status: string; count: string }>(sql`
+	const [runs, durations, retries, reviews, reports, timeouts, alertCounts, backups, health, queues] =
+		await Promise.all([
+			rows<{ status: string; count: string }>(sql`
 			select status, count(*) as count from geo_sampling_runs
 			where organization_id = ${organizationId} and created_at >= ${since}
 			group by status`),
-		rows<{ platform: string; samples: string; p50: number | null; p95: number | null; avg_cost: string | null }>(sql`
+			rows<{ platform: string; samples: string; p50: number | null; p95: number | null; avg_cost: string | null }>(sql`
 			select t.platform, count(*) as samples,
 				percentile_cont(0.5) within group (order by a.duration_ms) as p50,
 				percentile_cont(0.95) within group (order by a.duration_ms) as p95,
@@ -753,35 +769,35 @@ export async function getOpsMetrics(principal: GeoPrincipal) {
 			join geo_sampling_targets t on t.id = r.target_id
 			where a.organization_id = ${organizationId} and a.started_at >= ${since} and a.duration_ms is not null
 			group by t.platform order by t.platform`),
-		rows<{ retried_attempts: string; resampled_runs: string }>(sql`
+			rows<{ retried_attempts: string; resampled_runs: string }>(sql`
 			select
 				(select count(*) from geo_sampling_attempts where organization_id = ${organizationId}
 					and started_at >= ${since} and attempt_no > 1) as retried_attempts,
 				(select count(*) from geo_sampling_runs where organization_id = ${organizationId}
 					and created_at >= ${since} and retry_of_run_id is not null) as resampled_runs`),
-		rows<{ total: string; pending: string; reviewed: string }>(sql`
+			rows<{ total: string; pending: string; reviewed: string }>(sql`
 			select count(*) as total,
 				count(*) filter (where review_status = 'PENDING_REVIEW') as pending,
 				count(*) filter (where review_status in ('CONFIRMED', 'CORRECTED')) as reviewed
 			from geo_evaluations where organization_id = ${organizationId} and is_current and created_at >= ${since}`),
-		rows<{ status: string; count: string }>(sql`
+			rows<{ status: string; count: string }>(sql`
 			select status, count(*) as count from geo_generated_reports
 			where organization_id = ${organizationId}
 				and created_at >= now() - make_interval(days => ${REPORT_WINDOW_DAYS})
 			group by status`),
-		findGeoApprovalTimeouts(db, organizationId),
-		db
-			.select({ severity: geoAlerts.severity, count: count() })
-			.from(geoAlerts)
-			.where(and(eq(geoAlerts.organizationId, organizationId), ne(geoAlerts.status, "RESOLVED")))
-			.groupBy(geoAlerts.severity),
-		db.execute(sql`
+			findGeoApprovalTimeouts(db, organizationId),
+			db
+				.select({ severity: geoAlerts.severity, count: count() })
+				.from(geoAlerts)
+				.where(and(eq(geoAlerts.organizationId, organizationId), ne(geoAlerts.status, "RESOLVED")))
+				.groupBy(geoAlerts.severity),
+			db.execute(sql`
 			select distinct on (kind) kind, status, started_at, finished_at, database_bytes, object_count,
 				offsite_copied, duration_seconds, location, message
 			from ${geoBackupRuns} order by kind, finished_at desc`),
-		geoBackupHealth(db),
-		queueBacklog(),
-	]);
+			geoBackupHealth(db),
+			queueBacklog(),
+		]);
 
 	const runCounts = Object.fromEntries(runs.map((row) => [row.status, Number(row.count)]));
 	const sum = (...statuses: string[]) => statuses.reduce((total, status) => total + (runCounts[status] ?? 0), 0);

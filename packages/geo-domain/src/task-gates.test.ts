@@ -7,7 +7,12 @@ const PUBLISHED = new Date("2026-05-10T00:00:00Z");
 const NOW = new Date("2026-05-20T00:00:00Z");
 
 const plan = { launchApprovalRef: null, backupPlan: null, rollbackPlan: null };
-const siteRevision = { kind: "SITE_REVISION" as const, riskLevel: "HIGH" as const, createdAt: CREATED, publishedAt: null };
+const siteRevision = {
+	kind: "SITE_REVISION" as const,
+	riskLevel: "HIGH" as const,
+	createdAt: CREATED,
+	publishedAt: null,
+};
 
 function batch(overrides: Partial<GeoBatchFacts>): GeoBatchFacts {
 	return { id: "b", promptSetId: "set-1", createdAt: CREATED, status: "COMPLETED", ...overrides };
@@ -48,18 +53,26 @@ describe("publishing", () => {
 	const task = { kind: "FAQ" as const, riskLevel: "NORMAL" as const, createdAt: CREATED, publishedAt: null, ...plan };
 
 	it("needs a real publish time that is neither in the future nor before the task", () => {
-		expect(taskGateProblem({ action: "PUBLISH", task, payload: { publishedUrl: "https://a.test/x" }, now: NOW })?.code).toBe(
-			"EVIDENCE_REQUIRED",
-		);
+		expect(
+			taskGateProblem({ action: "PUBLISH", task, payload: { publishedUrl: "https://a.test/x" }, now: NOW })?.code,
+		).toBe("EVIDENCE_REQUIRED");
 		const future = new Date(NOW.getTime() + 60 * 60 * 1000);
 		expect(
-			taskGateProblem({ action: "PUBLISH", task, payload: { publishedUrl: "https://a.test/x", publishedAt: future }, now: NOW })
-				?.code,
+			taskGateProblem({
+				action: "PUBLISH",
+				task,
+				payload: { publishedUrl: "https://a.test/x", publishedAt: future },
+				now: NOW,
+			})?.code,
 		).toBe("VALIDATION_ERROR");
 		const early = new Date(CREATED.getTime() - 1);
 		expect(
-			taskGateProblem({ action: "PUBLISH", task, payload: { publishedUrl: "https://a.test/x", publishedAt: early }, now: NOW })
-				?.code,
+			taskGateProblem({
+				action: "PUBLISH",
+				task,
+				payload: { publishedUrl: "https://a.test/x", publishedAt: early },
+				now: NOW,
+			})?.code,
 		).toBe("VALIDATION_ERROR");
 	});
 
@@ -89,9 +102,9 @@ describe("verifying a retest", () => {
 	});
 
 	it("refuses batches from different prompt set versions", () => {
-		expect(taskGateProblem(verifyInput({ after: batch({ id: "after", promptSetId: "set-2", createdAt: NOW }) }))?.code).toBe(
-			"VALIDATION_ERROR",
-		);
+		expect(
+			taskGateProblem(verifyInput({ after: batch({ id: "after", promptSetId: "set-2", createdAt: NOW }) }))?.code,
+		).toBe("VALIDATION_ERROR");
 	});
 
 	it("refuses a retest batch taken before the publish time", () => {
@@ -132,7 +145,11 @@ describe("publishing is not proof of effect", () => {
 		const tech = { kind: "principal" as const, id: "t", roles: ["tech_reviewer" as const] };
 		const facts = { kind: "FAQ" as const, riskLevel: "HIGH" as const, authorId: "a", ownerId: "o" };
 		expect(
-			taskTransition({ task: { ...facts, state: "PENDING_MARKETING_REVIEW" }, action: "APPROVE_MARKETING", actor: tech }),
+			taskTransition({
+				task: { ...facts, state: "PENDING_MARKETING_REVIEW" },
+				action: "APPROVE_MARKETING",
+				actor: tech,
+			}),
 		).toMatchObject({ ok: false, code: "FORBIDDEN" });
 		expect(
 			taskTransition({

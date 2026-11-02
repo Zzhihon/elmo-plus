@@ -24,8 +24,8 @@ import {
 	geoKnowledgeAssertions,
 	geoObservations,
 	geoOptimizationTasks,
-	geoPrompts,
 	geoPromptSets,
+	geoPrompts,
 	geoSamplingBatches,
 	geoSiteAuditFindings,
 	geoSitePages,
@@ -319,7 +319,9 @@ export async function compareRetestBatches(
 		side.recommended = Number(row.recommended);
 		byKey.set(key, entry);
 	}
-	return [...byKey.values()].sort((a, b) => `${a.platform}${a.surfaceMode}`.localeCompare(`${b.platform}${b.surfaceMode}`));
+	return [...byKey.values()].sort((a, b) =>
+		`${a.platform}${a.surfaceMode}`.localeCompare(`${b.platform}${b.surfaceMode}`),
+	);
 }
 
 export async function getTaskDetail(principal: GeoPrincipal, id: string) {
@@ -400,7 +402,10 @@ export async function getTaskDetail(principal: GeoPrincipal, id: string) {
 		prompt: prompt[0] ?? null,
 		names,
 		events: events.map((event) => ({ ...event, createdAt: event.createdAt.toISOString() })),
-		evidence: evidence.map((row) => ({ ...row, observationSampledAt: row.observationSampledAt?.toISOString() ?? null })),
+		evidence: evidence.map((row) => ({
+			...row,
+			observationSampledAt: row.observationSampledAt?.toISOString() ?? null,
+		})),
 		content: content.map((item) => ({ ...item, updatedAt: item.updatedAt.toISOString() })),
 		beforeBatch: serializeBatch(batchOf(task.beforeBatchId)),
 		afterBatch: serializeBatch(batchOf(task.afterBatchId)),
@@ -686,6 +691,25 @@ function assertEditable(task: GeoOptimizationTask, input: UpdateTaskInput, chang
 	}
 }
 
+async function assertUpdateReferences(
+	tx: DbConnection,
+	organizationId: string,
+	input: UpdateTaskInput,
+	changed: (keyof UpdateTaskInput)[],
+): Promise<void> {
+	if (changed.includes("ownerId") && input.ownerId) await assertMember(tx, organizationId, input.ownerId);
+	if (changed.includes("promptId") && input.promptId) {
+		const [prompt] = await tx
+			.select({ id: geoPrompts.id })
+			.from(geoPrompts)
+			.where(and(eq(geoPrompts.organizationId, organizationId), eq(geoPrompts.id, input.promptId)))
+			.limit(1);
+		if (!prompt) throw new GeoError("NOT_FOUND", "问法不存在");
+	}
+	if (changed.includes("beforeBatchId")) await batchFacts(tx, organizationId, input.beforeBatchId ?? null);
+	if (changed.includes("afterBatchId")) await batchFacts(tx, organizationId, input.afterBatchId ?? null);
+}
+
 export async function updateTask(principal: GeoPrincipal, id: string, input: UpdateTaskInput) {
 	assertGeoPermission(principal, "task.transition");
 	return db.transaction(async (tx) => {
@@ -696,17 +720,7 @@ export async function updateTask(principal: GeoPrincipal, id: string, input: Upd
 		if (changed.length === 0) return task;
 		assertEditable(task, input, changed);
 
-		if (changed.includes("ownerId") && input.ownerId) await assertMember(tx, principal.organizationId, input.ownerId);
-		if (changed.includes("promptId") && input.promptId) {
-			const [prompt] = await tx
-				.select({ id: geoPrompts.id })
-				.from(geoPrompts)
-				.where(and(eq(geoPrompts.organizationId, principal.organizationId), eq(geoPrompts.id, input.promptId)))
-				.limit(1);
-			if (!prompt) throw new GeoError("NOT_FOUND", "问法不存在");
-		}
-		if (changed.includes("beforeBatchId")) await batchFacts(tx, principal.organizationId, input.beforeBatchId ?? null);
-		if (changed.includes("afterBatchId")) await batchFacts(tx, principal.organizationId, input.afterBatchId ?? null);
+		await assertUpdateReferences(tx, principal.organizationId, input, changed);
 
 		const patch = Object.fromEntries(changed.map((key) => [key, input[key] ?? null]));
 		const [updated] = await tx

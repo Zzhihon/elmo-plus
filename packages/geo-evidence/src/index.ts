@@ -12,7 +12,6 @@ export {
 	type S3ObjectStoreConfig,
 	type StoredObject,
 } from "./object-store";
-export { hostOf, normalizeUrl } from "./url";
 export {
 	type ClamdConfig,
 	clamdConfigFromEnv,
@@ -21,3 +20,4 @@ export {
 	ScanUnavailableError,
 	scanUpload,
 } from "./scan";
+export { hostOf, normalizeUrl } from "./url";
