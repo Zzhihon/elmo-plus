@@ -30,7 +30,12 @@ function permissionFor(action: GeoContentAction, state: GeoContentApprovalState)
 
 export interface GeoContentTransitionInput {
 	/** `authorIds` are everyone who wrote a version; none of them may review it. */
-	item: { state: GeoContentApprovalState; authorIds: readonly string[] };
+	item: {
+		state: GeoContentApprovalState;
+		authorIds: readonly string[];
+		/** Who gave this version its technical approval; the two reviews need two people. */
+		techApproverIds?: readonly string[];
+	};
 	action: GeoContentAction;
 	actor: GeoTransitionActor;
 	comment?: string | null;
@@ -50,6 +55,9 @@ export function contentTransition(input: GeoContentTransitionInput): GeoTransiti
 	}
 	if (REVIEW_ACTIONS.includes(action) && actor.kind === "principal" && item.authorIds.includes(actor.id)) {
 		return fail("FORBIDDEN", "作者不能审核自己撰写的内容");
+	}
+	if (action === "APPROVE_MARKETING" && actor.kind === "principal" && item.techApproverIds?.includes(actor.id)) {
+		return fail("FORBIDDEN", "技术审核和市场审核必须由不同的人完成");
 	}
 	if (action === "REJECT" && !hasText(comment)) return fail("VALIDATION_ERROR", "驳回必须填写意见");
 	return { ok: true, to };

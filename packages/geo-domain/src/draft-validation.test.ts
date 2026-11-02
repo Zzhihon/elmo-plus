@@ -152,6 +152,16 @@ describe("draft review flow", () => {
 		expect(result).toMatchObject({ ok: false, code: "FORBIDDEN" });
 	});
 
+	it("needs two people for the two reviews", () => {
+		const item = { state: "PENDING_MARKETING_REVIEW" as const, authorIds: ["writer"], techApproverIds: ["both"] };
+		expect(
+			contentTransition({ item, action: "APPROVE_MARKETING", actor: reviewer("both", "marketing_reviewer") }),
+		).toMatchObject({ ok: false, code: "FORBIDDEN" });
+		expect(
+			contentTransition({ item, action: "APPROVE_MARKETING", actor: reviewer("marketer", "marketing_reviewer") }),
+		).toEqual({ ok: true, to: "APPROVED" });
+	});
+
 	it("needs a comment to send a draft back", () => {
 		const item = { state: "PENDING_MARKETING_REVIEW" as const, authorIds: ["writer"] };
 		const actor = reviewer("marketer", "marketing_reviewer");
