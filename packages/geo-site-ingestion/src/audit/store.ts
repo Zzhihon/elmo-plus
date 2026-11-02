@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { gunzipSync } from "node:zlib";
 import {
 	GEO_QUEUE,
 	GeoError,
@@ -34,9 +33,9 @@ import {
 	userAgentOf,
 } from "../crawl-policy";
 import { siteDiscovery } from "../discovery";
-import { decodeHtml } from "../net/charset";
+import { decodeHtml, decodeSitemap, decodeStoredHtml } from "../net/charset";
 import { isAllowedByRobots, parseRobots } from "../net/robots";
-import { parseContentType, type SafeFetchOptions, type SafeFetchResult, safeFetch } from "../net/safe-fetch";
+import { type SafeFetchOptions, type SafeFetchResult, safeFetch } from "../net/safe-fetch";
 import { isAllowedHost } from "../net/url-policy";
 import { parseOpWindow, type SiteProfile } from "../profile";
 import { isWithinWindow } from "../schedule";
@@ -300,13 +299,6 @@ async function probeRobots(ctx: ProbeContext): Promise<RobotsProbe> {
 	return classifyRobotsProbe(url, result, text);
 }
 
-function sitemapText(result: Extract<SafeFetchResult, { ok: true }>): string {
-	if (result.mimeType === "application/gzip" || result.mimeType === "application/x-gzip") {
-		return gunzipSync(result.body, { maxOutputLength: LIMITS.sitemapBytes }).toString("utf8");
-	}
-	return decodeHtml(result.body, result.charset).text;
-}
-
 async function probeSitemapFile(ctx: ProbeContext, url: string, declared: boolean): Promise<SitemapFileProbe | null> {
 	const result = await probeFetch(ctx, url, {
 		maxBytes: LIMITS.sitemapBytes,
@@ -324,7 +316,7 @@ async function probeSitemapFile(ctx: ProbeContext, url: string, declared: boolea
 		return { ...base, status: result.status, error: `HTTP ${result.status}`, valid: false };
 	}
 	try {
-		const xml = sitemapText(result);
+		const xml = decodeSitemap(result, LIMITS.sitemapBytes);
 		const $ = cheerio.load(xml, { xml: true });
 		if ($("urlset").length === 0 && $("sitemapindex").length === 0) {
 			return { ...base, status: result.status, error: "根元素不是 urlset 或 sitemapindex", valid: false };
@@ -516,7 +508,7 @@ async function collectFacts(
 			skipped += version ? 1 : 0;
 			continue;
 		}
-		const html = decodeHtml(raw.body, parseContentType(raw.contentType ?? undefined).charset).text;
+		const html = decodeStoredHtml(raw.body, raw.contentType);
 		const parsed = await loadParsedPage(deps, version);
 		const pageFacts = extractAuditFacts({
 			pageId: page.id,

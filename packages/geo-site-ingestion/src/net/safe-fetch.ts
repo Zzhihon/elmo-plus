@@ -100,9 +100,8 @@ export function parseContentType(header: string | undefined): { mimeType: string
 	if (!header) return { mimeType: null, charset: null };
 	const [type, ...params] = header.split(";");
 	const mimeType = type.trim().toLowerCase() || null;
-	const charsetParam = params.map((param) => param.trim()).find((param) => param.toLowerCase().startsWith("charset="));
-	const charset = charsetParam ? charsetParam.slice(8).trim().replace(/^"|"$/g, "").toLowerCase() : null;
-	return { mimeType, charset };
+	const charset = /^\s*charset\s*=\s*"?([^";\s]+)/i.exec(params.find((param) => /^\s*charset\s*=/i.test(param)) ?? "");
+	return { mimeType, charset: charset ? charset[1].toLowerCase() : null };
 }
 
 /** The resolved addresses, all of which must be public; one private answer fails the whole host. */

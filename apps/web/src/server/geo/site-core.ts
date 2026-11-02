@@ -14,6 +14,7 @@ import { getObjectStore } from "@workspace/geo-evidence";
 import {
 	accuracyByField,
 	accuracyOf,
+	decodeStoredHtml,
 	diffLines,
 	drawSample,
 	type ParsedPage,
@@ -624,13 +625,7 @@ export async function getSnapshotForViewing(principal: GeoPrincipal, versionId: 
 	if (version.parseStatus === "SKIPPED") {
 		return { url, fetchedAt: version.fetchedAt, html: null, contentType: object.contentType };
 	}
-	const charset = /charset=([^;]+)/i.exec(object.contentType ?? "")?.[1]?.trim() ?? "utf-8";
-	let text: string;
-	try {
-		text = new TextDecoder(charset).decode(object.body);
-	} catch {
-		text = new TextDecoder("utf-8").decode(object.body);
-	}
+	const text = decodeStoredHtml(object.body, object.contentType);
 	await writeGeoAudit(db, {
 		principal,
 		action: "site.snapshot.view",

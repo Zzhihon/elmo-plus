@@ -10,8 +10,7 @@ import {
 } from "@workspace/lib/db/schema";
 import { and, desc, eq } from "drizzle-orm";
 import type { ParsedPage } from "../contracts";
-import { decodeHtml } from "../net/charset";
-import { parseContentType } from "../net/safe-fetch";
+import { decodeStoredHtml } from "../net/charset";
 import { parseSitePage } from "../parser";
 import { parserVersionOf, type SiteProfile } from "../profile";
 import { truncate } from "../text";
@@ -156,7 +155,7 @@ export async function createParsedVersion(
 
 	const raw = await deps.objectStore.get(input.rawObjectKey);
 	if (!raw) throw new GeoError("NOT_FOUND", "原始快照不存在，无法解析");
-	const { text: html } = decodeHtml(raw.body, parseContentType(raw.contentType ?? undefined).charset);
+	const html = decodeStoredHtml(raw.body, raw.contentType);
 	const outcome = parseSitePage(html, input.url, input.profile);
 	const page = outcome.page;
 	const parseStatus: GeoParseStatus = outcome.status === "PARSED" ? "PARSED" : "FAILED";

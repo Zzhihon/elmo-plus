@@ -1,4 +1,3 @@
-import { gunzipSync } from "node:zlib";
 import {
 	GEO_QUEUE,
 	type GeoCrawlItemOutcome,
@@ -37,7 +36,7 @@ import {
 } from "../crawl-policy";
 import { categoryOf, siteDiscovery } from "../discovery";
 import { contentHashOf, sha256Hex } from "../hash";
-import { decodeHtml } from "../net/charset";
+import { decodeHtml, decodeSitemap } from "../net/charset";
 import { isAllowedByRobots, parseRobots, type RobotsPolicy, robotsFromStatus } from "../net/robots";
 import { type SafeFetchOptions, type SafeFetchResult, safeFetch } from "../net/safe-fetch";
 import { checkUrl, urlPolicyOf } from "../net/url-policy";
@@ -231,13 +230,6 @@ async function loadRobots(ctx: CrawlContext): Promise<RobotsPolicy> {
 	return robotsFromStatus(result.status);
 }
 
-function sitemapBody(result: Extract<SafeFetchResult, { ok: true }>): string {
-	if (result.mimeType === "application/gzip" || result.mimeType === "application/x-gzip") {
-		return gunzipSync(result.body, { maxOutputLength: LIMITS.sitemapBytes }).toString("utf8");
-	}
-	return decodeHtml(result.body, result.charset).text;
-}
-
 async function readSitemap(
 	ctx: CrawlContext,
 	sitemapUrl: string,
@@ -250,7 +242,7 @@ async function readSitemap(
 	});
 	if (!result?.ok || result.status < 200 || result.status >= 300) return null;
 	try {
-		return siteDiscovery.sitemapUrls(sitemapBody(result), sitemapUrl);
+		return siteDiscovery.sitemapUrls(decodeSitemap(result, LIMITS.sitemapBytes), sitemapUrl);
 	} catch {
 		return null;
 	}
@@ -491,7 +483,7 @@ async function handleHtml(
 	attempts: number,
 ): Promise<void> {
 	const url = result.finalUrl;
-	const { text: html } = decodeHtml(result.body, result.charset);
+	const { text: html, charset } = decodeHtml(result.body, result.charset);
 	const discovery = await followLinks(ctx, item, html, url);
 	const category = categoryOf(url, ctx.profile, cheerio.load(html));
 	const now = nowOf(ctx.deps);
@@ -545,7 +537,7 @@ async function handleHtml(
 	const rawHash = sha256Hex(result.body);
 	const key = geoObjectKey(ctx.run.organizationId, "site", ctx.source.id, "raw", `${rawHash}.html`);
 	await ctx.deps.objectStore.put(key, result.body, {
-		contentType: `text/html; charset=${result.charset ?? "utf-8"}`,
+		contentType: `text/html; charset=${charset}`,
 	});
 	await finishItem(ctx, item, "DONE", "NEW_VERSION", {
 		...common,
