@@ -14,6 +14,7 @@ import {
 	parseCrawlItem,
 	processCrawlRun,
 	type SiteJobDeps,
+	tickSiteSchedules,
 } from "@workspace/geo-site-ingestion/store";
 import { db } from "@workspace/lib/db/db";
 import {
@@ -400,5 +401,12 @@ describe("crawling an authorized site", () => {
 			.from(geoSiteAuditFindings)
 			.where(inArray(geoSiteAuditFindings.id, [finding.id]));
 		expect(after).toMatchObject({ status: "TASKED", taskId: tasks[0]?.id });
+	});
+
+	it("finds no stranded work for this site in the periodic tick", async () => {
+		jobs.length = 0;
+		await tickSiteSchedules(deps);
+		expect(jobs.filter((job) => job.data.organizationId === organizationId)).toEqual([]);
+		jobs.length = 0;
 	});
 });
