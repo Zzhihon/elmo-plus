@@ -269,6 +269,25 @@ function readContent(
 	return contentMatch !== null;
 }
 
+function cleanTitle(raw: string, profile: SiteProfile): string | null {
+	return (
+		profile.defaults.titleStrip.reduce((title, pattern) => title.replace(new RegExp(pattern), ""), raw).trim() || null
+	);
+}
+
+/** Images a field picked out (a gallery outside the body, say) still belong to the page's image list. */
+function addFieldImages(page: ParsedPage): void {
+	const known = new Set(page.images.map((image) => image.src));
+	const sources = page.fields
+		.filter((field) => field.type === "image" || field.type === "images")
+		.flatMap((field) => [field.value ?? []].flat(2));
+	for (const src of sources) {
+		if (known.has(src)) continue;
+		known.add(src);
+		page.images.push({ src, alt: null });
+	}
+}
+
 function parsePage(html: string, url: string, profile: SiteProfile): ParseOutcome {
 	const $ = cheerio.load(html);
 	const page = emptyPage(url, profile);
@@ -281,20 +300,9 @@ function parsePage(html: string, url: string, profile: SiteProfile): ParseOutcom
 	readMeta($, page, url, profile);
 
 	const titleMatch = firstMatch($, category?.title ?? profile.defaults.title);
-	const rawTitle = titleMatch ? inline(titleMatch.elements.first().text()) : "";
-	page.title =
-		profile.defaults.titleStrip.reduce((title, pattern) => title.replace(new RegExp(pattern), ""), rawTitle).trim() ||
-		null;
+	page.title = cleanTitle(titleMatch ? inline(titleMatch.elements.first().text()) : "", profile);
 	const contentFound = readContent($, page, url, profile, category);
-	const known = new Set(page.images.map((image) => image.src));
-	for (const field of page.fields) {
-		if (field.type !== "image" && field.type !== "images") continue;
-		for (const src of [field.value ?? []].flat(2)) {
-			if (known.has(src)) continue;
-			known.add(src);
-			page.images.push({ src, alt: null });
-		}
-	}
+	addFieldImages(page);
 
 	if (!page.title) page.warnings.push("TITLE_MISSING");
 	if (!page.text && page.images.length === 0) page.warnings.push("EMPTY_CONTENT");
