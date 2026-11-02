@@ -63,7 +63,7 @@ import {
 	geoSiteSources,
 } from "@workspace/lib/db/schema";
 import { writeGeoAudit } from "@workspace/lib/geo/audit";
-import { and, asc, count, desc, eq, ilike, inArray, isNull, ne, or, type SQL, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, getTableName, ilike, inArray, isNull, ne, or, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
 import { enqueueGeoJob } from "@/lib/geo/enqueue";
 
@@ -385,10 +385,16 @@ export const sitePageFilterSchema = z.object({
 });
 export type SitePageFilters = z.infer<typeof sitePageFilterSchema>;
 
+/**
+ * The outer page id, spelled out: drizzle drops table names from columns in a
+ * single-table selection, and a bare "id" inside a subquery means the subquery's own.
+ */
+const outerPageId = sql`${sql.identifier(getTableName(geoSitePages))}.${sql.identifier(geoSitePages.id.name)}`;
+
 /** A column of the page's newest version, newest by fetch time and then by parse time. */
 function latest(column: "id" | "title" | "parse_status" | "parser_version") {
 	return sql`(select v.${sql.raw(column)} from ${geoSitePageVersions} v
-		where v.page_id = ${geoSitePages.id} order by v.fetched_at desc, v.created_at desc limit 1)`;
+		where v.page_id = ${outerPageId} order by v.fetched_at desc, v.created_at desc limit 1)`;
 }
 
 function assertionExists(status: "PENDING_REVIEW" | "APPROVED") {
@@ -446,7 +452,7 @@ export async function listSitePages(principal: GeoPrincipal, filters: SitePageFi
 				title: sql<string | null>`${latest("title")}`,
 				parseStatus: sql<string | null>`${latest("parse_status")}`,
 				parserVersion: sql<string | null>`${latest("parser_version")}`,
-				versionCount: sql<number>`(select count(*)::int from ${geoSitePageVersions} v where v.page_id = ${geoSitePages.id})`,
+				versionCount: sql<number>`(select count(*)::int from ${geoSitePageVersions} v where v.page_id = ${outerPageId})`,
 			})
 			.from(geoSitePages)
 			.where(where)
