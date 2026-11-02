@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { GeoEmptyState } from "@/components/geo/shell/empty-state";
+import { GeoOverviewView } from "@/components/geo/overview/overview-view";
 import { GeoPageFrame } from "@/components/geo/shell/page-frame";
 import { pageHead } from "@/lib/route-head";
 
@@ -12,7 +12,7 @@ export const Route = createFileRoute("/_authed/app/org/$org/geo/overview")({
 function GeoOverviewPage() {
 	return (
 		<GeoPageFrame title="总览" description="总体趋势、P0 缺口、近七日结果与待审核事项。">
-			<GeoEmptyState />
+			<GeoOverviewView />
 		</GeoPageFrame>
 	);
 }
