@@ -52,7 +52,12 @@
 		"./rollups/constants": "./src/rollups/constants.ts",
 		"./rollups/dirty": "./src/rollups/dirty.ts",
 		"./rollups/citation-pages": "./src/rollups/citation-pages.ts",
-		"./rollups/fanout": "./src/rollups/fanout.ts"
+		"./rollups/fanout": "./src/rollups/fanout.ts",
+		"./geo/alerts": "./src/geo/alerts.ts",
+		"./geo/audit": "./src/geo/audit.ts",
+		"./geo/idempotency": "./src/geo/idempotency.ts",
+		"./geo/roles": "./src/geo/roles.ts",
+		"./geo/tasks": "./src/geo/tasks.ts"
 	},
 	"dependencies": {
 		"@ai-sdk/anthropic": "^4.0.88",
