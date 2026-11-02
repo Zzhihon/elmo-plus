@@ -6,6 +6,8 @@ import {
 	compareBatchesFor,
 	getInsights,
 	getOverview,
+	listClaimIssues,
+	listSampledPromptSets,
 	metricQuerySchema,
 } from "./metrics-core";
 
@@ -31,4 +33,18 @@ export const compareBatchesFn = createServerFn({ method: "GET" })
 	.handler(async ({ data }) => {
 		const principal = await requireGeoServerFnPrincipal(data.organizationId, "metric.read");
 		return compareBatchesFor(principal, data.query);
+	});
+
+export const listClaimIssuesFn = createServerFn({ method: "GET" })
+	.validator(org.extend({ query: metricQuerySchema.default({}) }))
+	.handler(async ({ data }) => {
+		const principal = await requireGeoServerFnPrincipal(data.organizationId, "metric.read");
+		return listClaimIssues(principal, data.query);
+	});
+
+export const listSampledPromptSetsFn = createServerFn({ method: "GET" })
+	.validator(org)
+	.handler(async ({ data }) => {
+		const principal = await requireGeoServerFnPrincipal(data.organizationId, "metric.read");
+		return listSampledPromptSets(principal);
 	});

@@ -29,11 +29,12 @@ import {
 import { db } from "@workspace/lib/db/db";
 import {
 	geoGeneratedReports,
+	geoObservationClaims,
 	geoObservations,
 	geoOptimizationTasks,
 	geoSamplingBatches,
 } from "@workspace/lib/db/schema";
-import { and, eq, gte, inArray, notInArray, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, notInArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 
 /** Default window: the last four weeks, long enough for one round a week to show a trend. */
@@ -263,4 +264,74 @@ export async function compareBatchesFor(
 		query.promptId ?? null,
 	);
 	return { ...comparison, before, after };
+}
+
+export interface ClaimIssue {
+	claimId: string;
+	observationId: string;
+	questionText: string;
+	platform: GeoPlatform;
+	surfaceMode: GeoSurfaceMode;
+	sampledAt: string;
+	claimKind: string;
+	claimText: string;
+	extractedValue: string | null;
+	referenceValue: string | null;
+	verdict: string;
+	matchStatus: string;
+	reviewNote: string | null;
+}
+
+const CLAIM_ISSUE_LIMIT = 200;
+
+/**
+ * The error-description list: errors a technical reviewer confirmed, then statements
+ * that disagree with approved knowledge and are waiting for that review, for the same
+ * window and question set as the metrics.
+ */
+export async function listClaimIssues(principal: GeoPrincipal, query: MetricQuery): Promise<ClaimIssue[]> {
+	assertGeoPermission(principal, "metric.read");
+	const window = resolveWindow(query);
+	const range = chinaDayRange(window.from, window.to);
+	const c = geoObservationClaims;
+	const o = geoObservations;
+	const rows = await db
+		.select({
+			claimId: c.id,
+			observationId: o.id,
+			questionText: o.questionText,
+			platform: o.platform,
+			surfaceMode: o.surfaceMode,
+			sampledAt: o.sampledAt,
+			claimKind: c.claimKind,
+			claimText: c.claimText,
+			extractedValue: c.extractedValue,
+			referenceValue: c.referenceValue,
+			verdict: c.verdict,
+			matchStatus: c.matchStatus,
+			reviewNote: c.reviewNote,
+		})
+		.from(c)
+		.innerJoin(o, eq(o.id, c.observationId))
+		.where(
+			and(
+				eq(c.organizationId, principal.organizationId),
+				eq(o.status, "VALID"),
+				gte(o.sampledAt, range.start),
+				lt(o.sampledAt, range.end),
+				query.promptSetId ? eq(o.promptSetId, query.promptSetId) : undefined,
+				query.platform ? eq(o.platform, query.platform) : undefined,
+				query.surfaceMode ? eq(o.surfaceMode, query.surfaceMode) : undefined,
+				or(eq(c.verdict, "ERROR"), and(eq(c.verdict, "UNVERIFIED"), eq(c.matchStatus, "MISMATCH"))),
+			),
+		)
+		.orderBy(desc(sql`${c.verdict} = 'ERROR'`), desc(o.sampledAt))
+		.limit(CLAIM_ISSUE_LIMIT);
+	return rows.map((row) => ({ ...row, sampledAt: row.sampledAt.toISOString() }));
+}
+
+/** Question sets with any sampled answer: the choices for a report or a comparison. */
+export async function listSampledPromptSets(principal: GeoPrincipal) {
+	assertGeoPermission(principal, "metric.read");
+	return sampledPromptSets(db, principal.organizationId);
 }
