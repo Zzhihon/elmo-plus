@@ -1,13 +1,17 @@
 import type {
 	GeoAssertionStatus,
 	GeoBatchStatus,
+	GeoBrandKind,
 	GeoEvaluationReviewStatus,
+	GeoFactStatus,
 	GeoPlatform,
 	GeoPromptStatus,
+	GeoPromptTier,
 	GeoRecommendation,
 	GeoRunStatus,
 	GeoSurfaceMode,
 	GeoTaskState,
+	GeoTermKind,
 	GeoVerificationStatus,
 } from "./enums";
 import type { GeoRole } from "./permissions";
@@ -65,6 +69,29 @@ export const GEO_ASSERTION_STATUS_LABELS: Record<GeoAssertionStatus, string> = {
 	NEEDS_EVIDENCE: "待补证据",
 	SUPERSEDED: "已替代",
 	SOURCE_UNAVAILABLE: "来源不可用待复核",
+};
+
+export const GEO_BRAND_KIND_LABELS: Record<GeoBrandKind, string> = {
+	OWN: "自有品牌",
+	COMPETITOR: "竞品",
+};
+
+export const GEO_TERM_KIND_LABELS: Record<GeoTermKind, string> = {
+	GENERIC: "通用产品词",
+	CUSTOMER_MODEL: "客户型号",
+};
+
+/** On a brand or product these describe customer sign-off, not a reviewed knowledge assertion. */
+export const GEO_FACT_STATUS_LABELS: Record<GeoFactStatus, string> = {
+	UNVERIFIED: "待客户确认",
+	PENDING_REVIEW: "审核中",
+	APPROVED: "客户已确认",
+	REJECTED: "已驳回",
+};
+
+export const GEO_PROMPT_TIER_LABELS: Record<GeoPromptTier, string> = {
+	CORE: "核心问法",
+	EXTENDED: "扩展问法",
 };
 
 export const GEO_PROMPT_STATUS_LABELS: Record<GeoPromptStatus, string> = {
