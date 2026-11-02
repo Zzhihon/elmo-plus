@@ -1,0 +1,149 @@
+# Single-enterprise GEO deployment: web, worker, migrations, PostgreSQL, an
+# S3-compatible object store with a private bucket, and optional ClamAV.
+#
+#   cp env.example .env   # then replace every placeholder
+#   docker compose build
+#   docker compose --profile clamav up -d   # or without --profile clamav
+#
+# Every image is pinned. The application images are built from this repository
+# and tagged with ELMO_IMAGE_TAG, so an upgrade is an explicit tag change.
+# Nothing listens on a public interface: put an HTTPS reverse proxy in front of
+# 127.0.0.1:${ELMO_WEB_PORT}. PostgreSQL and the S3 port are bound to loopback
+# only so the host-side backup scripts can reach them.
+
+name: elmo-geo
+
+x-app-build: &app-build
+  context: ../..
+  dockerfile: docker/Dockerfile
+
+services:
+  postgres:
+    image: postgres:18.1-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: elmo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: elmo
+    volumes:
+      # PostgreSQL 18 keeps PGDATA in a version-specific child of this directory.
+      - postgres_data:/var/lib/postgresql
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U elmo -d elmo"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  db-migrate:
+    image: ${ELMO_IMAGE_REPO:-elmo-local}/elmo-db-migrate:${ELMO_IMAGE_TAG:?set ELMO_IMAGE_TAG in .env}
+    build:
+      <<: *app-build
+      target: migrate
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Run on demand after infra/backup/pre-migrate.sh: `docker compose run --rm db-migrate`.
+    profiles: ["migrate"]
+
+  geo-objectstore:
+    image: chrislusf/seaweedfs:3.80
+    restart: unless-stopped
+    environment:
+      GEO_OBJECT_STORE_ACCESS_KEY: ${GEO_OBJECT_STORE_ACCESS_KEY:?set GEO_OBJECT_STORE_ACCESS_KEY in .env}
+      GEO_OBJECT_STORE_SECRET_KEY: ${GEO_OBJECT_STORE_SECRET_KEY:?set GEO_OBJECT_STORE_SECRET_KEY in .env}
+    # The S3 identity is written from the environment at start. No anonymous
+    # identity exists, so every bucket is private.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        printf '{"identities":[{"name":"elmo","credentials":[{"accessKey":"%s","secretKey":"%s"}],"actions":["Admin","Read","List","Tagging","Write"]}]}'
+        "$$GEO_OBJECT_STORE_ACCESS_KEY" "$$GEO_OBJECT_STORE_SECRET_KEY" > /tmp/s3.json
+        && exec weed server -dir=/data -s3 -s3.port=8333 -s3.config=/tmp/s3.json
+    volumes:
+      - geo_objects:/data
+    ports:
+      - "127.0.0.1:8333:8333"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9333/cluster/status || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  geo-objectstore-init:
+    image: rclone/rclone:1.68.2
+    environment:
+      RCLONE_CONFIG_GEO_TYPE: s3
+      RCLONE_CONFIG_GEO_PROVIDER: SeaweedFS
+      RCLONE_CONFIG_GEO_ENDPOINT: http://geo-objectstore:8333
+      RCLONE_CONFIG_GEO_ACCESS_KEY_ID: ${GEO_OBJECT_STORE_ACCESS_KEY}
+      RCLONE_CONFIG_GEO_SECRET_ACCESS_KEY: ${GEO_OBJECT_STORE_SECRET_KEY}
+    # Creating a bucket that exists is a no-op, so this is safe on every start.
+    command: ["mkdir", "geo:${GEO_BUCKET:-elmo-geo}"]
+    depends_on:
+      geo-objectstore:
+        condition: service_healthy
+
+  clamav:
+    image: clamav/clamav:1.4.1
+    restart: unless-stopped
+    profiles: ["clamav"]
+    volumes:
+      - clamav_db:/var/lib/clamav
+    healthcheck:
+      test: ["CMD", "clamdcheck.sh"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      # The first start downloads signatures before clamd listens.
+      start_period: 300s
+
+  web:
+    image: ${ELMO_IMAGE_REPO:-elmo-local}/elmo-web:${ELMO_IMAGE_TAG:?set ELMO_IMAGE_TAG in .env}
+    build:
+      <<: *app-build
+      target: web
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: true
+    ports:
+      - "127.0.0.1:${ELMO_WEB_PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      geo-objectstore-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3000/api/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  worker:
+    image: ${ELMO_IMAGE_REPO:-elmo-local}/elmo-worker:${ELMO_IMAGE_TAG:?set ELMO_IMAGE_TAG in .env}
+    build:
+      <<: *app-build
+      target: worker
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: true
+    # pg-boss gets 30s to finish in-flight jobs on SIGTERM.
+    stop_grace_period: 35s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      geo-objectstore-init:
+        condition: service_completed_successfully
+
+volumes:
+  postgres_data:
+  geo_objects:
+  clamav_db:
