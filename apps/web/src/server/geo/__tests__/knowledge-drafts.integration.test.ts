@@ -16,7 +16,7 @@ import {
 	geoSiteSources,
 } from "@workspace/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createDraft, recordPublication, reviseDraft, transitionDraft } from "@/server/geo/drafts-core";
 import {
 	attachAssetSource,
@@ -47,7 +47,7 @@ const approve = {
 
 beforeAll(async () => {
 	objectRoot = await mkdtemp(path.join(tmpdir(), "geo-knowledge-objects-"));
-	process.env.GEO_OBJECT_STORE_URL = `file://${objectRoot}`;
+	vi.stubEnv("GEO_OBJECT_STORE_URL", `file://${objectRoot}`);
 	const org = await createGeoOrganization();
 	organizationId = org.organizationId;
 	operator = await org.actor(["geo_operator"]);
@@ -177,7 +177,7 @@ describe("knowledge review gates", () => {
 
 describe("knowledge views", () => {
 	it("counts the claims each original backs and finds entities by name", async () => {
-		const { rows } = await listKnowledgeAssets(operator, {}, { page: 1, limit: 20, offset: 0 });
+		const { rows } = await listKnowledgeAssets(operator, {}, { limit: 20, offset: 0 });
 		expect(rows).toEqual([expect.objectContaining({ id: assetId, claimCount: 3 })]);
 		const entities = await searchEntities(operator, { q: "KYN28" });
 		expect(entities).toEqual([expect.objectContaining({ id: entityId, pageCount: 0 })]);

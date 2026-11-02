@@ -5,7 +5,7 @@ import type { GeoPrincipal } from "@workspace/geo-domain";
 import { db } from "@workspace/lib/db/db";
 import { geoObservations, geoOrgSettings, geoSamplingRuns } from "@workspace/lib/db/schema";
 import { and, eq } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { listCredentials } from "@/server/geo/admin-core";
 import {
 	exportObservation,
@@ -52,9 +52,9 @@ let objectRoot: string;
 const MODEL_API_CONFIG = { baseUrl: "https://model-api.example.test/v1", model: "test-model" };
 
 beforeAll(async () => {
-	process.env.ELMO_ENCRYPTION_KEY ??= Buffer.alloc(32, 9).toString("base64");
+	vi.stubEnv("ELMO_ENCRYPTION_KEY", Buffer.alloc(32, 9).toString("base64"));
 	objectRoot = await mkdtemp(path.join(tmpdir(), "geo-objects-"));
-	process.env.GEO_OBJECT_STORE_URL = `file://${objectRoot}`;
+	vi.stubEnv("GEO_OBJECT_STORE_URL", `file://${objectRoot}`);
 
 	const org = await createGeoOrganization();
 	organizationId = org.organizationId;

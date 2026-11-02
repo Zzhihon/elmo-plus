@@ -26,7 +26,7 @@ import {
 	geoSitePageVersions,
 } from "@workspace/lib/db/schema";
 import { and, desc, eq, inArray } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
 	getClaimDetail,
 	knowledgeOverview,
@@ -203,7 +203,7 @@ async function voltageAssertions() {
 
 beforeAll(async () => {
 	objectRoot = await mkdtemp(path.join(tmpdir(), "geo-site-objects-"));
-	process.env.GEO_OBJECT_STORE_URL = `file://${objectRoot}`;
+	vi.stubEnv("GEO_OBJECT_STORE_URL", `file://${objectRoot}`);
 	await startFakeSite();
 	deps = {
 		db,
@@ -317,7 +317,7 @@ describe("crawling an authorized site", () => {
 	});
 
 	it("lists each page with its latest version and counts parsed key pages as covered", async () => {
-		const { rows } = await listSitePages(operator, { siteId }, { limit: 50, offset: 0 });
+		const { rows } = await listSitePages(operator, { siteId }, { page: 1, limit: 50, offset: 0 });
 		const product = rows.find((row) => row.url === `${BASE}products/kyn28`);
 		const [latest] = await db
 			.select()
@@ -365,7 +365,7 @@ describe("crawling an authorized site", () => {
 	});
 
 	it("finds facts by Chinese keyword and shows where each came from", async () => {
-		const { rows } = await searchClaims(operator, { q: "开关柜" }, { page: 1, limit: 20, offset: 0 });
+		const { rows } = await searchClaims(operator, { q: "开关柜" }, { limit: 20, offset: 0 });
 		expect(rows.length).toBe(2);
 		const detail = await getClaimDetail(operator, rows[0].id);
 		expect(JSON.stringify(detail)).toContain(`${BASE}products/kyn28`);

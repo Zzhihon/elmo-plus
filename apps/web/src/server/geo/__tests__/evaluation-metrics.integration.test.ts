@@ -47,6 +47,51 @@ interface Judged {
 	ownCitation?: boolean;
 }
 
+/** A first, automated evaluation of one answer, as the evaluation job stores it. */
+async function insertEvaluation(observationId: string, judged: Judged): Promise<string> {
+	const competitorHits = judged.competitor
+		? [
+				{
+					entityId: competitorId,
+					name: "样板开关",
+					mentioned: true,
+					recommendation: "MENTIONED_ONLY" as const,
+					rank: 2,
+				},
+			]
+		: [];
+	const citationAttribution = judged.ownCitation
+		? [
+				{
+					ordinal: 0,
+					normalizedUrl: "https://www.example-electric.test/p",
+					host: "www.example-electric.test",
+					owner: "OWN" as const,
+					entityId: null,
+				},
+			]
+		: [];
+	const [evaluation] = await db
+		.insert(geoEvaluations)
+		.values({
+			organizationId,
+			observationId,
+			version: 1,
+			evaluatorVersion: "rules-test",
+			brandMentioned: judged.mentioned,
+			recommendation: judged.recommendation,
+			hasOrderedList: judged.ordered ?? false,
+			brandRank: judged.rank ?? null,
+			competitorHits,
+			citationAttribution,
+			reviewStatus: judged.pending ? "PENDING_REVIEW" : "AUTO_ACCEPTED",
+			reviewReasons: judged.pending ? ["LOW_CONFIDENCE"] : [],
+			createdBy: "system:evaluation",
+		})
+		.returning();
+	return evaluation.id;
+}
+
 beforeAll(async () => {
 	const org = await createGeoOrganization();
 	organizationId = org.organizationId;
@@ -142,38 +187,7 @@ beforeAll(async () => {
 			})
 			.returning();
 		ids[name] = observation.id;
-		if (!judged) return;
-		const [evaluation] = await db
-			.insert(geoEvaluations)
-			.values({
-				organizationId,
-				observationId: observation.id,
-				version: 1,
-				evaluatorVersion: "rules-test",
-				brandMentioned: judged.mentioned,
-				recommendation: judged.recommendation,
-				hasOrderedList: judged.ordered ?? false,
-				brandRank: judged.rank ?? null,
-				competitorHits: judged.competitor
-					? [{ entityId: competitorId, name: "样板开关", mentioned: true, recommendation: "MENTIONED_ONLY", rank: 2 }]
-					: [],
-				citationAttribution: judged.ownCitation
-					? [
-							{
-								ordinal: 0,
-								normalizedUrl: "https://www.example-electric.test/p",
-								host: "www.example-electric.test",
-								owner: "OWN",
-								entityId: null,
-							},
-						]
-					: [],
-				reviewStatus: judged.pending ? "PENDING_REVIEW" : "AUTO_ACCEPTED",
-				reviewReasons: judged.pending ? ["LOW_CONFIDENCE"] : [],
-				createdBy: "system:evaluation",
-			})
-			.returning();
-		ids[`${name}:evaluation`] = evaluation.id;
+		if (judged) ids[`${name}:evaluation`] = await insertEvaluation(observation.id, judged);
 	}
 
 	// deepseek: P1 three valid answers, P2 one pending recommendation, a timeout re-sampled to valid, a rate limit.
