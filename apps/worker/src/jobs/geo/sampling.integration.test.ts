@@ -39,8 +39,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { evaluateObservation, sweepUnevaluated } from "./evaluation-run";
 import { generateReport, reportTick } from "./reports-generate";
 import { applyGeoBootstrapTargets } from "./sampling-bootstrap";
-import { loadTargetCredential } from "./sampling-credentials";
 import { processCaptureJob } from "./sampling-capture";
+import { loadTargetCredential } from "./sampling-credentials";
 import { dispatchBatch, sweepSampling } from "./sampling-dispatch";
 
 const sent = vi.hoisted(() => {

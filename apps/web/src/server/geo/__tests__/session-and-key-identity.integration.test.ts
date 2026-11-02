@@ -131,7 +131,9 @@ describe("the administrator's second factor", () => {
 async function issuedKey(organizationId: string, ownerId: string): Promise<OrganizationAuth> {
 	const keyId = `key-${randomUUID()}`;
 	const now = new Date();
-	await db.insert(apikey).values({ id: keyId, referenceId: organizationId, key: keyId, createdAt: now, updatedAt: now });
+	await db
+		.insert(apikey)
+		.values({ id: keyId, referenceId: organizationId, key: keyId, createdAt: now, updatedAt: now });
 	await db.insert(geoApiKeyOwners).values({ keyId, organizationId, userId: ownerId });
 	return {
 		kind: "organization",
@@ -268,9 +270,7 @@ describe("what an API key writes", () => {
 
 function base32Decode(text: string): Buffer {
 	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-	const bits = [...text.replace(/=+$/, "")]
-		.map((char) => alphabet.indexOf(char).toString(2).padStart(5, "0"))
-		.join("");
+	const bits = [...text.replace(/=+$/, "")].map((char) => alphabet.indexOf(char).toString(2).padStart(5, "0")).join("");
 	const bytes = bits.match(/.{8}/g) ?? [];
 	return Buffer.from(bytes.map((byte) => Number.parseInt(byte, 2)));
 }
@@ -322,9 +322,7 @@ describe("better-auth's second factor flow, end to end", () => {
 	}
 
 	async function state(jar: Map<string, string>, organizationId: string, userId: string) {
-		const fresh = new Map(
-			[...jar].filter(([name]) => !name.endsWith("session_data")),
-		);
+		const fresh = new Map([...jar].filter(([name]) => !name.endsWith("session_data")));
 		const { json } = await call(fresh, "/get-session?disableCookieCache=true");
 		const sessionId = (json as unknown as { session: { id: string } }).session.id;
 		return loadGeoSecondFactorState(db, { organizationId, userId, sessionId });

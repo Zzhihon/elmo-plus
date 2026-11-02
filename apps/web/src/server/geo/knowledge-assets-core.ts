@@ -388,22 +388,24 @@ export async function getKnowledgeAsset(principal: GeoPrincipal, assetId: string
 
 const EXTEND_VALIDITY_ACTION = "knowledge.asset.extend_validity";
 
+function assetPatch(before: AssetRow, input: AssetUpdate): { patch: Partial<AssetRow>; extended: boolean } {
+	const patch: Partial<AssetRow> = {};
+	if (input.title !== undefined) patch.title = input.title;
+	if (input.description !== undefined) patch.description = input.description ?? null;
+	if (input.validUntil !== undefined) patch.validUntil = parseValidUntil(input.validUntil);
+	const extended = patch.validUntil !== undefined && validityExtended(before.validUntil, patch.validUntil);
+	if (extended && before.approvalStatus === "APPROVED") {
+		Object.assign(patch, { approvalStatus: "PENDING", reviewedBy: null, reviewedAt: null, reviewNote: null });
+	}
+	return { patch, extended };
+}
+
 export async function updateKnowledgeAsset(principal: GeoPrincipal, assetId: string, input: AssetUpdate) {
 	assertGeoPermission(principal, "knowledge.write");
 	return db.transaction(async (tx) => {
 		const before = await loadAsset(tx, principal, assetId, true);
-		const patch: Partial<AssetRow> = {};
-		if (input.title !== undefined) patch.title = input.title;
-		if (input.description !== undefined) patch.description = input.description ?? null;
-		if (input.validUntil !== undefined) patch.validUntil = parseValidUntil(input.validUntil);
+		const { patch, extended } = assetPatch(before, input);
 		if (Object.keys(patch).length === 0) return before;
-		const extended = patch.validUntil !== undefined && validityExtended(before.validUntil, patch.validUntil);
-		if (extended && before.approvalStatus === "APPROVED") {
-			patch.approvalStatus = "PENDING";
-			patch.reviewedBy = null;
-			patch.reviewedAt = null;
-			patch.reviewNote = null;
-		}
 		const [after] = await tx
 			.update(geoKnowledgeAssets)
 			.set(patch)

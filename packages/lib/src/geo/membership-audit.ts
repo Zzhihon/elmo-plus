@@ -1,5 +1,5 @@
-import { geoSystemPrincipal } from "@workspace/geo-domain";
 import { randomUUID } from "node:crypto";
+import { geoSystemPrincipal } from "@workspace/geo-domain";
 import type { DbConnection } from "../db/db-connection";
 import { writeGeoAudit } from "./audit";
 

@@ -519,7 +519,11 @@ function ValidationPanel({ detail }: { detail: DraftDetail }) {
 						<li key={`${check.segment}-${check.kind}-${check.token}`} className="flex flex-col gap-1 py-2">
 							<div className="flex flex-wrap items-center gap-2">
 								<GeoStatusBadge
-									label={check.risk === "HIGH" && check.status === "UNCITED" ? "未标注引用" : CHECK_STATUS_LABELS[check.status]}
+									label={
+										check.risk === "HIGH" && check.status === "UNCITED"
+											? "未标注引用"
+											: CHECK_STATUS_LABELS[check.status]
+									}
 									tone={check.risk === "HIGH" ? "danger" : CHECK_STATUS_TONES[check.status]}
 								/>
 								<span className="font-medium">{check.token}</span>

@@ -119,7 +119,8 @@ function geoSessionFactorPlugin(deploymentSsoProviders: ReadonlySet<string>) {
 						if (!factor) return;
 						// A rejected code surfaces here as an error; a finished SSO login redirects, which is one too.
 						if (factor === "TWO_FACTOR" && ctx.context.returned instanceof APIError) return;
-						const signedIn = factor === "SSO" ? ctx.context.newSession : (ctx.context.newSession ?? ctx.context.session);
+						const signedIn =
+							factor === "SSO" ? ctx.context.newSession : (ctx.context.newSession ?? ctx.context.session);
 						if (!signedIn?.session) return;
 						await recordSessionFactor(db, {
 							sessionId: signedIn.session.id,
@@ -146,11 +147,21 @@ function withGeoMembershipAudit(hooks: OrganizationHooks | undefined): Organizat
 		...hooks,
 		afterAddMember: async (data) => {
 			await hooks?.afterAddMember?.(data);
-			await audit({ organizationId: data.organization.id, userId: data.user.id, previousRole: null, role: data.member.role });
+			await audit({
+				organizationId: data.organization.id,
+				userId: data.user.id,
+				previousRole: null,
+				role: data.member.role,
+			});
 		},
 		afterAcceptInvitation: async (data) => {
 			await hooks?.afterAcceptInvitation?.(data);
-			await audit({ organizationId: data.organization.id, userId: data.user.id, previousRole: null, role: data.member.role });
+			await audit({
+				organizationId: data.organization.id,
+				userId: data.user.id,
+				previousRole: null,
+				role: data.member.role,
+			});
 		},
 		afterUpdateMemberRole: async (data) => {
 			await hooks?.afterUpdateMemberRole?.(data);
@@ -163,7 +174,12 @@ function withGeoMembershipAudit(hooks: OrganizationHooks | undefined): Organizat
 		},
 		afterRemoveMember: async (data) => {
 			await hooks?.afterRemoveMember?.(data);
-			await audit({ organizationId: data.organization.id, userId: data.user.id, previousRole: data.member.role, role: null });
+			await audit({
+				organizationId: data.organization.id,
+				userId: data.user.id,
+				previousRole: data.member.role,
+				role: null,
+			});
 		},
 	};
 }

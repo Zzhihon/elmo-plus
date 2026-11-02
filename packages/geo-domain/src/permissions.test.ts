@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { can, GEO_PERMISSIONS, GEO_ROLES, type GeoPermission, permissionAccess } from "./permissions";
-import { assertGeoPermission, type GeoPrincipal, principalCan, rolesForApiKeyScopes, rolesForMember } from "./principal";
+import {
+	assertGeoPermission,
+	type GeoPrincipal,
+	principalCan,
+	rolesForApiKeyScopes,
+	rolesForMember,
+} from "./principal";
 
 const REVIEW_OR_ADMIN: GeoPermission[] = GEO_PERMISSIONS.filter(
 	(permission) =>

@@ -103,7 +103,14 @@ function inactiveReason(key: ApiKeySummary): string {
 }
 
 function ApiKeysSettingsPage() {
-	const { keys, brands, expiryOptions, geoWorkspaceEnabled, canManage: isKeyAdmin, organization } = Route.useLoaderData();
+	const {
+		keys,
+		brands,
+		expiryOptions,
+		geoWorkspaceEnabled,
+		canManage: isKeyAdmin,
+		organization,
+	} = Route.useLoaderData();
 	const readOnly = useDeploymentFeatures()?.readOnly ?? false;
 	const canManage = isKeyAdmin && !readOnly;
 	const linkParams = orgLinkParams(useOrganization());

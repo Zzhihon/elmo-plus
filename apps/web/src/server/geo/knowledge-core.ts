@@ -67,9 +67,9 @@ import { z } from "zod";
 import {
 	canReadConfidential,
 	displayNames,
+	hiddenFromReader,
 	iso,
 	knowledgeValue,
-	hiddenFromReader,
 	type LocatorFields,
 	locatorFields,
 	nameOf,

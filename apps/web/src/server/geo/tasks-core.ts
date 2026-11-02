@@ -489,6 +489,10 @@ async function recordEvent(
 	});
 }
 
+async function currentTaskRisk(tx: DbConnection, organizationId: string, task: GeoOptimizationTask) {
+	return task.riskLevel === "HIGH" ? task.riskLevel : derivedTaskRisk(tx, organizationId, task.id);
+}
+
 /** Past owners, and who approved the current technical review; the state machine compares reviewers with both. */
 async function reviewHistory(tx: DbConnection, organizationId: string, taskId: string) {
 	const events = await tx
@@ -577,8 +581,7 @@ export async function transitionTask(principal: GeoPrincipal, id: string, input:
 		const { action } = input;
 		if (action === "ASSIGN" && input.ownerId) await assertMember(tx, principal.organizationId, input.ownerId);
 		const published = publishFields(principal, input);
-		const riskLevel =
-			task.riskLevel === "HIGH" ? "HIGH" : await derivedTaskRisk(tx, principal.organizationId, task.id);
+		const riskLevel = await currentTaskRisk(tx, principal.organizationId, task);
 
 		const beforeBatchId = input.beforeBatchId ?? task.beforeBatchId;
 		const afterBatchId = input.afterBatchId ?? task.afterBatchId;

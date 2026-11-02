@@ -199,7 +199,10 @@ describe("risk of a content version", () => {
 			contentVersionRisk({ claims: [{ riskLevel: "NORMAL" }], validation: { result: { checks: [{ risk: "HIGH" }] } } }),
 		).toBe("HIGH");
 		expect(
-			contentVersionRisk({ claims: [{ riskLevel: "NORMAL" }], validation: { result: { checks: [{ risk: "NORMAL" }] } } }),
+			contentVersionRisk({
+				claims: [{ riskLevel: "NORMAL" }],
+				validation: { result: { checks: [{ risk: "NORMAL" }] } },
+			}),
 		).toBe("NORMAL");
 	});
 });

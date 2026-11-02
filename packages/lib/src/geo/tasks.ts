@@ -133,7 +133,10 @@ async function evidenceRisk(
 		.select({ riskLevel: geoKnowledgeAssertions.riskLevel, claimType: geoKnowledgeAssertions.claimType })
 		.from(geoKnowledgeAssertions)
 		.where(
-			and(eq(geoKnowledgeAssertions.organizationId, organizationId), inArray(geoKnowledgeAssertions.id, [...assertionIds])),
+			and(
+				eq(geoKnowledgeAssertions.organizationId, organizationId),
+				inArray(geoKnowledgeAssertions.id, [...assertionIds]),
+			),
 		);
 	return rows.some((row) => effectiveRiskLevel(row) === "HIGH") ? "HIGH" : "NORMAL";
 }

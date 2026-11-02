@@ -551,7 +551,9 @@ export async function removeCredential(principal: GeoPrincipal, ref: string) {
 		await tx
 			.update(geoSamplingTargets)
 			.set({ credentialRef: null })
-			.where(and(eq(geoSamplingTargets.organizationId, principal.organizationId), eq(geoSamplingTargets.credentialRef, ref)));
+			.where(
+				and(eq(geoSamplingTargets.organizationId, principal.organizationId), eq(geoSamplingTargets.credentialRef, ref)),
+			);
 		const removed = await deleteGeoCredential(tx, principal.organizationId, ref);
 		if (!removed) throw new GeoError("NOT_FOUND", "密钥不存在");
 		await writeGeoAudit(tx, {

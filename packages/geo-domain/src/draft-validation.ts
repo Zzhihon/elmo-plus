@@ -141,11 +141,9 @@ const CN_DIGITS: Record<string, number> = {
 const CN_SMALL_UNITS: Record<string, number> = { 十: 10, 拾: 10, 百: 100, 佰: 100, 千: 1000, 仟: 1000 };
 const CN_LARGE_UNITS: Record<string, number> = { 万: 10_000, 萬: 10_000, 亿: 100_000_000, 億: 100_000_000 };
 const CN_NUMERAL = "[零〇一壹二贰貳两兩三叁參四肆五伍六陆陸七柒八捌九玖十拾百佰千仟万萬亿億]";
-const CN_UNITS = "千伏|千瓦|千安|兆瓦|毫米|厘米|千克|公斤|万元|亿元|億元|萬元|元|级|級|项|項|台|套|个|個|年|家|人|吨|噸|米";
-const CN_QUANTITY = new RegExp(
-	`(?<![第每这那某哪任${CN_NUMERAL.slice(1, -1)}])(${CN_NUMERAL}+?)(${CN_UNITS})`,
-	"g",
-);
+const CN_UNITS =
+	"千伏|千瓦|千安|兆瓦|毫米|厘米|千克|公斤|万元|亿元|億元|萬元|元|级|級|项|項|台|套|个|個|年|家|人|吨|噸|米";
+const CN_QUANTITY = new RegExp(`(?<![第每这那某哪任${CN_NUMERAL.slice(1, -1)}])(${CN_NUMERAL}+?)(${CN_UNITS})`, "g");
 const CN_PERCENT = new RegExp(`百分之(${CN_NUMERAL}+)`, "g");
 const CN_BIG_NUMBER = new RegExp(`(${CN_NUMERAL}{2,})(?=万|亿|萬|億)`, "g");
 const MIXED_NUMBER = /(?<![\d.])(\d+(?:\.\d+)?)([十拾百佰千仟])(万|亿|萬|億)/g;
@@ -156,9 +154,7 @@ const CN_ARTICLE_UNITS = new Set(["个", "個", "台", "套", "年", "家", "人
 function parseChineseNumber(text: string): number | null {
 	const chars = [...text];
 	if (chars.every((char) => char in CN_DIGITS)) {
-		return chars.length === 1
-			? CN_DIGITS[chars[0]]
-			: Number(chars.map((char) => CN_DIGITS[char]).join(""));
+		return chars.length === 1 ? CN_DIGITS[chars[0]] : Number(chars.map((char) => CN_DIGITS[char]).join(""));
 	}
 	if (!chars.some((char) => char in CN_DIGITS || char in CN_SMALL_UNITS)) return null;
 	let total = 0;
@@ -431,7 +427,8 @@ export function validateDraft(body: string, facts: readonly GeoDraftFact[]): Geo
 	});
 
 	// A high-risk value with no citation cannot be re-checked once its fact lapses, so it blocks too.
-	const blockingCount = checks.filter((check) => check.risk === "HIGH" && check.status !== "SUPPORTED").length + unknown.size;
+	const blockingCount =
+		checks.filter((check) => check.risk === "HIGH" && check.status !== "SUPPORTED").length + unknown.size;
 	const pendingCount = checks.filter(
 		(check) => check.risk !== "HIGH" && (check.status === "UNCITED" || check.status === "UNSUPPORTED"),
 	).length;

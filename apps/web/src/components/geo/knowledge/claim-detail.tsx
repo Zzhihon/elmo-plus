@@ -146,22 +146,22 @@ function Reviews({ detail }: { detail: KnowledgeClaimDetail }) {
 					<p className="whitespace-pre-wrap">{review.basis}</p>
 					<p className="text-xs text-muted-foreground">
 						绑定来源：
-						{review.sourceRef.length === 0
-							? "无"
-							: review.sourceRef
-									.map((source) =>
-										source.hidden
-											? "保密原件（无权查看）"
-											: source.kind === "PAGE_VERSION"
-												? `页面版本 ${source.pageVersionId?.slice(0, 8) ?? "—"}（${source.url ?? ""}）`
-												: `客户原件 ${source.assetId?.slice(0, 8) ?? "—"}${typeof source.locator.page === "number" ? ` 第 ${source.locator.page} 页` : ""}`,
-									)
-									.join("；")}
+						{review.sourceRef.length === 0 ? "无" : review.sourceRef.map(reviewSourceLabel).join("；")}
 					</p>
 				</li>
 			))}
 		</ol>
 	);
+}
+
+type ReviewSource = KnowledgeClaimDetail["reviews"][number]["sourceRef"][number];
+
+function reviewSourceLabel(source: ReviewSource): string {
+	if (source.hidden) return "保密原件（无权查看）";
+	if (source.kind === "PAGE_VERSION")
+		return `页面版本 ${source.pageVersionId?.slice(0, 8) ?? "—"}（${source.url ?? ""}）`;
+	const page = typeof source.locator.page === "number" ? ` 第 ${source.locator.page} 页` : "";
+	return `客户原件 ${source.assetId?.slice(0, 8) ?? "—"}${page}`;
 }
 
 export function ClaimDetailView({ detail }: { detail: KnowledgeClaimDetail }) {
@@ -204,7 +204,9 @@ export function ClaimDetailView({ detail }: { detail: KnowledgeClaimDetail }) {
 						sourceKind="ASSERTION"
 						sourceRef={`assertion:${claim.id}`}
 						evidence={{ assertionIds: [claim.id] }}
-						defaultTitle={claim.publicationScope === "CONFIDENTIAL" ? "核对保密事实" : `核对事实：${claim.claimText}`.slice(0, 200)}
+						defaultTitle={
+							claim.publicationScope === "CONFIDENTIAL" ? "核对保密事实" : `核对事实：${claim.claimText}`.slice(0, 200)
+						}
 						defaultKind="FACT_CORRECTION"
 						defaultRiskLevel={claim.riskLevel}
 						size="sm"

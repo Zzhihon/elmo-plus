@@ -39,7 +39,9 @@ function holdsHighRisk(entries: unknown, key: "riskLevel" | "risk"): boolean {
  */
 export function contentVersionRisk(version: { claims: unknown; validation: unknown }): GeoRiskLevel {
 	const stored = version.validation as { result?: { checks?: unknown } } | null;
-	return holdsHighRisk(version.claims, "riskLevel") || holdsHighRisk(stored?.result?.checks, "risk") ? "HIGH" : "NORMAL";
+	return holdsHighRisk(version.claims, "riskLevel") || holdsHighRisk(stored?.result?.checks, "risk")
+		? "HIGH"
+		: "NORMAL";
 }
 
 export interface GeoBatchFacts {
