@@ -199,6 +199,27 @@ describe("competitor coverage", () => {
 		expect(second?.mentioned).toMatchObject({ numerator: 2, denominator: 2 });
 		expect(second?.recommended).toMatchObject({ numerator: 2, denominator: 2 });
 	});
+
+	it("leaves samples from before a competitor joined the dictionary out of its denominator", () => {
+		const oldHit = { entityId: "c1", mentioned: true, recommendation: "MENTIONED_ONLY" as GeoRecommendation };
+		const newHit = { entityId: "c2", mentioned: false, recommendation: "NOT_MENTIONED" as GeoRecommendation };
+		const metrics = cell([
+			sample({ evaluation: { competitorHits: [oldHit] } }),
+			sample({ evaluation: { competitorHits: [oldHit] } }),
+			sample({ evaluation: { competitorHits: [oldHit, newHit] } }),
+		]);
+		const [existing, added] = metrics.competitors;
+		expect(existing?.mentioned).toMatchObject({ numerator: 3, denominator: 3 });
+		expect(added?.mentioned).toMatchObject({ status: "OK", numerator: 0, denominator: 1 });
+	});
+
+	it("reads as no data, never 0%, when no sample was evaluated against the competitor yet", () => {
+		const metrics = cell([sample({ evaluation: { competitorHits: [] } })]);
+		const [added] = metrics.competitors;
+		expect(added?.mentioned.status).toBe("NO_DATA");
+		expect(added?.recommended.status).toBe("NO_DATA");
+		expect(added && formatMetric(added.mentioned)).toBe("数据不足");
+	});
 });
 
 describe("citation sources", () => {

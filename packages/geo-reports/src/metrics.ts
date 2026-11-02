@@ -17,7 +17,7 @@ import {
 } from "@workspace/geo-domain";
 
 /** Bump when a formula below changes: reports record which definitions produced them. */
-export const GEO_METRIC_VERSION = "geo-metrics-v1";
+export const GEO_METRIC_VERSION = "geo-metrics-v2";
 
 /** A rate over fewer evaluated valid samples than this is flagged as low-sample. */
 export const GEO_LOW_SAMPLE_THRESHOLD = 20;
@@ -379,18 +379,20 @@ export function computeCellMetrics(input: {
 	).length;
 
 	const competitors = input.competitors.map((competitor) => {
-		let competitorMentioned = 0;
-		let competitorRecommended = 0;
-		for (const sample of evaluated) {
+		// An evaluation holds one entry per competitor its dictionary version had, mentioned or
+		// not, so a missing entry means the answer was never checked for this one: not a "no".
+		const assessed = evaluated.flatMap((sample) => {
 			const hit = sample.evaluation.competitorHits.find((entry) => entry.entityId === competitor.entityId);
-			if (hit?.mentioned) competitorMentioned++;
-			if (hit?.recommendation === "RECOMMENDED") competitorRecommended++;
-		}
+			return hit ? [hit] : [];
+		});
+		const emptyReason = "该竞品加入词典前的样本未按其评估，暂无可比样本";
 		return {
 			entityId: competitor.entityId,
 			name: competitor.name,
-			mentioned: metricValue(competitorMentioned, evaluated.length),
-			recommended: metricValue(competitorRecommended, evaluated.length),
+			mentioned: metricValue(assessed.filter((hit) => hit.mentioned).length, assessed.length, { emptyReason }),
+			recommended: metricValue(assessed.filter((hit) => hit.recommendation === "RECOMMENDED").length, assessed.length, {
+				emptyReason,
+			}),
 		};
 	});
 
