@@ -219,11 +219,21 @@ export type GeoAssertionStatus = (typeof GEO_ASSERTION_STATUSES)[number];
 export const GEO_ASSERTION_SOURCE_KINDS = ["PAGE_VERSION", "ASSET"] as const;
 export type GeoAssertionSourceKind = (typeof GEO_ASSERTION_SOURCE_KINDS)[number];
 
-export const GEO_ASSERTION_REVIEW_DECISIONS = ["APPROVE", "REJECT", "REQUEST_EVIDENCE", "INVALIDATE"] as const;
+export const GEO_ASSERTION_REVIEW_DECISIONS = [
+	"APPROVE",
+	"REJECT",
+	"REQUEST_EVIDENCE",
+	"INVALIDATE",
+	"FREEZE",
+	"UNFREEZE",
+] as const;
 export type GeoAssertionReviewDecision = (typeof GEO_ASSERTION_REVIEW_DECISIONS)[number];
 
 export const GEO_CONFLICT_STATUSES = ["OPEN", "RESOLVED"] as const;
 export type GeoConflictStatus = (typeof GEO_CONFLICT_STATUSES)[number];
+
+export const GEO_CONFLICT_RESOLUTIONS = ["KEEP_APPROVED", "ACCEPT_CANDIDATE", "SUPERSEDED"] as const;
+export type GeoConflictResolution = (typeof GEO_CONFLICT_RESOLUTIONS)[number];
 
 export const GEO_TASK_STATES = [
 	"PENDING_ANALYSIS",
@@ -267,6 +277,12 @@ export const GEO_CONTENT_APPROVAL_STATES = [
 	"PUBLISHED",
 ] as const;
 export type GeoContentApprovalState = (typeof GEO_CONTENT_APPROVAL_STATES)[number];
+
+export const GEO_CONTENT_ACTIONS = ["SUBMIT", "APPROVE_TECH", "APPROVE_MARKETING", "REJECT", "REVISE", "PUBLISH"] as const;
+export type GeoContentAction = (typeof GEO_CONTENT_ACTIONS)[number];
+
+export const GEO_CONTENT_GENERATORS = ["LLM", "MANUAL"] as const;
+export type GeoContentGenerator = (typeof GEO_CONTENT_GENERATORS)[number];
 
 export const GEO_REPORT_STATUSES = ["QUEUED", "RUNNING", "SUCCEEDED", "FAILED"] as const;
 export type GeoReportStatus = (typeof GEO_REPORT_STATUSES)[number];
