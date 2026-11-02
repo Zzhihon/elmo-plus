@@ -281,8 +281,20 @@ function parsePage(html: string, url: string, profile: SiteProfile): ParseOutcom
 	readMeta($, page, url, profile);
 
 	const titleMatch = firstMatch($, category?.title ?? profile.defaults.title);
-	page.title = titleMatch ? inline(titleMatch.elements.first().text()) || null : null;
+	const rawTitle = titleMatch ? inline(titleMatch.elements.first().text()) : "";
+	page.title =
+		profile.defaults.titleStrip.reduce((title, pattern) => title.replace(new RegExp(pattern), ""), rawTitle).trim() ||
+		null;
 	const contentFound = readContent($, page, url, profile, category);
+	const known = new Set(page.images.map((image) => image.src));
+	for (const field of page.fields) {
+		if (field.type !== "image" && field.type !== "images") continue;
+		for (const src of [field.value ?? []].flat(2)) {
+			if (known.has(src)) continue;
+			known.add(src);
+			page.images.push({ src, alt: null });
+		}
+	}
 
 	if (!page.title) page.warnings.push("TITLE_MISSING");
 	if (!page.text && page.images.length === 0) page.warnings.push("EMPTY_CONTENT");

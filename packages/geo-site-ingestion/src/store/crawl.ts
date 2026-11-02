@@ -41,7 +41,7 @@ import { decodeHtml } from "../net/charset";
 import { isAllowedByRobots, parseRobots, type RobotsPolicy, robotsFromStatus } from "../net/robots";
 import { type SafeFetchOptions, type SafeFetchResult, safeFetch } from "../net/safe-fetch";
 import { checkUrl, urlPolicyOf } from "../net/url-policy";
-import { parseOpWindow, type SiteProfile } from "../profile";
+import { parseOpWindow, parserVersionOf, type SiteProfile } from "../profile";
 import { isWithinWindow, nextWindowStart } from "../schedule";
 import { defaultSleep, nowOf, type SiteJobDeps } from "./deps";
 import { finalizeCrawlRun } from "./finalize";
@@ -402,6 +402,26 @@ async function latestHashOf(ctx: CrawlContext, pageId: string): Promise<string |
 	return pending?.contentHash ?? null;
 }
 
+/**
+ * Content unchanged but the rules moved on: the stored HTML is parsed again
+ * with the current profile, which adds a version without downloading anything.
+ */
+async function reparseIfRulesChanged(ctx: CrawlContext, pageId: string): Promise<void> {
+	const [latest] = await ctx.deps.db
+		.select({ id: geoSitePageVersions.id, parserVersion: geoSitePageVersions.parserVersion })
+		.from(geoSitePageVersions)
+		.where(and(eq(geoSitePageVersions.pageId, pageId), ne(geoSitePageVersions.parseStatus, "SKIPPED")))
+		.orderBy(desc(geoSitePageVersions.fetchedAt), desc(geoSitePageVersions.createdAt))
+		.limit(1);
+	if (!latest || latest.parserVersion === parserVersionOf(ctx.profile)) return;
+	const reparse = { pageId, versionId: latest.id, profileVersion: ctx.profile.version };
+	await ctx.deps.send(
+		GEO_QUEUE.siteParse,
+		{ organizationId: ctx.run.organizationId, reparse },
+		{ singletonKey: `reparse:${pageId}:${latest.id}:${ctx.profile.version}` },
+	);
+}
+
 async function pageWithSameContent(ctx: CrawlContext, contentHash: string): Promise<string | null> {
 	const [row] = await ctx.deps.db
 		.select({ pageId: geoSitePageVersions.pageId })
@@ -515,6 +535,7 @@ async function handleHtml(
 	});
 	if (decision === "UNCHANGED") {
 		await finishItem(ctx, item, "DONE", "UNCHANGED", { ...common, contentHash });
+		await reparseIfRulesChanged(ctx, page.id);
 		return;
 	}
 	if (decision === "DUPLICATE") {

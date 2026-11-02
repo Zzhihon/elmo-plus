@@ -90,8 +90,11 @@ export const siteProfileSchema = z.object({
 			content: selectors.default(["main", "article", "body"]),
 			remove: selectors.default(["header", "footer", "nav", "script", "style", "noscript", "form"]),
 			publishedAt: z.object({ selector: selectors.min(1), pattern: regex.optional() }).optional(),
+			/** Removed from every title, e.g. a site-name suffix repeated on each page. */
+			titleStrip: z.array(regex).max(10).default([]),
 		})
 		.default({
+			titleStrip: [],
 			title: ["h1", "title"],
 			content: ["main", "article", "body"],
 			remove: ["header", "footer", "nav", "script", "style", "noscript", "form"],
