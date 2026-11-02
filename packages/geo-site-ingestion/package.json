@@ -10,7 +10,10 @@
 	"exports": {
 		".": "./src/index.ts",
 		"./store": "./src/store/index.ts",
-		"./snapshot": "./src/snapshot-view.ts"
+		"./snapshot": "./src/snapshot-view.ts",
+		"./audit": "./src/audit/index.ts",
+		"./audit/catalog": "./src/audit/catalog.ts",
+		"./audit/store": "./src/audit/store.ts"
 	},
 	"dependencies": {
 		"@workspace/geo-domain": "workspace:*",

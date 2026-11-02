@@ -220,8 +220,8 @@ async function purgeEvidence(
 // ---------------------------------------------------------------------------
 
 /**
- * The latest version of a page and any version a knowledge or entity source cites
- * stay, so the lineage of a reviewed fact never loses its page.
+ * The latest version of a page and any version a knowledge or entity source or an
+ * audit finding cites stay, so neither a reviewed fact nor a finding loses its evidence.
  */
 async function expiredPageVersionBatch(tx: DbConnection, organizationId: string, cutoff: Date, limit: number) {
 	const result = await tx.execute(sql`
@@ -233,6 +233,7 @@ async function expiredPageVersionBatch(tx: DbConnection, organizationId: string,
 			)
 			and not exists (select 1 from geo_assertion_sources s where s.page_version_id = v.id)
 			and not exists (select 1 from geo_site_entity_sources e where e.page_version_id = v.id)
+			and not exists (select 1 from geo_site_audit_findings f where f.page_version_id = v.id)
 		order by v.fetched_at
 		limit ${limit}
 	`);
@@ -395,7 +396,8 @@ export async function previewGeoRetention(
 						where v.organization_id = ${organizationId} and v.fetched_at < ${snapshot}
 							and exists (select 1 from geo_site_page_versions n where n.page_id = v.page_id and n.fetched_at > v.fetched_at)
 							and not exists (select 1 from geo_assertion_sources s where s.page_version_id = v.id)
-							and not exists (select 1 from geo_site_entity_sources e where e.page_version_id = v.id)`)
+							and not exists (select 1 from geo_site_entity_sources e where e.page_version_id = v.id)
+							and not exists (select 1 from geo_site_audit_findings f where f.page_version_id = v.id)`)
 				: 0,
 		},
 		{

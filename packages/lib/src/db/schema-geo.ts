@@ -989,6 +989,10 @@ export const geoSiteAuditRuns = pgTable(
 		counts: jsonb("counts").notNull().default({}),
 		idempotencyKey: text("idempotency_key").notNull(),
 		requestedBy: text("requested_by").notNull(),
+		/** The crawl whose completion queued this run; null for a run started by hand. */
+		crawlRunId: uuid("crawl_run_id").references(() => geoSiteCrawlRuns.id),
+		/** Whether robots.txt, the sitemap and HTTPS were probed, or the last answers kept. */
+		siteChecks: boolean("site_checks").notNull().default(true),
 		errorSummary: text("error_summary"),
 		startedAt: at("started_at"),
 		finishedAt: at("finished_at"),
@@ -1006,28 +1010,50 @@ export const geoSiteAuditFindings = pgTable(
 	{
 		id: pk(),
 		organizationId: org(),
+		/** The run that first found it; one row lives on across runs while the problem does. */
 		runId: uuid("run_id")
 			.notNull()
 			.references(() => geoSiteAuditRuns.id),
+		siteSourceId: uuid("site_source_id")
+			.notNull()
+			.references(() => geoSiteSources.id),
 		/** Null for a site-wide finding such as a missing sitemap. */
 		pageId: uuid("page_id").references(() => geoSitePages.id),
+		/** The page id, or `site` for a site-wide finding: what makes a rule's finding the same one next run. */
+		subjectKey: text("subject_key").notNull(),
 		ruleId: text("rule_id").notNull(),
+		ruleVersion: integer("rule_version").notNull().default(1),
 		severity: text("severity").$type<GeoFindingSeverity>().notNull(),
+		priority: text("priority").$type<GeoPriority>().notNull().default("P2"),
 		status: text("status").$type<GeoFindingStatus>().notNull().default("OPEN"),
+		/** The page version the evidence was read from, so the snapshot behind it can be opened. */
+		pageVersionId: uuid("page_version_id").references(() => geoSitePageVersions.id),
 		evidence: jsonb("evidence").notNull().default({}),
 		recommendation: text("recommendation"),
 		ownerDepartment: text("owner_department"),
 		targetPromptIds: uuid("target_prompt_ids").array().notNull().default([]),
 		taskId: uuid("task_id").references((): AnyPgColumn => geoOptimizationTasks.id),
+		lastRunId: uuid("last_run_id").references(() => geoSiteAuditRuns.id),
+		firstSeenAt: at("first_seen_at").notNull().defaultNow(),
+		lastSeenAt: at("last_seen_at").notNull().defaultNow(),
+		resolvedAt: at("resolved_at"),
+		resolvedRunId: uuid("resolved_run_id").references(() => geoSiteAuditRuns.id),
+		/** Why it was dismissed, or how it came to be resolved. */
+		statusNote: text("status_note"),
+		triagedBy: text("triaged_by"),
+		triagedAt: at("triaged_at"),
 		createdAt: createdAt(),
 		updatedAt: updatedAt(),
 	},
 	(table) => [
 		uniqueIndex("geo_site_audit_findings_run_page_rule_idx").on(table.runId, table.pageId, table.ruleId),
+		uniqueIndex("geo_site_audit_findings_subject_idx").on(table.siteSourceId, table.ruleId, table.subjectKey),
+		index("geo_site_audit_findings_version_idx").on(table.pageVersionId),
 		index("geo_site_audit_findings_org_status_idx").on(table.organizationId, table.status),
 		index("geo_site_audit_findings_page_idx").on(table.pageId),
 		oneOf("geo_site_audit_findings_severity_check", table.severity, GEO_FINDING_SEVERITIES),
 		oneOf("geo_site_audit_findings_status_check", table.status, GEO_FINDING_STATUSES),
+		oneOf("geo_site_audit_findings_priority_check", table.priority, GEO_PRIORITIES),
 	],
 ).enableRLS();
 

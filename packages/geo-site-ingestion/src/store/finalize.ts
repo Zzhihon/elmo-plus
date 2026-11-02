@@ -9,6 +9,7 @@ import { geoSiteCrawlItems, geoSiteCrawlRuns, geoSitePages, geoSiteSources } fro
 import { raiseGeoAlert, resolveGeoAlert } from "@workspace/lib/geo/alerts";
 import { writeGeoAudit } from "@workspace/lib/geo/audit";
 import { and, count, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { enqueueSiteAuditAfterCrawl } from "../audit/store";
 import type { SiteProfile } from "../profile";
 import type { SiteJobDeps } from "./deps";
 import { keyUrlCoverageOf } from "./metrics";
@@ -303,5 +304,14 @@ export async function finalizeCrawlRun(
 		entityId: runId,
 		after: { status: outcome.status, summary },
 	});
+	if (outcome.status === "SUCCEEDED" || outcome.status === "PARTIAL") {
+		const fullScope = (run.config as { seedUrls?: unknown } | null)?.seedUrls == null;
+		await enqueueSiteAuditAfterCrawl(deps, {
+			id: runId,
+			organizationId: run.organizationId,
+			siteSourceId: source.id,
+			fullScope,
+		});
+	}
 	return { status: outcome.status, continued: false, processed: 0 };
 }
