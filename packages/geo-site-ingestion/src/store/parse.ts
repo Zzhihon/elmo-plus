@@ -37,16 +37,26 @@ export interface ParsedSummary {
 	imageCount: number;
 	images: string[];
 	tableCount: number;
-	fields: Array<{ path: string; label: string | null; type: string; value: unknown; selector: string | null }>;
+	fields: Array<{
+		path: string;
+		label: string | null;
+		type: string;
+		value: string | string[] | string[][] | null;
+		selector: string | null;
+	}>;
 	warnings: string[];
 	error: string | null;
 }
 
 function summarize(page: ParsedPage | null, error: string | null): ParsedSummary {
-	const shorten = (value: unknown): unknown => {
+	const shorten = (value: ParsedSummary["fields"][number]["value"]): ParsedSummary["fields"][number]["value"] => {
 		if (typeof value === "string") return truncate(value, 500);
-		if (Array.isArray(value)) return value.slice(0, 20).map(shorten);
-		return value;
+		if (!Array.isArray(value)) return value;
+		return value
+			.slice(0, 20)
+			.map((entry) => (Array.isArray(entry) ? entry.map((cell) => truncate(cell, 200)) : truncate(entry, 500))) as
+			| string[]
+			| string[][];
 	};
 	return {
 		category: page?.category ?? null,
