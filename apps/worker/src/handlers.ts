@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/node";
+import { isGeoWorkspaceEnabled } from "@workspace/config/geo";
 import { getDeploymentFeatures } from "@workspace/deployment";
 import type { OnboardingSuggestion } from "@workspace/lib/onboarding";
 import { REFRESH_ROLLUPS_QUEUE, ROLLUP_CATCH_UP_QUEUE } from "@workspace/lib/rollups/constants";
@@ -117,4 +118,9 @@ export async function registerHandlers(boss: PgBoss): Promise<void> {
 		withSentry(ROLLUP_CATCH_UP_QUEUE, rollupCatchUpJob),
 	);
 	console.log(`Registered handler: ${ROLLUP_CATCH_UP_QUEUE}`);
+
+	if (isGeoWorkspaceEnabled()) {
+		const { registerGeoHandlers } = await import("./jobs/geo/index.js");
+		await registerGeoHandlers(boss, withSentry);
+	}
 }

@@ -1,5 +1,6 @@
 import * as Sentry from "@sentry/node";
 import { assertRequiredEnv } from "@workspace/config/env";
+import { isGeoWorkspaceEnabled } from "@workspace/config/geo";
 import { parseScrapeTargets } from "@workspace/config/scrape-targets";
 import { getDeploymentFeatures } from "@workspace/deployment";
 import { db } from "@workspace/lib/db/db";
@@ -124,6 +125,10 @@ async function main() {
 		retryLimit: 0,
 		expireInSeconds: 60 * 2,
 	});
+	if (isGeoWorkspaceEnabled()) {
+		const { createGeoQueues } = await import("./jobs/geo/index.js");
+		await createGeoQueues(boss);
+	}
 	console.log("Queues created");
 
 	await boss.schedule("schedule-maintenance", "*/5 * * * *", { source: "scheduled" }, { tz: "UTC" });
