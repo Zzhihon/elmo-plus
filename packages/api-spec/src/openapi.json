@@ -2123,6 +2123,2322 @@
 					}
 				},
 				"required": ["average", "series"]
+			},
+			"GeoError": {
+				"type": "object",
+				"required": ["error"],
+				"properties": {
+					"error": {
+						"type": "object",
+						"required": ["code", "message", "request_id"],
+						"properties": {
+							"code": {
+								"type": "string",
+								"enum": [
+									"VALIDATION_ERROR",
+									"UNAUTHORIZED",
+									"FORBIDDEN",
+									"NOT_FOUND",
+									"METHOD_NOT_ALLOWED",
+									"CONFLICT",
+									"EVIDENCE_REQUIRED",
+									"RATE_LIMITED",
+									"INTERNAL_ERROR",
+									"TARGET_UNAVAILABLE"
+								]
+							},
+							"message": {
+								"type": "string"
+							},
+							"request_id": {
+								"type": "string"
+							},
+							"details": {
+								"type": "array",
+								"description": "仅人工导入：逐行错误",
+								"items": {
+									"$ref": "#/components/schemas/GeoManualImportRowError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"GeoPagination": {
+				"type": "object",
+				"properties": {
+					"page": {
+						"type": "integer"
+					},
+					"limit": {
+						"type": "integer"
+					},
+					"total": {
+						"type": "integer"
+					},
+					"totalPages": {
+						"type": "integer"
+					}
+				}
+			},
+			"GeoFactStatus": {
+				"type": "string",
+				"enum": ["UNVERIFIED", "PENDING_REVIEW", "APPROVED", "REJECTED"],
+				"description": "品牌和产品上表示客户确认状态；UNVERIFIED 即“待客户确认”。"
+			},
+			"GeoBrandInput": {
+				"type": "object",
+				"required": ["kind", "displayName"],
+				"properties": {
+					"kind": {
+						"type": "string",
+						"enum": ["OWN", "COMPETITOR"]
+					},
+					"displayName": {
+						"type": "string",
+						"maxLength": 200
+					},
+					"legalName": {
+						"type": ["string", "null"]
+					},
+					"shortName": {
+						"type": ["string", "null"]
+					},
+					"aliases": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"historicalNames": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"domains": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "主机名；URL 会被归一为主机名，www 与裸域视为同一站点。"
+					},
+					"officialUrl": {
+						"type": ["string", "null"],
+						"format": "uri"
+					},
+					"regions": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"factStatus": {
+						"$ref": "#/components/schemas/GeoFactStatus"
+					},
+					"factNotes": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "待客户确认的事实，每条一句。"
+					},
+					"changeNote": {
+						"type": ["string", "null"],
+						"description": "写入词典版本的变更说明。"
+					}
+				}
+			},
+			"GeoBrandPatch": {
+				"type": "object",
+				"minProperties": 1,
+				"description": "省略的字段保持不变；null 清空可空字段。名称、别名或域名与其他启用实体冲突时返回 CONFLICT。",
+				"properties": {
+					"displayName": {
+						"type": "string"
+					},
+					"legalName": {
+						"type": ["string", "null"]
+					},
+					"shortName": {
+						"type": ["string", "null"]
+					},
+					"aliases": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"historicalNames": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"domains": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"officialUrl": {
+						"type": ["string", "null"],
+						"format": "uri"
+					},
+					"regions": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"status": {
+						"type": "string",
+						"enum": ["ACTIVE", "DISABLED"]
+					},
+					"factStatus": {
+						"$ref": "#/components/schemas/GeoFactStatus"
+					},
+					"factNotes": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"changeNote": {
+						"type": ["string", "null"]
+					}
+				}
+			},
+			"GeoProduct": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "string",
+						"format": "uuid"
+					},
+					"brandEntityId": {
+						"type": "string",
+						"format": "uuid"
+					},
+					"name": {
+						"type": "string"
+					},
+					"model": {
+						"type": ["string", "null"]
+					},
+					"category": {
+						"type": ["string", "null"]
+					},
+					"termKind": {
+						"type": "string",
+						"enum": ["GENERIC", "CUSTOMER_MODEL"],
+						"description": "GENERIC 为通用产品词，不能带型号；CUSTOMER_MODEL 为客户型号，必须带型号。"
+					},
+					"factStatus": {
+						"$ref": "#/components/schemas/GeoFactStatus"
+					},
+					"status": {
+						"type": "string",
+						"enum": ["ACTIVE", "DISABLED"]
+					}
+				}
+			},
+			"GeoProductInput": {
+				"type": "object",
+				"required": ["name", "termKind"],
+				"properties": {
+					"name": {
+						"type": "string"
+					},
+					"model": {
+						"type": ["string", "null"]
+					},
+					"category": {
+						"type": ["string", "null"]
+					},
+					"termKind": {
+						"type": "string",
+						"enum": ["GENERIC", "CUSTOMER_MODEL"]
+					},
+					"factStatus": {
+						"$ref": "#/components/schemas/GeoFactStatus"
+					},
+					"changeNote": {
+						"type": ["string", "null"]
+					}
+				}
+			},
+			"GeoProductPatch": {
+				"type": "object",
+				"minProperties": 1,
+				"properties": {
+					"name": {
+						"type": "string"
+					},
+					"model": {
+						"type": ["string", "null"]
+					},
+					"category": {
+						"type": ["string", "null"]
+					},
+					"termKind": {
+						"type": "string",
+						"enum": ["GENERIC", "CUSTOMER_MODEL"]
+					},
+					"factStatus": {
+						"$ref": "#/components/schemas/GeoFactStatus"
+					},
+					"status": {
+						"type": "string",
+						"enum": ["ACTIVE", "DISABLED"]
+					},
+					"changeNote": {
+						"type": ["string", "null"]
+					}
+				}
+			},
+			"GeoBrand": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "string",
+						"format": "uuid"
+					},
+					"kind": {
+						"type": "string",
+						"enum": ["OWN", "COMPETITOR"]
+					},
+					"displayName": {
+						"type": "string"
+					},
+					"legalName": {
+						"type": ["string", "null"]
+					},
+					"shortName": {
+						"type": ["string", "null"]
+					},
+					"aliases": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"historicalNames": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"domains": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"officialUrl": {
+						"type": ["string", "null"]
+					},
+					"regions": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"status": {
+						"type": "string",
+						"enum": ["ACTIVE", "DISABLED"]
+					},
+					"factStatus": {
+						"$ref": "#/components/schemas/GeoFactStatus"
+					},
+					"factNotes": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"createdBy": {
+						"type": "string"
+					},
+					"createdAt": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"updatedAt": {
+						"type": "string",
+						"format": "date-time"
+					}
+				}
+			},
+			"GeoBrandWithProducts": {
+				"allOf": [
+					{
+						"$ref": "#/components/schemas/GeoBrand"
+					},
+					{
+						"type": "object",
+						"properties": {
+							"products": {
+								"type": "array",
+								"items": {
+									"$ref": "#/components/schemas/GeoProduct"
+								}
+							}
+						}
+					}
+				]
+			},
+			"GeoDictionaryChange": {
+				"type": "object",
+				"properties": {
+					"entityId": {
+						"type": "string"
+					},
+					"displayName": {
+						"type": "string"
+					},
+					"addedAliases": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"removedAliases": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"addedHistoricalNames": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"removedHistoricalNames": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"changedFields": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					}
+				}
+			},
+			"GeoBrandDetail": {
+				"allOf": [
+					{
+						"$ref": "#/components/schemas/GeoBrandWithProducts"
+					},
+					{
+						"type": "object",
+						"properties": {
+							"history": {
+								"type": "array",
+								"description": "别名与字段变更历史，按词典版本倒序。",
+								"items": {
+									"allOf": [
+										{
+											"$ref": "#/components/schemas/GeoDictionaryChange"
+										},
+										{
+											"type": "object",
+											"properties": {
+												"version": {
+													"type": "integer"
+												},
+												"changeNote": {
+													"type": ["string", "null"]
+												},
+												"createdBy": {
+													"type": "string"
+												},
+												"createdAt": {
+													"type": "string",
+													"format": "date-time"
+												}
+											}
+										}
+									]
+								}
+							}
+						}
+					}
+				]
+			},
+			"GeoDictionaryVersionSummary": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "string",
+						"format": "uuid"
+					},
+					"version": {
+						"type": "integer"
+					},
+					"changeNote": {
+						"type": ["string", "null"]
+					},
+					"changes": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/GeoDictionaryChange"
+						}
+					},
+					"createdBy": {
+						"type": "string"
+					},
+					"createdAt": {
+						"type": "string",
+						"format": "date-time"
+					}
+				}
+			},
+			"GeoDictionaryVersion": {
+				"allOf": [
+					{
+						"$ref": "#/components/schemas/GeoDictionaryVersionSummary"
+					},
+					{
+						"type": "object",
+						"properties": {
+							"changedEntityIds": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								}
+							},
+							"snapshot": {
+								"type": "object",
+								"description": "该版本的完整品牌、竞品与产品词典，不可变。",
+								"properties": {
+									"entities": {
+										"type": "array",
+										"items": {
+											"type": "object"
+										}
+									},
+									"products": {
+										"type": "array",
+										"items": {
+											"type": "object"
+										}
+									}
+								}
+							}
+						}
+					}
+				]
+			},
+			"GeoBuyerRole": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "string",
+						"format": "uuid"
+					},
+					"code": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"priority": {
+						"type": "integer"
+					}
+				}
+			},
+			"GeoPromptInput": {
+				"type": "object",
+				"required": ["question"],
+				"properties": {
+					"question": {
+						"type": "string",
+						"maxLength": 500
+					},
+					"buyerRoleId": {
+						"type": ["string", "null"],
+						"format": "uuid"
+					},
+					"intent": {
+						"type": ["string", "null"]
+					},
+					"productLine": {
+						"type": ["string", "null"]
+					},
+					"geoRegion": {
+						"type": ["string", "null"]
+					},
+					"priority": {
+						"type": "string",
+						"enum": ["P0", "P1", "P2", "P3"],
+						"default": "P2"
+					},
+					"language": {
+						"type": "string",
+						"default": "zh-CN"
+					},
+					"tier": {
+						"type": "string",
+						"enum": ["CORE", "EXTENDED"],
+						"default": "CORE",
+						"description": "EXTENDED 默认不进入高频监测。"
+					},
+					"ownerId": {
+						"type": ["string", "null"],
+						"description": "组织成员的用户 ID；省略时为创建人。"
+					},
+					"sourceNote": {
+						"type": ["string", "null"]
+					}
+				}
+			},
+			"GeoPromptPatch": {
+				"type": "object",
+				"minProperties": 1,
+				"description": "只有 DRAFT 可编辑；每次保存生成新修订。",
+				"properties": {
+					"question": {
+						"type": "string"
+					},
+					"buyerRoleId": {
+						"type": ["string", "null"],
+						"format": "uuid"
+					},
+					"intent": {
+						"type": ["string", "null"]
+					},
+					"productLine": {
+						"type": ["string", "null"]
+					},
+					"geoRegion": {
+						"type": ["string", "null"]
+					},
+					"priority": {
+						"type": "string",
+						"enum": ["P0", "P1", "P2", "P3"]
+					},
+					"language": {
+						"type": "string"
+					},
+					"tier": {
+						"type": "string",
+						"enum": ["CORE", "EXTENDED"]
+					},
+					"ownerId": {
+						"type": ["string", "null"]
+					},
+					"sourceNote": {
+						"type": ["string", "null"]
+					}
+				}
+			},
+			"GeoPrompt": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "string",
+						"format": "uuid"
+					},
+					"question": {
+						"type": "string"
+					},
+					"buyerRoleId": {
+						"type": ["string", "null"]
+					},
+					"intent": {
+						"type": ["string", "null"]
+					},
+					"productLine": {
+						"type": ["string", "null"]
+					},
+					"geoRegion": {
+						"type": ["string", "null"]
+					},
+					"priority": {
+						"type": "string"
+					},
+					"language": {
+						"type": "string"
+					},
+					"tier": {
+						"type": "string",
+						"enum": ["CORE", "EXTENDED"]
+					},
+					"status": {
+						"type": "string",
+						"enum": ["DRAFT", "IN_REVIEW", "BASELINE", "FROZEN", "REJECTED"]
+					},
+					"ownerId": {
+						"type": ["string", "null"]
+					},
+					"reviewerId": {
+						"type": ["string", "null"]
+					},
+					"reviewNote": {
+						"type": ["string", "null"]
+					},
+					"sourceNote": {
+						"type": ["string", "null"]
+					},
+					"currentRevision": {
+						"type": "integer"
+					},
+					"createdBy": {
+						"type": "string"
+					},
+					"createdAt": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"updatedAt": {
+						"type": "string",
+						"format": "date-time"
+					}
+				}
+			},
+			"GeoPromptRow": {
+				"allOf": [
+					{
+						"$ref": "#/components/schemas/GeoPrompt"
+					},
+					{
+						"type": "object",
+						"properties": {
+							"buyerRoleCode": {
+								"type": ["string", "null"]
+							},
+							"buyerRoleTitle": {
+								"type": ["string", "null"]
+							},
+							"latestFrozenSet": {
+								"type": ["object", "null"],
+								"description": "test_set_version：最近一次包含该问法的冻结测试集。",
+								"properties": {
+									"id": {
+										"type": "string"
+									},
+									"name": {
+										"type": "string"
+									},
+									"version": {
+										"type": "integer"
+									}
+								}
+							}
+						}
+					}
+				]
+			},
+			"GeoPromptDetail": {
+				"allOf": [
+					{
+						"$ref": "#/components/schemas/GeoPromptRow"
+					},
+					{
+						"type": "object",
+						"properties": {
+							"revisions": {
+								"type": "array",
+								"items": {
+									"type": "object",
+									"properties": {
+										"revision": {
+											"type": "integer"
+										},
+										"snapshot": {
+											"type": "object"
+										},
+										"editorId": {
+											"type": "string"
+										},
+										"createdAt": {
+											"type": "string",
+											"format": "date-time"
+										}
+									}
+								}
+							}
+						}
+					}
+				]
+			},
+			"GeoPromptTransition": {
+				"type": "object",
+				"required": ["action"],
+				"properties": {
+					"action": {
+						"type": "string",
+						"enum": ["SUBMIT", "APPROVE", "REJECT", "REVISE"],
+						"description": "SUBMIT 草稿→业务审核（需填齐角色、意图、产品线、地区）；APPROVE 审核→入选基线；REJECT 审核→驳回（需 comment）；REVISE 驳回/基线/冻结→草稿。APPROVE、REJECT 需要 `prompt.review`，API Key 不具备；作者、负责人和编辑过该问法的人不能审核。"
+					},
+					"comment": {
+						"type": ["string", "null"]
+					}
+				}
+			},
+			"GeoPromptImportResult": {
+				"type": "object",
+				"properties": {
+					"created": {
+						"type": "integer"
+					},
+					"updated": {
+						"type": "integer"
+					},
+					"unchanged": {
+						"type": "integer"
+					},
+					"errors": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"line": {
+									"type": "integer"
+								},
+								"column": {
+									"type": ["string", "null"]
+								},
+								"message": {
+									"type": "string"
+								}
+							}
+						}
+					}
+				}
+			},
+			"GeoPromptSet": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "string",
+						"format": "uuid"
+					},
+					"name": {
+						"type": "string"
+					},
+					"version": {
+						"type": "integer"
+					},
+					"status": {
+						"type": "string",
+						"enum": ["DRAFT", "FROZEN"]
+					},
+					"parentSetId": {
+						"type": ["string", "null"]
+					},
+					"frozenAt": {
+						"type": ["string", "null"],
+						"format": "date-time"
+					},
+					"frozenBy": {
+						"type": ["string", "null"]
+					},
+					"createdBy": {
+						"type": "string"
+					},
+					"createdAt": {
+						"type": "string",
+						"format": "date-time"
+					}
+				}
+			},
+			"GeoPromptSetSummary": {
+				"allOf": [
+					{
+						"$ref": "#/components/schemas/GeoPromptSet"
+					},
+					{
+						"type": "object",
+						"properties": {
+							"itemCount": {
+								"type": "integer"
+							},
+							"coreCount": {
+								"type": "integer"
+							}
+						}
+					}
+				]
+			},
+			"GeoPromptLabels": {
+				"type": "object",
+				"properties": {
+					"buyerRoleId": {
+						"type": ["string", "null"]
+					},
+					"buyerRoleCode": {
+						"type": ["string", "null"]
+					},
+					"buyerRoleTitle": {
+						"type": ["string", "null"]
+					},
+					"intent": {
+						"type": ["string", "null"]
+					},
+					"productLine": {
+						"type": ["string", "null"]
+					},
+					"geoRegion": {
+						"type": ["string", "null"]
+					},
+					"priority": {
+						"type": "string"
+					},
+					"language": {
+						"type": "string"
+					},
+					"tier": {
+						"type": "string"
+					},
+					"ownerId": {
+						"type": ["string", "null"]
+					}
+				}
+			},
+			"GeoPromptSetDetail": {
+				"allOf": [
+					{
+						"$ref": "#/components/schemas/GeoPromptSet"
+					},
+					{
+						"type": "object",
+						"properties": {
+							"items": {
+								"type": "array",
+								"items": {
+									"type": "object",
+									"properties": {
+										"promptId": {
+											"type": "string"
+										},
+										"promptRevision": {
+											"type": "integer"
+										},
+										"questionText": {
+											"type": "string"
+										},
+										"labels": {
+											"$ref": "#/components/schemas/GeoPromptLabels"
+										},
+										"currentStatus": {
+											"type": "string"
+										},
+										"currentRevision": {
+											"type": "integer"
+										}
+									}
+								}
+							}
+						}
+					}
+				]
+			},
+			"GeoFrozenPromptSet": {
+				"type": "object",
+				"description": "冻结后的不可变快照；监测轮次只使用 questionText。",
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"organizationId": {
+						"type": "string"
+					},
+					"name": {
+						"type": "string"
+					},
+					"version": {
+						"type": "integer"
+					},
+					"parentSetId": {
+						"type": ["string", "null"]
+					},
+					"frozenAt": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"frozenBy": {
+						"type": "string"
+					},
+					"items": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"promptId": {
+									"type": "string"
+								},
+								"promptRevision": {
+									"type": "integer"
+								},
+								"questionText": {
+									"type": "string"
+								},
+								"labels": {
+									"$ref": "#/components/schemas/GeoPromptLabels"
+								}
+							}
+						}
+					}
+				}
+			},
+			"GeoPromptSetInput": {
+				"type": "object",
+				"required": ["name"],
+				"properties": {
+					"name": {
+						"type": "string",
+						"maxLength": 100
+					},
+					"promptIds": {
+						"type": "array",
+						"items": {
+							"type": "string",
+							"format": "uuid"
+						},
+						"maxItems": 500
+					}
+				}
+			},
+			"GeoPromptSetItems": {
+				"type": "object",
+				"required": ["promptIds"],
+				"properties": {
+					"promptIds": {
+						"type": "array",
+						"items": {
+							"type": "string",
+							"format": "uuid"
+						},
+						"maxItems": 500
+					}
+				}
+			},
+			"GeoSamplingTarget": {
+				"type": "object",
+				"description": "能力矩阵中的一个采样目标。不包含凭据，只返回是否已设置。",
+				"properties": {
+					"id": {
+						"type": "string",
+						"format": "uuid"
+					},
+					"platform": {
+						"type": "string",
+						"enum": ["doubao", "deepseek", "yuanbao", "qwen"]
+					},
+					"surfaceMode": {
+						"type": "string",
+						"enum": ["LIVE_SURFACE", "MODEL_API", "MANUAL_EVIDENCE"]
+					},
+					"provider": {
+						"type": "string"
+					},
+					"modelId": {
+						"type": ["string", "null"]
+					},
+					"region": {
+						"type": ["string", "null"]
+					},
+					"language": {
+						"type": "string"
+					},
+					"config": {
+						"description": "目标配置（不含凭据）"
+					},
+					"availableWindow": {},
+					"maxConcurrency": {
+						"type": "integer"
+					},
+					"perMinuteQuota": {
+						"type": ["integer", "null"]
+					},
+					"perDayQuota": {
+						"type": ["integer", "null"]
+					},
+					"retryPolicy": {},
+					"costBudget": {
+						"type": ["number", "null"]
+					},
+					"breakerState": {
+						"type": "string",
+						"enum": ["CLOSED", "OPEN", "HALF_OPEN"]
+					},
+					"breakerOpenedAt": {
+						"type": ["string", "null"],
+						"format": "date-time"
+					},
+					"verificationStatus": {
+						"type": "string",
+						"enum": ["UNVERIFIED", "LIMITED", "PASSED", "FAILED"]
+					},
+					"verificationNote": {
+						"type": ["string", "null"]
+					},
+					"verifiedBy": {
+						"type": ["string", "null"]
+					},
+					"verifiedAt": {
+						"type": ["string", "null"],
+						"format": "date-time"
+					},
+					"enabled": {
+						"type": "boolean"
+					},
+					"credentialConfigured": {
+						"type": "boolean"
+					},
+					"platformEnabled": {
+						"type": "boolean"
+					},
+					"configErrors": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"runnable": {
+						"type": "boolean",
+						"description": "已启用、已验证（PASSED/LIMITED）、配置完整且部署允许，可加入采样批次"
+					},
+					"stats": {
+						"type": "object",
+						"properties": {
+							"attempts7d": {
+								"type": "integer"
+							},
+							"valid7d": {
+								"type": "integer"
+							},
+							"p50Ms": {
+								"type": ["number", "null"]
+							},
+							"p95Ms": {
+								"type": ["number", "null"]
+							},
+							"cost30d": {
+								"type": "number"
+							}
+						}
+					},
+					"updatedAt": {
+						"type": "string",
+						"format": "date-time"
+					}
+				}
+			},
+			"GeoSamplingBatchCreate": {
+				"type": "object",
+				"required": ["promptSetId", "targetIds"],
+				"properties": {
+					"promptSetId": {
+						"type": "string",
+						"format": "uuid",
+						"description": "必须是已冻结的问法集"
+					},
+					"targetIds": {
+						"type": "array",
+						"items": {
+							"type": "string",
+							"format": "uuid"
+						},
+						"minItems": 1,
+						"maxItems": 50
+					},
+					"repeatCount": {
+						"type": "integer",
+						"minimum": 1,
+						"maximum": 10,
+						"default": 3
+					},
+					"idempotencyKey": {
+						"type": "string",
+						"maxLength": 200,
+						"description": "同一 key 返回已创建的批次；也可用 Idempotency-Key 请求头"
+					}
+				}
+			},
+			"GeoSamplingBatch": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "string",
+						"format": "uuid"
+					},
+					"status": {
+						"type": "string",
+						"enum": ["PLANNED", "RUNNING", "PAUSED", "COMPLETED", "PARTIAL", "FAILED", "CANCELLED"]
+					},
+					"promptSet": {
+						"type": "object",
+						"properties": {
+							"id": {
+								"type": "string",
+								"format": "uuid"
+							},
+							"name": {
+								"type": "string"
+							},
+							"version": {
+								"type": "integer"
+							}
+						}
+					},
+					"repeatCount": {
+						"type": "integer"
+					},
+					"plannedCount": {
+						"type": "integer",
+						"description": "计划样本数（问法 × 目标 × 重复次数），重采不增加"
+					},
+					"validCount": {
+						"type": "integer"
+					},
+					"partialCount": {
+						"type": "integer"
+					},
+					"unavailableCount": {
+						"type": "integer"
+					},
+					"failedCount": {
+						"type": "integer"
+					},
+					"costEstimate": {
+						"type": "number"
+					},
+					"targetCount": {
+						"type": "integer"
+					},
+					"requestedBy": {
+						"type": "string"
+					},
+					"createdAt": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"startedAt": {
+						"type": ["string", "null"],
+						"format": "date-time"
+					},
+					"finishedAt": {
+						"type": ["string", "null"],
+						"format": "date-time"
+					}
+				}
+			},
+			"GeoSamplingRun": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "string",
+						"format": "uuid"
+					},
+					"promptId": {
+						"type": "string",
+						"format": "uuid"
+					},
+					"questionText": {
+						"type": "string"
+					},
+					"targetId": {
+						"type": "string",
+						"format": "uuid"
+					},
+					"platform": {
+						"type": "string",
+						"enum": ["doubao", "deepseek", "yuanbao", "qwen"]
+					},
+					"surfaceMode": {
+						"type": "string",
+						"enum": ["LIVE_SURFACE", "MODEL_API", "MANUAL_EVIDENCE"]
+					},
+					"repeatIndex": {
+						"type": "integer"
+					},
+					"status": {
+						"type": "string",
+						"enum": [
+							"PLANNED",
+							"RUNNING",
+							"VALID",
+							"PARTIAL",
+							"UNAVAILABLE",
+							"NEEDS_MANUAL",
+							"FAILED",
+							"RATE_LIMITED",
+							"TIMEOUT",
+							"CAPTCHA",
+							"NETWORK_ERROR"
+						]
+					},
+					"attemptCount": {
+						"type": "integer"
+					},
+					"errorCode": {
+						"type": ["string", "null"]
+					},
+					"errorDetail": {
+						"type": ["string", "null"]
+					},
+					"retryOfRunId": {
+						"type": ["string", "null"],
+						"format": "uuid"
+					},
+					"retryRelation": {
+						"type": ["string", "null"],
+						"enum": ["AUTO_RETRY", "EXPLICIT_RESAMPLE", null]
+					},
+					"nextAttemptAt": {
+						"type": ["string", "null"],
+						"format": "date-time"
+					},
+					"observationId": {
+						"type": ["string", "null"],
+						"format": "uuid"
+					},
+					"updatedAt": {
+						"type": "string",
+						"format": "date-time"
+					}
+				}
+			},
+			"GeoSamplingBatchDetail": {
+				"allOf": [
+					{
+						"$ref": "#/components/schemas/GeoSamplingBatch"
+					},
+					{
+						"type": "object",
+						"properties": {
+							"idempotencyKey": {
+								"type": "string"
+							},
+							"targets": {
+								"type": "array",
+								"items": {
+									"type": "object",
+									"properties": {
+										"targetId": {
+											"type": "string",
+											"format": "uuid"
+										},
+										"platform": {
+											"type": "string",
+											"enum": ["doubao", "deepseek", "yuanbao", "qwen"]
+										},
+										"surfaceMode": {
+											"type": "string",
+											"enum": ["LIVE_SURFACE", "MODEL_API", "MANUAL_EVIDENCE"]
+										},
+										"provider": {
+											"type": "string"
+										},
+										"modelId": {
+											"type": ["string", "null"]
+										},
+										"verificationStatus": {
+											"type": "string",
+											"enum": ["UNVERIFIED", "LIMITED", "PASSED", "FAILED"]
+										},
+										"statuses": {
+											"type": "object",
+											"additionalProperties": {
+												"type": "integer"
+											}
+										}
+									}
+								}
+							},
+							"runs": {
+								"type": "array",
+								"items": {
+									"$ref": "#/components/schemas/GeoSamplingRun"
+								}
+							},
+							"runTotal": {
+								"type": "integer"
+							}
+						}
+					}
+				]
+			},
+			"GeoManualImportRow": {
+				"type": "object",
+				"required": ["sampledAt", "platform", "responseText", "evidenceLocation"],
+				"description": "question 与 promptId 至少一个",
+				"properties": {
+					"sampledAt": {
+						"type": "string",
+						"description": "ISO 8601，或 YYYY-MM-DD HH:mm（按北京时间）"
+					},
+					"platform": {
+						"type": "string",
+						"description": "doubao/deepseek/yuanbao/qwen 或中文名"
+					},
+					"question": {
+						"type": "string"
+					},
+					"promptId": {
+						"type": "string",
+						"format": "uuid"
+					},
+					"responseText": {
+						"type": "string",
+						"maxLength": 100000
+					},
+					"evidenceLocation": {
+						"type": "string",
+						"maxLength": 2000,
+						"description": "http(s) 链接、上传接口返回的 upload:<sha256>.<ext>，或存档说明"
+					},
+					"citations": {
+						"oneOf": [
+							{
+								"type": "array",
+								"items": {
+									"oneOf": [
+										{
+											"type": "string",
+											"format": "uri"
+										},
+										{
+											"type": "object",
+											"properties": {
+												"url": {
+													"type": "string",
+													"format": "uri"
+												},
+												"title": {
+													"type": "string"
+												}
+											},
+											"required": ["url"]
+										}
+									]
+								}
+							},
+							{
+								"type": "string"
+							}
+						]
+					},
+					"modelVersion": {
+						"type": "string"
+					},
+					"targetId": {
+						"type": "string",
+						"format": "uuid"
+					},
+					"status": {
+						"type": "string",
+						"enum": ["VALID", "PARTIAL"]
+					},
+					"note": {
+						"type": "string"
+					}
+				}
+			},
+			"GeoManualImportRequest": {
+				"oneOf": [
+					{
+						"type": "object",
+						"required": ["format", "rows"],
+						"properties": {
+							"format": {
+								"const": "rows"
+							},
+							"rows": {
+								"type": "array",
+								"maxItems": 1000,
+								"items": {
+									"$ref": "#/components/schemas/GeoManualImportRow"
+								}
+							},
+							"promptSetId": {
+								"type": "string",
+								"format": "uuid"
+							}
+						}
+					},
+					{
+						"type": "object",
+						"required": ["format", "content"],
+						"properties": {
+							"format": {
+								"type": "string",
+								"enum": ["csv", "json"]
+							},
+							"content": {
+								"type": "string",
+								"maxLength": 5242880
+							},
+							"promptSetId": {
+								"type": "string",
+								"format": "uuid"
+							}
+						}
+					}
+				]
+			},
+			"GeoManualImportRowError": {
+				"type": "object",
+				"properties": {
+					"row": {
+						"type": "integer",
+						"description": "从 1 开始；0 表示整个文件"
+					},
+					"field": {
+						"type": "string"
+					},
+					"code": {
+						"type": "string",
+						"enum": ["EVIDENCE_REQUIRED", "VALIDATION_ERROR"]
+					},
+					"message": {
+						"type": "string"
+					}
+				}
+			},
+			"GeoManualImportResult": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"type": "object",
+						"properties": {
+							"importBatchId": {
+								"type": "string",
+								"format": "uuid"
+							},
+							"created": {
+								"type": "integer"
+							},
+							"skipped": {
+								"type": "integer",
+								"description": "与已有证据完全相同而跳过的行数"
+							},
+							"observationIds": {
+								"type": "array",
+								"items": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"skippedRows": {
+								"type": "array",
+								"items": {
+									"type": "integer"
+								}
+							}
+						}
+					}
+				}
+			},
+			"GeoUploadedEvidence": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"type": "object",
+						"properties": {
+							"ref": {
+								"type": "string"
+							},
+							"sha256": {
+								"type": "string"
+							},
+							"size": {
+								"type": "integer"
+							},
+							"contentType": {
+								"type": "string"
+							}
+						}
+					}
+				}
+			},
+			"GeoObservationListItem": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "string",
+						"format": "uuid"
+					},
+					"promptId": {
+						"type": "string",
+						"format": "uuid"
+					},
+					"questionText": {
+						"type": "string"
+					},
+					"platform": {
+						"type": "string",
+						"enum": ["doubao", "deepseek", "yuanbao", "qwen"]
+					},
+					"surfaceMode": {
+						"type": "string",
+						"enum": ["LIVE_SURFACE", "MODEL_API", "MANUAL_EVIDENCE"]
+					},
+					"status": {
+						"type": "string",
+						"enum": [
+							"VALID",
+							"PARTIAL",
+							"UNAVAILABLE",
+							"NEEDS_MANUAL",
+							"FAILED",
+							"RATE_LIMITED",
+							"TIMEOUT",
+							"CAPTCHA",
+							"NETWORK_ERROR"
+						]
+					},
+					"sampledAt": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"errorCode": {
+						"type": ["string", "null"]
+					},
+					"citationCount": {
+						"type": "integer"
+					},
+					"countsInRates": {
+						"type": "boolean",
+						"description": "只有 VALID 计入比率分母"
+					},
+					"imported": {
+						"type": "boolean"
+					},
+					"retryOfObservationId": {
+						"type": ["string", "null"],
+						"format": "uuid"
+					},
+					"evaluation": {
+						"type": ["object", "null"],
+						"properties": {
+							"recommendation": {
+								"type": "string"
+							},
+							"brandMentioned": {
+								"type": "boolean"
+							},
+							"reviewStatus": {
+								"type": "string"
+							}
+						}
+					}
+				}
+			},
+			"GeoObservation": {
+				"type": "object",
+				"description": "不可变的证据记录，含引用、采样尝试与全部评估版本",
+				"properties": {
+					"id": {
+						"type": "string",
+						"format": "uuid"
+					},
+					"promptId": {
+						"type": "string",
+						"format": "uuid"
+					},
+					"promptSet": {
+						"type": ["object", "null"]
+					},
+					"promptRevision": {
+						"type": "integer"
+					},
+					"questionText": {
+						"type": "string"
+					},
+					"target": {
+						"type": "object",
+						"properties": {
+							"id": {
+								"type": "string",
+								"format": "uuid"
+							},
+							"platform": {
+								"type": "string",
+								"enum": ["doubao", "deepseek", "yuanbao", "qwen"]
+							},
+							"surfaceMode": {
+								"type": "string",
+								"enum": ["LIVE_SURFACE", "MODEL_API", "MANUAL_EVIDENCE"]
+							},
+							"provider": {
+								"type": "string"
+							},
+							"modelId": {
+								"type": ["string", "null"]
+							},
+							"region": {
+								"type": ["string", "null"]
+							},
+							"language": {
+								"type": "string"
+							},
+							"verificationStatus": {
+								"type": "string",
+								"enum": ["UNVERIFIED", "LIMITED", "PASSED", "FAILED"]
+							},
+							"verificationNote": {
+								"type": ["string", "null"]
+							}
+						}
+					},
+					"status": {
+						"type": "string",
+						"enum": [
+							"VALID",
+							"PARTIAL",
+							"UNAVAILABLE",
+							"NEEDS_MANUAL",
+							"FAILED",
+							"RATE_LIMITED",
+							"TIMEOUT",
+							"CAPTCHA",
+							"NETWORK_ERROR"
+						]
+					},
+					"countsInRates": {
+						"type": "boolean"
+					},
+					"responseText": {
+						"type": ["string", "null"]
+					},
+					"sampledAt": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"responseMetadata": {
+						"type": "object"
+					},
+					"providerVersion": {
+						"type": ["string", "null"]
+					},
+					"modelVersion": {
+						"type": ["string", "null"]
+					},
+					"sourceMethodVersion": {
+						"type": ["string", "null"]
+					},
+					"errorCode": {
+						"type": ["string", "null"]
+					},
+					"evidence": {
+						"type": "object",
+						"properties": {
+							"kind": {
+								"type": "string",
+								"enum": ["object", "url", "note", "none"]
+							},
+							"location": {
+								"type": ["string", "null"]
+							}
+						}
+					},
+					"citations": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"ordinal": {
+									"type": "integer"
+								},
+								"url": {
+									"type": "string"
+								},
+								"normalizedUrl": {
+									"type": ["string", "null"]
+								},
+								"host": {
+									"type": ["string", "null"]
+								},
+								"title": {
+									"type": ["string", "null"]
+								}
+							}
+						}
+					},
+					"run": {
+						"type": ["object", "null"]
+					},
+					"import": {
+						"type": ["object", "null"]
+					},
+					"retryOf": {
+						"type": ["object", "null"]
+					},
+					"resamples": {
+						"type": "array",
+						"items": {
+							"type": "object"
+						}
+					},
+					"evaluations": {
+						"type": "array",
+						"items": {
+							"type": "object"
+						}
+					},
+					"createdAt": {
+						"type": "string",
+						"format": "date-time"
+					}
+				}
+			},
+			"GeoTask": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "string",
+						"format": "uuid"
+					},
+					"organizationId": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"kind": {
+						"type": "string",
+						"enum": [
+							"SELECTION_GUIDE",
+							"CASE_ADDITION",
+							"FAQ",
+							"COMPANY_INTRO",
+							"SITE_REVISION",
+							"FACT_CORRECTION",
+							"OTHER"
+						]
+					},
+					"state": {
+						"type": "string",
+						"enum": [
+							"PENDING_ANALYSIS",
+							"PENDING_ASSIGNMENT",
+							"IN_PROGRESS",
+							"PENDING_TECH_REVIEW",
+							"PENDING_MARKETING_REVIEW",
+							"PENDING_PUBLISH",
+							"PUBLISHED",
+							"PENDING_RETEST",
+							"VERIFIED",
+							"REJECTED",
+							"PAUSED",
+							"CANCELLED"
+						]
+					},
+					"pausedFrom": {
+						"type": ["string", "null"],
+						"enum": [
+							"PENDING_ANALYSIS",
+							"PENDING_ASSIGNMENT",
+							"IN_PROGRESS",
+							"PENDING_TECH_REVIEW",
+							"PENDING_MARKETING_REVIEW",
+							"PENDING_PUBLISH",
+							"PUBLISHED",
+							"PENDING_RETEST",
+							"VERIFIED",
+							"REJECTED",
+							"PAUSED",
+							"CANCELLED",
+							null
+						]
+					},
+					"priority": {
+						"type": "string",
+						"enum": ["P0", "P1", "P2", "P3"]
+					},
+					"promptId": {
+						"type": ["string", "null"],
+						"format": "uuid"
+					},
+					"ownerId": {
+						"type": ["string", "null"]
+					},
+					"recommendedAction": {
+						"type": ["string", "null"]
+					},
+					"expectedMetric": {
+						"type": ["string", "null"]
+					},
+					"beforeBatchId": {
+						"type": ["string", "null"],
+						"format": "uuid"
+					},
+					"afterBatchId": {
+						"type": ["string", "null"],
+						"format": "uuid"
+					},
+					"publishedUrl": {
+						"type": ["string", "null"]
+					},
+					"publishedAt": {
+						"type": ["string", "null"],
+						"format": "date-time"
+					},
+					"proof": {
+						"type": ["object", "null"],
+						"properties": {
+							"note": {
+								"type": "string"
+							},
+							"url": {
+								"type": ["string", "null"]
+							},
+							"recordedBy": {
+								"type": "string"
+							},
+							"recordedAt": {
+								"type": "string",
+								"format": "date-time"
+							}
+						}
+					},
+					"launchApprovalRef": {
+						"type": ["string", "null"]
+					},
+					"backupPlan": {
+						"type": ["string", "null"]
+					},
+					"rollbackPlan": {
+						"type": ["string", "null"]
+					},
+					"riskLevel": {
+						"type": "string",
+						"enum": ["HIGH", "NORMAL"]
+					},
+					"sourceKind": {
+						"type": "string",
+						"enum": ["OBSERVATION", "FINDING", "ASSERTION", "MANUAL"]
+					},
+					"sourceRef": {
+						"type": ["string", "null"]
+					},
+					"createdBy": {
+						"type": "string"
+					},
+					"createdAt": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"updatedAt": {
+						"type": "string",
+						"format": "date-time"
+					}
+				}
+			},
+			"GeoTaskSummary": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "string",
+						"format": "uuid"
+					},
+					"title": {
+						"type": "string"
+					},
+					"kind": {
+						"type": "string",
+						"enum": [
+							"SELECTION_GUIDE",
+							"CASE_ADDITION",
+							"FAQ",
+							"COMPANY_INTRO",
+							"SITE_REVISION",
+							"FACT_CORRECTION",
+							"OTHER"
+						]
+					},
+					"state": {
+						"type": "string",
+						"enum": [
+							"PENDING_ANALYSIS",
+							"PENDING_ASSIGNMENT",
+							"IN_PROGRESS",
+							"PENDING_TECH_REVIEW",
+							"PENDING_MARKETING_REVIEW",
+							"PENDING_PUBLISH",
+							"PUBLISHED",
+							"PENDING_RETEST",
+							"VERIFIED",
+							"REJECTED",
+							"PAUSED",
+							"CANCELLED"
+						]
+					},
+					"priority": {
+						"type": "string",
+						"enum": ["P0", "P1", "P2", "P3"]
+					},
+					"riskLevel": {
+						"type": "string",
+						"enum": ["HIGH", "NORMAL"]
+					},
+					"ownerId": {
+						"type": ["string", "null"]
+					},
+					"ownerName": {
+						"type": ["string", "null"]
+					},
+					"promptQuestion": {
+						"type": ["string", "null"]
+					},
+					"sourceKind": {
+						"type": "string",
+						"enum": ["OBSERVATION", "FINDING", "ASSERTION", "MANUAL"]
+					},
+					"publishedAt": {
+						"type": ["string", "null"],
+						"format": "date-time"
+					},
+					"createdAt": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"updatedAt": {
+						"type": "string",
+						"format": "date-time"
+					}
+				}
+			},
+			"GeoTaskCreate": {
+				"type": "object",
+				"required": ["title", "kind", "sourceKind"],
+				"properties": {
+					"title": {
+						"type": "string",
+						"maxLength": 200
+					},
+					"kind": {
+						"type": "string",
+						"enum": [
+							"SELECTION_GUIDE",
+							"CASE_ADDITION",
+							"FAQ",
+							"COMPANY_INTRO",
+							"SITE_REVISION",
+							"FACT_CORRECTION",
+							"OTHER"
+						]
+					},
+					"sourceKind": {
+						"type": "string",
+						"enum": ["OBSERVATION", "FINDING", "ASSERTION", "MANUAL"]
+					},
+					"sourceRef": {
+						"type": ["string", "null"],
+						"maxLength": 500,
+						"description": "非 MANUAL 时必填；同一来源已有未结束工单时返回该工单"
+					},
+					"priority": {
+						"type": "string",
+						"enum": ["P0", "P1", "P2", "P3"]
+					},
+					"riskLevel": {
+						"type": "string",
+						"enum": ["HIGH", "NORMAL"]
+					},
+					"promptId": {
+						"type": ["string", "null"],
+						"format": "uuid"
+					},
+					"ownerId": {
+						"type": ["string", "null"]
+					},
+					"recommendedAction": {
+						"type": ["string", "null"]
+					},
+					"expectedMetric": {
+						"type": ["string", "null"]
+					},
+					"beforeBatchId": {
+						"type": ["string", "null"],
+						"format": "uuid"
+					},
+					"evidence": {
+						"type": "object",
+						"description": "非 MANUAL 时至少一条，否则 EVIDENCE_REQUIRED",
+						"properties": {
+							"observationIds": {
+								"type": "array",
+								"items": {
+									"type": "string",
+									"format": "uuid"
+								},
+								"maxItems": 100
+							},
+							"findingIds": {
+								"type": "array",
+								"items": {
+									"type": "string",
+									"format": "uuid"
+								},
+								"maxItems": 100
+							},
+							"assertionIds": {
+								"type": "array",
+								"items": {
+									"type": "string",
+									"format": "uuid"
+								},
+								"maxItems": 100
+							}
+						}
+					},
+					"comment": {
+						"type": ["string", "null"]
+					}
+				}
+			},
+			"GeoTaskTransition": {
+				"type": "object",
+				"required": ["action"],
+				"properties": {
+					"action": {
+						"type": "string",
+						"enum": [
+							"TRIAGE",
+							"ASSIGN",
+							"SUBMIT_FOR_REVIEW",
+							"APPROVE_TECH",
+							"APPROVE_MARKETING",
+							"REJECT",
+							"REWORK",
+							"PUBLISH",
+							"REQUEST_RETEST",
+							"VERIFY",
+							"REOPEN",
+							"PAUSE",
+							"RESUME",
+							"CANCEL"
+						]
+					},
+					"comment": {
+						"type": ["string", "null"],
+						"description": "REJECT、PAUSE、CANCEL、REOPEN 必填"
+					},
+					"ownerId": {
+						"type": ["string", "null"],
+						"description": "ASSIGN 必填（或工单已有责任人）"
+					},
+					"publishedUrl": {
+						"type": ["string", "null"],
+						"description": "PUBLISH 必填，http(s)"
+					},
+					"publishedAt": {
+						"type": ["string", "null"],
+						"format": "date-time",
+						"description": "PUBLISH 必填，不晚于当前时间、不早于工单创建时间"
+					},
+					"proofNote": {
+						"type": ["string", "null"],
+						"description": "PUBLISH 必填：可验证凭证"
+					},
+					"proofUrl": {
+						"type": ["string", "null"]
+					},
+					"beforeBatchId": {
+						"type": ["string", "null"],
+						"format": "uuid"
+					},
+					"afterBatchId": {
+						"type": ["string", "null"],
+						"format": "uuid",
+						"description": "VERIFY 需要前后批次：同一问法集、均已完成、复测批次在发布后创建"
+					}
+				}
+			},
+			"GeoTaskDetail": {
+				"type": "object",
+				"properties": {
+					"task": {
+						"$ref": "#/components/schemas/GeoTask"
+					},
+					"prompt": {
+						"type": ["object", "null"],
+						"properties": {
+							"id": {
+								"type": "string",
+								"format": "uuid"
+							},
+							"question": {
+								"type": "string"
+							}
+						}
+					},
+					"names": {
+						"type": "object",
+						"additionalProperties": {
+							"type": "string"
+						}
+					},
+					"events": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"id": {
+									"type": "string",
+									"format": "uuid"
+								},
+								"fromState": {
+									"type": ["string", "null"]
+								},
+								"toState": {
+									"type": "string"
+								},
+								"action": {
+									"type": "string"
+								},
+								"actorId": {
+									"type": "string"
+								},
+								"comment": {
+									"type": ["string", "null"]
+								},
+								"createdAt": {
+									"type": "string",
+									"format": "date-time"
+								}
+							}
+						}
+					},
+					"evidence": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"additionalProperties": true
+						}
+					},
+					"content": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"id": {
+									"type": "string",
+									"format": "uuid"
+								},
+								"title": {
+									"type": "string"
+								},
+								"kind": {
+									"type": "string"
+								},
+								"approvalState": {
+									"type": "string"
+								},
+								"currentVersion": {
+									"type": "integer"
+								},
+								"updatedAt": {
+									"type": "string",
+									"format": "date-time"
+								}
+							}
+						}
+					},
+					"beforeBatch": {
+						"type": ["object", "null"],
+						"additionalProperties": true
+					},
+					"afterBatch": {
+						"type": ["object", "null"],
+						"additionalProperties": true
+					},
+					"comparison": {
+						"type": ["array", "null"],
+						"items": {
+							"type": "object",
+							"properties": {
+								"platform": {
+									"type": "string"
+								},
+								"surfaceMode": {
+									"type": "string"
+								},
+								"before": {
+									"$ref": "#/components/schemas/GeoRetestCounts"
+								},
+								"after": {
+									"$ref": "#/components/schemas/GeoRetestCounts"
+								}
+							}
+						}
+					},
+					"retestRounds": {
+						"type": "integer"
+					}
+				}
+			},
+			"GeoRetestCounts": {
+				"type": "object",
+				"properties": {
+					"valid": {
+						"type": "integer"
+					},
+					"evaluated": {
+						"type": "integer"
+					},
+					"mentioned": {
+						"type": "integer"
+					},
+					"recommended": {
+						"type": "integer"
+					}
+				}
+			},
+			"GeoAuditLog": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "string",
+						"format": "uuid"
+					},
+					"actorId": {
+						"type": "string"
+					},
+					"actorName": {
+						"type": ["string", "null"]
+					},
+					"actorKind": {
+						"type": "string",
+						"enum": ["user", "api_key", "instance_admin_key", "system"]
+					},
+					"action": {
+						"type": "string"
+					},
+					"entityType": {
+						"type": "string"
+					},
+					"entityId": {
+						"type": "string"
+					},
+					"beforeHash": {
+						"type": ["string", "null"]
+					},
+					"afterHash": {
+						"type": ["string", "null"]
+					},
+					"metadata": {
+						"type": ["object", "null"],
+						"additionalProperties": true,
+						"description": "密钥类字段为 [REDACTED]"
+					},
+					"requestId": {
+						"type": ["string", "null"]
+					},
+					"createdAt": {
+						"type": "string",
+						"format": "date-time"
+					}
+				}
 			}
 		},
 		"responses": {
@@ -4514,6 +6830,3096 @@
 				"x-elmo-scopes": [],
 				"x-elmo-admin-only": true
 			}
+		},
+		"/geo/brands": {
+			"get": {
+				"operationId": "listGeoBrands",
+				"summary": "列出品牌与竞品（含产品）",
+				"tags": ["GEO"],
+				"x-elmo-scopes": ["read"],
+				"description": "需要 GEO 权限 `brand.read`。",
+				"responses": {
+					"200": {
+						"description": "成功",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"data": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/GeoBrandWithProducts"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "kind",
+						"in": "query",
+						"schema": {
+							"type": "string",
+							"enum": ["OWN", "COMPETITOR"]
+						}
+					},
+					{
+						"name": "status",
+						"in": "query",
+						"schema": {
+							"type": "string",
+							"enum": ["ACTIVE", "DISABLED"]
+						}
+					}
+				]
+			},
+			"post": {
+				"operationId": "createGeoBrand",
+				"summary": "新增品牌或竞品",
+				"tags": ["GEO"],
+				"x-elmo-scopes": ["write"],
+				"description": "别名按大小写、全半角与空格归一后去重；与其他启用实体的名称、别名或域名冲突时返回 CONFLICT。\n\n需要 GEO 权限 `brand.manage`。",
+				"responses": {
+					"201": {
+						"description": "已创建，并生成新的词典版本",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoBrand"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"409": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "Idempotency-Key",
+						"in": "header",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "同 key 同请求体回放已存的 2xx 响应（带 Idempotency-Replayed: true）；同 key 不同请求体返回 CONFLICT。"
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/GeoBrandInput"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/geo/brands/{id}": {
+			"get": {
+				"operationId": "getGeoBrand",
+				"summary": "获取品牌或竞品详情与别名历史",
+				"tags": ["GEO"],
+				"x-elmo-scopes": ["read"],
+				"description": "需要 GEO 权限 `brand.read`。",
+				"responses": {
+					"200": {
+						"description": "成功",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoBrandDetail"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					}
+				]
+			},
+			"patch": {
+				"operationId": "updateGeoBrand",
+				"summary": "修改、停用或启用品牌或竞品",
+				"tags": ["GEO"],
+				"x-elmo-scopes": ["write"],
+				"description": "任何实际变化都会生成不可变的新词典版本；历史评估继续引用它们使用的版本。\n\n需要 GEO 权限 `brand.manage`。",
+				"responses": {
+					"200": {
+						"description": "成功",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoBrand"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"409": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					},
+					{
+						"name": "Idempotency-Key",
+						"in": "header",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "同 key 同请求体回放已存的 2xx 响应（带 Idempotency-Replayed: true）；同 key 不同请求体返回 CONFLICT。"
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/GeoBrandPatch"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/geo/brands/{id}/products": {
+			"post": {
+				"operationId": "createGeoProduct",
+				"summary": "为品牌新增产品",
+				"tags": ["GEO"],
+				"x-elmo-scopes": ["write"],
+				"description": "需要 GEO 权限 `brand.manage`。",
+				"responses": {
+					"201": {
+						"description": "已创建",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoProduct"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"409": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					},
+					{
+						"name": "Idempotency-Key",
+						"in": "header",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "同 key 同请求体回放已存的 2xx 响应（带 Idempotency-Replayed: true）；同 key 不同请求体返回 CONFLICT。"
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/GeoProductInput"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/geo/brands/{id}/products/{productId}": {
+			"patch": {
+				"operationId": "updateGeoProduct",
+				"summary": "修改或停用产品",
+				"tags": ["GEO"],
+				"x-elmo-scopes": ["write"],
+				"description": "需要 GEO 权限 `brand.manage`。",
+				"responses": {
+					"200": {
+						"description": "成功",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoProduct"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"409": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					},
+					{
+						"name": "productId",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					},
+					{
+						"name": "Idempotency-Key",
+						"in": "header",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "同 key 同请求体回放已存的 2xx 响应（带 Idempotency-Replayed: true）；同 key 不同请求体返回 CONFLICT。"
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/GeoProductPatch"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/geo/brands/dictionary-versions": {
+			"get": {
+				"operationId": "listGeoDictionaryVersions",
+				"summary": "列出词典版本",
+				"tags": ["GEO"],
+				"x-elmo-scopes": ["read"],
+				"description": "需要 GEO 权限 `brand.read`。",
+				"responses": {
+					"200": {
+						"description": "成功",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"data": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/GeoDictionaryVersionSummary"
+											}
+										},
+										"pagination": {
+											"$ref": "#/components/schemas/GeoPagination"
+										}
+									}
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "page",
+						"in": "query",
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"default": 1
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 100,
+							"default": 20
+						}
+					}
+				]
+			}
+		},
+		"/geo/brands/dictionary-versions/{version}": {
+			"get": {
+				"operationId": "getGeoDictionaryVersion",
+				"summary": "获取某个词典版本的完整快照",
+				"tags": ["GEO"],
+				"x-elmo-scopes": ["read"],
+				"description": "需要 GEO 权限 `brand.read`。",
+				"responses": {
+					"200": {
+						"description": "成功",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoDictionaryVersion"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "version",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"minimum": 1
+						}
+					}
+				]
+			}
+		},
+		"/geo/prompts": {
+			"get": {
+				"operationId": "listGeoPrompts",
+				"summary": "列出问法",
+				"tags": ["GEO"],
+				"x-elmo-scopes": ["read"],
+				"description": "需要 GEO 权限 `prompt.read`。",
+				"responses": {
+					"200": {
+						"description": "成功",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"data": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/GeoPromptRow"
+											}
+										},
+										"pagination": {
+											"$ref": "#/components/schemas/GeoPagination"
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "status",
+						"in": "query",
+						"schema": {
+							"type": "string",
+							"enum": ["DRAFT", "IN_REVIEW", "BASELINE", "FROZEN", "REJECTED"]
+						}
+					},
+					{
+						"name": "tier",
+						"in": "query",
+						"schema": {
+							"type": "string",
+							"enum": ["CORE", "EXTENDED"]
+						}
+					},
+					{
+						"name": "buyerRoleId",
+						"in": "query",
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					},
+					{
+						"name": "q",
+						"in": "query",
+						"schema": {
+							"type": "string",
+							"maxLength": 200
+						}
+					},
+					{
+						"name": "page",
+						"in": "query",
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"default": 1
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 100,
+							"default": 20
+						}
+					}
+				]
+			},
+			"post": {
+				"operationId": "createGeoPrompt",
+				"summary": "新建问法（草稿）",
+				"tags": ["GEO"],
+				"x-elmo-scopes": ["write"],
+				"description": "需要 GEO 权限 `prompt.write`。",
+				"responses": {
+					"201": {
+						"description": "已创建，修订号 1",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoPrompt"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"409": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "Idempotency-Key",
+						"in": "header",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "同 key 同请求体回放已存的 2xx 响应（带 Idempotency-Replayed: true）；同 key 不同请求体返回 CONFLICT。"
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/GeoPromptInput"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/geo/prompts/{id}": {
+			"get": {
+				"operationId": "getGeoPrompt",
+				"summary": "获取问法与修订历史",
+				"tags": ["GEO"],
+				"x-elmo-scopes": ["read"],
+				"description": "需要 GEO 权限 `prompt.read`。",
+				"responses": {
+					"200": {
+						"description": "成功",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoPromptDetail"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					}
+				]
+			},
+			"patch": {
+				"operationId": "updateGeoPrompt",
+				"summary": "编辑草稿问法",
+				"tags": ["GEO"],
+				"x-elmo-scopes": ["write"],
+				"description": "非草稿返回 CONFLICT，需先 REVISE。\n\n需要 GEO 权限 `prompt.write`。",
+				"responses": {
+					"200": {
+						"description": "成功",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoPrompt"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"409": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					},
+					{
+						"name": "Idempotency-Key",
+						"in": "header",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "同 key 同请求体回放已存的 2xx 响应（带 Idempotency-Replayed: true）；同 key 不同请求体返回 CONFLICT。"
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/GeoPromptPatch"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/geo/prompts/{id}/transitions": {
+			"post": {
+				"operationId": "transitionGeoPrompt",
+				"summary": "推进问法审核状态",
+				"tags": ["GEO"],
+				"x-elmo-scopes": ["write"],
+				"description": "需要 GEO 权限 `prompt.write`。",
+				"responses": {
+					"200": {
+						"description": "成功",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoPrompt"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"409": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					},
+					{
+						"name": "Idempotency-Key",
+						"in": "header",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "同 key 同请求体回放已存的 2xx 响应（带 Idempotency-Replayed: true）；同 key 不同请求体返回 CONFLICT。"
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/GeoPromptTransition"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/geo/prompts/buyer-roles": {
+			"get": {
+				"operationId": "listGeoBuyerRoles",
+				"summary": "列出买方角色（首次访问时写入六类默认角色）",
+				"tags": ["GEO"],
+				"x-elmo-scopes": ["read"],
+				"description": "需要 GEO 权限 `prompt.read`。",
+				"responses": {
+					"200": {
+						"description": "成功",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"data": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/GeoBuyerRole"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/geo/prompts/import": {
+			"post": {
+				"operationId": "importGeoPromptsCsv",
+				"summary": "导入问法 CSV",
+				"tags": ["GEO"],
+				"x-elmo-scopes": ["write"],
+				"description": "全有或全无：任一行出错则不写入并返回所有错误。以公式字符（= + - @ 及其全角形式）开头的单元格被拒绝。填 prompt_id 只能修改草稿；status 与 test_set_version 列被忽略。新问法均为草稿。\n\n需要 GEO 权限 `prompt.write`。",
+				"responses": {
+					"200": {
+						"description": "成功",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoPromptImportResult"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "存在逐行错误，整份文件未写入",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoPromptImportResult"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "Idempotency-Key",
+						"in": "header",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "同 key 同请求体回放已存的 2xx 响应（带 Idempotency-Replayed: true）；同 key 不同请求体返回 CONFLICT。"
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"required": ["csv"],
+								"properties": {
+									"csv": {
+										"type": "string",
+										"description": "UTF-8 CSV 文本，首行为列名，必须含 question。上限 1 MB、2000 行。"
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/geo/prompts/export": {
+			"get": {
+				"operationId": "exportGeoPromptsCsv",
+				"summary": "导出问法 CSV",
+				"tags": ["GEO"],
+				"x-elmo-scopes": ["read"],
+				"description": "需要 GEO 权限 `prompt.read`。",
+				"responses": {
+					"200": {
+						"description": "UTF-8（带 BOM）CSV，列：prompt_id, question, buyer_role, intent, product_line, geo_region, priority, language, tier, status, test_set_version, owner。以公式字符开头的单元格前加单引号。",
+						"content": {
+							"text/csv": {
+								"schema": {
+									"type": "string"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "status",
+						"in": "query",
+						"schema": {
+							"type": "string",
+							"enum": ["DRAFT", "IN_REVIEW", "BASELINE", "FROZEN", "REJECTED"]
+						}
+					},
+					{
+						"name": "tier",
+						"in": "query",
+						"schema": {
+							"type": "string",
+							"enum": ["CORE", "EXTENDED"]
+						}
+					},
+					{
+						"name": "buyerRoleId",
+						"in": "query",
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					},
+					{
+						"name": "q",
+						"in": "query",
+						"schema": {
+							"type": "string",
+							"maxLength": 200
+						}
+					}
+				]
+			}
+		},
+		"/geo/prompt-sets": {
+			"get": {
+				"operationId": "listGeoPromptSets",
+				"summary": "列出测试集版本",
+				"tags": ["GEO"],
+				"x-elmo-scopes": ["read"],
+				"description": "需要 GEO 权限 `prompt.read`。",
+				"responses": {
+					"200": {
+						"description": "成功",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"data": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/GeoPromptSetSummary"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"post": {
+				"operationId": "createGeoPromptSet",
+				"summary": "新建测试集草稿",
+				"tags": ["GEO"],
+				"x-elmo-scopes": ["write"],
+				"description": "同名测试集自动递增版本号；同名已有未冻结草稿时返回 CONFLICT。\n\n需要 GEO 权限 `prompt.write`。",
+				"responses": {
+					"201": {
+						"description": "已创建",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoPromptSet"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"409": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "Idempotency-Key",
+						"in": "header",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "同 key 同请求体回放已存的 2xx 响应（带 Idempotency-Replayed: true）；同 key 不同请求体返回 CONFLICT。"
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/GeoPromptSetInput"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/geo/prompt-sets/{id}": {
+			"get": {
+				"operationId": "getGeoPromptSet",
+				"summary": "获取测试集条目",
+				"tags": ["GEO"],
+				"x-elmo-scopes": ["read"],
+				"description": "需要 GEO 权限 `prompt.read`。",
+				"responses": {
+					"200": {
+						"description": "成功",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoPromptSetDetail"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					}
+				]
+			},
+			"patch": {
+				"operationId": "updateGeoPromptSetItems",
+				"summary": "替换草稿测试集的问法",
+				"tags": ["GEO"],
+				"x-elmo-scopes": ["write"],
+				"description": "已冻结的测试集返回 CONFLICT，修改须通过 versions 生成新版本。\n\n需要 GEO 权限 `prompt.write`。",
+				"responses": {
+					"200": {
+						"description": "成功",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoPromptSet"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"409": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					},
+					{
+						"name": "Idempotency-Key",
+						"in": "header",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "同 key 同请求体回放已存的 2xx 响应（带 Idempotency-Replayed: true）；同 key 不同请求体返回 CONFLICT。"
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/GeoPromptSetItems"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/geo/prompt-sets/{id}/freeze": {
+			"post": {
+				"operationId": "freezeGeoPromptSet",
+				"summary": "冻结测试集",
+				"tags": ["GEO"],
+				"x-elmo-scopes": ["write"],
+				"description": "把每个条目固定在当前修订号与问法文本；所有问法必须已入选基线或已冻结，基线问法随之变为已冻结。冻结后的测试集不可再修改。\n\n需要 GEO 权限 `prompt.freeze`。",
+				"responses": {
+					"200": {
+						"description": "成功",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoFrozenPromptSet"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"409": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					},
+					{
+						"name": "Idempotency-Key",
+						"in": "header",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "同 key 同请求体回放已存的 2xx 响应（带 Idempotency-Replayed: true）；同 key 不同请求体返回 CONFLICT。"
+					}
+				]
+			}
+		},
+		"/geo/prompt-sets/{id}/versions": {
+			"post": {
+				"operationId": "createGeoPromptSetVersion",
+				"summary": "从冻结测试集生成新版本草稿",
+				"tags": ["GEO"],
+				"x-elmo-scopes": ["write"],
+				"description": "复制条目到版本号 +1 的草稿，parentSetId 指向源测试集；源版本保持不变。\n\n需要 GEO 权限 `prompt.write`。",
+				"responses": {
+					"201": {
+						"description": "已创建",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoPromptSet"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"409": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					},
+					{
+						"name": "Idempotency-Key",
+						"in": "header",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "同 key 同请求体回放已存的 2xx 响应（带 Idempotency-Replayed: true）；同 key 不同请求体返回 CONFLICT。"
+					}
+				]
+			}
+		},
+		"/geo/targets": {
+			"get": {
+				"summary": "List sampling targets",
+				"operationId": "listGeoTargets",
+				"tags": ["GEO Sampling"],
+				"description": "能力矩阵：每个目标的源模式、验证状态、可用性与近期耗时。未 PASSED 的目标不代表已全面支持该平台。",
+				"responses": {
+					"200": {
+						"description": "采样目标列表",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"data": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/GeoSamplingTarget"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"429": {
+						"$ref": "#/components/responses/RateLimitError"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalServerError"
+					}
+				},
+				"x-elmo-scopes": ["read"]
+			}
+		},
+		"/geo/sampling-runs": {
+			"get": {
+				"summary": "List sampling batches",
+				"operationId": "listGeoSamplingRuns",
+				"tags": ["GEO Sampling"],
+				"parameters": [
+					{
+						"$ref": "#/components/parameters/Page"
+					},
+					{
+						"$ref": "#/components/parameters/Limit"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "采样批次分页列表",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"data": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/GeoSamplingBatch"
+											}
+										},
+										"pagination": {
+											"type": "object",
+											"properties": {
+												"page": {
+													"type": "integer"
+												},
+												"limit": {
+													"type": "integer"
+												},
+												"total": {
+													"type": "integer"
+												},
+												"totalPages": {
+													"type": "integer"
+												}
+											},
+											"required": ["page", "limit", "total", "totalPages"]
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"429": {
+						"$ref": "#/components/responses/RateLimitError"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalServerError"
+					}
+				},
+				"x-elmo-scopes": ["read"],
+				"description": ""
+			},
+			"post": {
+				"summary": "Create a sampling batch",
+				"operationId": "createGeoSamplingRun",
+				"tags": ["GEO Sampling"],
+				"parameters": [
+					{
+						"name": "Idempotency-Key",
+						"in": "header",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"maxLength": 255
+						},
+						"description": "同 key 同请求体回放已存的 2xx 响应"
+					}
+				],
+				"description": "冻结问法集 × 目标 × 重复次数生成计划并异步执行；校验目标验证状态、部署开关与组织限额。只创建任务，返回 job_id。",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/GeoSamplingBatchCreate"
+							}
+						}
+					}
+				},
+				"responses": {
+					"202": {
+						"description": "已计划",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"data": {
+											"allOf": [
+												{
+													"$ref": "#/components/schemas/GeoSamplingBatch"
+												},
+												{
+													"type": "object",
+													"properties": {
+														"estimatedCost": {
+															"type": "number"
+														}
+													}
+												}
+											]
+										},
+										"created": {
+											"type": "boolean"
+										},
+										"job_id": {
+											"type": ["string", "null"]
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"409": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"503": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"429": {
+						"$ref": "#/components/responses/RateLimitError"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalServerError"
+					}
+				},
+				"x-elmo-scopes": ["write"]
+			}
+		},
+		"/geo/sampling-runs/{id}": {
+			"get": {
+				"summary": "Get a sampling batch",
+				"operationId": "getGeoSamplingRun",
+				"tags": ["GEO Sampling"],
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					},
+					{
+						"$ref": "#/components/parameters/Page"
+					},
+					{
+						"$ref": "#/components/parameters/Limit"
+					},
+					{
+						"name": "status",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"PLANNED",
+								"RUNNING",
+								"VALID",
+								"PARTIAL",
+								"UNAVAILABLE",
+								"NEEDS_MANUAL",
+								"FAILED",
+								"RATE_LIMITED",
+								"TIMEOUT",
+								"CAPTCHA",
+								"NETWORK_ERROR"
+							]
+						},
+						"description": "按运行状态筛选"
+					},
+					{
+						"name": "targetId",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						},
+						"description": "按目标筛选"
+					}
+				],
+				"description": "执行状态、按目标分组的状态计数、有效数、费用估算与运行列表（分页）。",
+				"responses": {
+					"200": {
+						"description": "批次详情",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"data": {
+											"$ref": "#/components/schemas/GeoSamplingBatchDetail"
+										},
+										"pagination": {
+											"type": "object",
+											"properties": {
+												"page": {
+													"type": "integer"
+												},
+												"limit": {
+													"type": "integer"
+												},
+												"total": {
+													"type": "integer"
+												},
+												"totalPages": {
+													"type": "integer"
+												}
+											},
+											"required": ["page", "limit", "total", "totalPages"]
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"429": {
+						"$ref": "#/components/responses/RateLimitError"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalServerError"
+					}
+				},
+				"x-elmo-scopes": ["read"]
+			}
+		},
+		"/geo/manual-observations/import": {
+			"post": {
+				"summary": "Import manual evidence",
+				"operationId": "importGeoManualObservations",
+				"tags": ["GEO Evidence"],
+				"parameters": [
+					{
+						"name": "Idempotency-Key",
+						"in": "header",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"maxLength": 255
+						},
+						"description": "同 key 同请求体回放已存的 2xx 响应"
+					}
+				],
+				"description": "人工证据导入（单条或 CSV/JSON 批量）。任一行缺少采样时间、平台、问题、回答原文或证据位置时返回 422 EVIDENCE_REQUIRED 并逐行列出错误，整批不导入。",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/GeoManualImportRequest"
+							}
+						}
+					}
+				},
+				"responses": {
+					"201": {
+						"description": "已导入",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoManualImportResult"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"429": {
+						"$ref": "#/components/responses/RateLimitError"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalServerError"
+					},
+					"422": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"x-elmo-scopes": ["write"]
+			}
+		},
+		"/geo/manual-observations/evidence": {
+			"post": {
+				"summary": "Upload an evidence file",
+				"operationId": "uploadGeoEvidenceFile",
+				"tags": ["GEO Evidence"],
+				"description": "上传一张截图或一个 PDF（PNG/JPEG/WebP/PDF，按文件内容识别，不超过 10 MB），返回可写入导入行 evidenceLocation 的 ref。",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"multipart/form-data": {
+							"schema": {
+								"type": "object",
+								"required": ["file"],
+								"properties": {
+									"file": {
+										"type": "string",
+										"format": "binary"
+									}
+								}
+							}
+						}
+					}
+				},
+				"responses": {
+					"201": {
+						"description": "已上传",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoUploadedEvidence"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"429": {
+						"$ref": "#/components/responses/RateLimitError"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalServerError"
+					}
+				},
+				"x-elmo-scopes": ["write"]
+			}
+		},
+		"/geo/observations": {
+			"get": {
+				"summary": "List observations",
+				"operationId": "listGeoObservations",
+				"tags": ["GEO Evidence"],
+				"parameters": [
+					{
+						"$ref": "#/components/parameters/Page"
+					},
+					{
+						"$ref": "#/components/parameters/Limit"
+					},
+					{
+						"name": "q",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "按问题文本检索"
+					},
+					{
+						"name": "promptId",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						},
+						"description": "问法"
+					},
+					{
+						"name": "promptSetId",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						},
+						"description": "问法集"
+					},
+					{
+						"name": "targetId",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						},
+						"description": "采样目标"
+					},
+					{
+						"name": "batchId",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						},
+						"description": "采样批次"
+					},
+					{
+						"name": "platform",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": ["doubao", "deepseek", "yuanbao", "qwen"]
+						},
+						"description": "平台"
+					},
+					{
+						"name": "surfaceMode",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": ["LIVE_SURFACE", "MODEL_API", "MANUAL_EVIDENCE"]
+						},
+						"description": "源模式"
+					},
+					{
+						"name": "status",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"VALID",
+								"PARTIAL",
+								"UNAVAILABLE",
+								"NEEDS_MANUAL",
+								"FAILED",
+								"RATE_LIMITED",
+								"TIMEOUT",
+								"CAPTCHA",
+								"NETWORK_ERROR"
+							]
+						},
+						"description": "状态"
+					},
+					{
+						"name": "from",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"format": "date"
+						},
+						"description": "开始日期（北京时间，含）"
+					},
+					{
+						"name": "to",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"format": "date"
+						},
+						"description": "结束日期（北京时间，含）"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "证据分页列表",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"data": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/GeoObservationListItem"
+											}
+										},
+										"pagination": {
+											"type": "object",
+											"properties": {
+												"page": {
+													"type": "integer"
+												},
+												"limit": {
+													"type": "integer"
+												},
+												"total": {
+													"type": "integer"
+												},
+												"totalPages": {
+													"type": "integer"
+												}
+											},
+											"required": ["page", "limit", "total", "totalPages"]
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"429": {
+						"$ref": "#/components/responses/RateLimitError"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalServerError"
+					}
+				},
+				"x-elmo-scopes": ["read"],
+				"description": "按问题、平台、源模式、状态与日期检索证据。"
+			}
+		},
+		"/geo/observations/{id}": {
+			"get": {
+				"summary": "Get an observation",
+				"operationId": "getGeoObservation",
+				"tags": ["GEO Evidence"],
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					}
+				],
+				"description": "原始问题与回答、引用、采样尝试、证据位置、重采关系与全部评估版本。记录不可修改。",
+				"responses": {
+					"200": {
+						"description": "证据详情",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"data": {
+											"$ref": "#/components/schemas/GeoObservation"
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"429": {
+						"$ref": "#/components/responses/RateLimitError"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalServerError"
+					}
+				},
+				"x-elmo-scopes": ["read"]
+			}
+		},
+		"/geo/tasks": {
+			"get": {
+				"operationId": "listGeoTasks",
+				"summary": "查询优化工单",
+				"tags": ["GEO"],
+				"x-elmo-scopes": ["read"],
+				"description": "需要 GEO 权限 `task.read`。",
+				"parameters": [
+					{
+						"name": "state",
+						"in": "query",
+						"schema": {
+							"type": "string"
+						},
+						"description": "逗号分隔的状态列表"
+					},
+					{
+						"name": "ownerId",
+						"in": "query",
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"name": "priority",
+						"in": "query",
+						"schema": {
+							"type": "string",
+							"enum": ["P0", "P1", "P2", "P3"]
+						}
+					},
+					{
+						"name": "kind",
+						"in": "query",
+						"schema": {
+							"type": "string",
+							"enum": [
+								"SELECTION_GUIDE",
+								"CASE_ADDITION",
+								"FAQ",
+								"COMPANY_INTRO",
+								"SITE_REVISION",
+								"FACT_CORRECTION",
+								"OTHER"
+							]
+						}
+					},
+					{
+						"name": "promptId",
+						"in": "query",
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					},
+					{
+						"name": "q",
+						"in": "query",
+						"schema": {
+							"type": "string",
+							"maxLength": 200
+						}
+					},
+					{
+						"name": "page",
+						"in": "query",
+						"schema": {
+							"type": "integer",
+							"minimum": 1
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 100
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "成功",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"data": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/GeoTaskSummary"
+											}
+										},
+										"pagination": {
+											"$ref": "#/components/schemas/GeoPagination"
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"post": {
+				"operationId": "createGeoTask",
+				"summary": "创建优化工单",
+				"tags": ["GEO"],
+				"x-elmo-scopes": ["write"],
+				"description": "从证据创建时必须带来源与至少一条证据；同一来源已有未结束工单时返回 200 和该工单（created=false）。需要 GEO 权限 `task.create`。",
+				"parameters": [
+					{
+						"name": "Idempotency-Key",
+						"in": "header",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"maxLength": 255
+						},
+						"description": "同 key 同内容回放已存的 2xx 响应，24 小时有效"
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/GeoTaskCreate"
+							}
+						}
+					}
+				},
+				"responses": {
+					"201": {
+						"description": "已创建",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"data": {
+											"$ref": "#/components/schemas/GeoTask"
+										},
+										"created": {
+											"type": "boolean"
+										}
+									}
+								}
+							}
+						}
+					},
+					"200": {
+						"description": "同一来源已有未结束工单",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"data": {
+											"$ref": "#/components/schemas/GeoTask"
+										},
+										"created": {
+											"type": "boolean"
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"409": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/geo/tasks/{id}": {
+			"get": {
+				"operationId": "getGeoTask",
+				"summary": "工单详情：事件、证据、关联内容与复测对比",
+				"tags": ["GEO"],
+				"x-elmo-scopes": ["read"],
+				"description": "需要 GEO 权限 `task.read`。",
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "成功",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"data": {
+											"$ref": "#/components/schemas/GeoTaskDetail"
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/geo/tasks/{id}/transitions": {
+			"post": {
+				"operationId": "transitionGeoTask",
+				"summary": "执行工单状态流转",
+				"tags": ["GEO"],
+				"x-elmo-scopes": ["write"],
+				"description": "按状态机与角色校验。API Key 只有运营权限，审核类动作（APPROVE_TECH、APPROVE_MARKETING、审核阶段的 REJECT）会返回 FORBIDDEN，需由具名审核人在工作台完成。高风险 SITE_REVISION 进入待发布前须已填上线审批编号、备份方案与回滚计划；已发布不会自动视为有效。需要 GEO 权限 `task.transition`。",
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					},
+					{
+						"name": "Idempotency-Key",
+						"in": "header",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"maxLength": 255
+						},
+						"description": "同 key 同内容回放已存的 2xx 响应，24 小时有效"
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/GeoTaskTransition"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "已流转",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"data": {
+											"$ref": "#/components/schemas/GeoTask"
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"409": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/geo/audit-logs": {
+			"get": {
+				"operationId": "listGeoAuditLogs",
+				"summary": "查询审计日志",
+				"tags": ["GEO"],
+				"x-elmo-scopes": ["read"],
+				"description": "需要 GEO 权限 `audit.read`，只有平台管理员持有；API Key 永远不具备，因此通过 API Key 调用返回 FORBIDDEN。审计只存哈希，不存内容。",
+				"parameters": [
+					{
+						"name": "actorId",
+						"in": "query",
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"name": "action",
+						"in": "query",
+						"schema": {
+							"type": "string"
+						},
+						"description": "以 . 结尾时按前缀匹配，如 task."
+					},
+					{
+						"name": "entityType",
+						"in": "query",
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"name": "entityId",
+						"in": "query",
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"name": "from",
+						"in": "query",
+						"schema": {
+							"type": "string",
+							"format": "date-time"
+						}
+					},
+					{
+						"name": "to",
+						"in": "query",
+						"schema": {
+							"type": "string",
+							"format": "date-time"
+						}
+					},
+					{
+						"name": "page",
+						"in": "query",
+						"schema": {
+							"type": "integer",
+							"minimum": 1
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 100
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "成功",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"data": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/GeoAuditLog"
+											}
+										},
+										"pagination": {
+											"$ref": "#/components/schemas/GeoPagination"
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				}
+			}
 		}
 	},
 	"tags": [
@@ -4568,6 +9974,18 @@
 		{
 			"name": "Opportunities",
 			"description": "Where a brand could win more citations, and why"
+		},
+		{
+			"name": "GEO",
+			"description": "GEO workspace (enabled with GEO_WORKSPACE_ENABLED)."
+		},
+		{
+			"name": "GEO Sampling",
+			"description": "GEO workspace (enabled with GEO_WORKSPACE_ENABLED)."
+		},
+		{
+			"name": "GEO Evidence",
+			"description": "GEO workspace (enabled with GEO_WORKSPACE_ENABLED)."
 		}
 	]
 }
