@@ -125,6 +125,43 @@ export type GeoSiteEntityKind = (typeof GEO_SITE_ENTITY_KINDS)[number];
 export const GEO_SITE_ENTITY_STATUSES = ["CANDIDATE", "CONFIRMED", "REJECTED", "SOURCE_UNAVAILABLE"] as const;
 export type GeoSiteEntityStatus = (typeof GEO_SITE_ENTITY_STATUSES)[number];
 
+export const GEO_CRAWL_ITEM_STATUSES = ["QUEUED", "FETCHING", "DONE", "FAILED", "SKIPPED"] as const;
+export type GeoCrawlItemStatus = (typeof GEO_CRAWL_ITEM_STATUSES)[number];
+
+/** What one URL in a crawl run came to. */
+export const GEO_CRAWL_ITEM_OUTCOMES = [
+	"NEW_VERSION",
+	"UNCHANGED",
+	"DUPLICATE",
+	"REDIRECTED",
+	"GONE",
+	"AUTH_REQUIRED",
+	"CLIENT_ERROR",
+	"SERVER_ERROR",
+	"NETWORK_ERROR",
+	"REDIRECT_BLOCKED",
+	"ADDRESS_BLOCKED",
+	"MIME_REJECTED",
+	"TOO_LARGE",
+	"ROBOTS_DISALLOWED",
+	"OUT_OF_SCOPE",
+	"NOFOLLOW",
+	"BUDGET_EXCEEDED",
+	"ASSET_RECORDED",
+	"ASSET_STORED",
+	"CIRCUIT_OPEN",
+] as const;
+export type GeoCrawlItemOutcome = (typeof GEO_CRAWL_ITEM_OUTCOMES)[number];
+
+export const GEO_CRAWL_ITEM_SOURCES = ["SEED", "SITEMAP", "KNOWN", "LINK", "PAGINATION", "CANONICAL", "REDIRECT"] as const;
+export type GeoCrawlItemSource = (typeof GEO_CRAWL_ITEM_SOURCES)[number];
+
+export const GEO_SITE_QA_SAMPLE_STATUSES = ["OPEN", "COMPLETED"] as const;
+export type GeoSiteQaSampleStatus = (typeof GEO_SITE_QA_SAMPLE_STATUSES)[number];
+
+export const GEO_SITE_QA_VERDICTS = ["CORRECT", "INCORRECT", "NOT_APPLICABLE"] as const;
+export type GeoSiteQaVerdict = (typeof GEO_SITE_QA_VERDICTS)[number];
+
 export const GEO_SITE_AUDIT_RUN_STATUSES = ["QUEUED", "RUNNING", "SUCCEEDED", "FAILED"] as const;
 export type GeoSiteAuditRunStatus = (typeof GEO_SITE_AUDIT_RUN_STATUSES)[number];
 
