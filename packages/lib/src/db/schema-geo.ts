@@ -66,6 +66,8 @@ import {
 	type GeoContentKind,
 	type GeoCrawlMode,
 	type GeoCrawlStatus,
+	type GeoDictionaryEntityChange,
+	type GeoDictionarySnapshot,
 	type GeoEvaluationReviewStatus,
 	type GeoFactStatus,
 	type GeoFindingSeverity,
@@ -74,6 +76,8 @@ import {
 	type GeoParseStatus,
 	type GeoPlatform,
 	type GeoPriority,
+	type GeoPromptLabels,
+	type GeoPromptRevisionSnapshot,
 	type GeoPromptSetStatus,
 	type GeoPromptStatus,
 	type GeoPromptTier,
@@ -206,6 +210,8 @@ export const geoBrandEntities = pgTable(
 		officialUrl: text("official_url"),
 		regions: text("regions").array().notNull().default([]),
 		status: text("status").$type<GeoActiveStatus>().notNull().default("ACTIVE"),
+		factStatus: text("fact_status").$type<GeoFactStatus>().notNull().default("UNVERIFIED"),
+		factNotes: text("fact_notes").array().notNull().default([]),
 		createdBy: text("created_by").notNull(),
 		createdAt: createdAt(),
 		updatedAt: updatedAt(),
@@ -215,6 +221,7 @@ export const geoBrandEntities = pgTable(
 		index("geo_brand_entities_org_kind_idx").on(table.organizationId, table.kind),
 		oneOf("geo_brand_entities_kind_check", table.kind, GEO_BRAND_KINDS),
 		oneOf("geo_brand_entities_status_check", table.status, GEO_ACTIVE_STATUSES),
+		oneOf("geo_brand_entities_fact_status_check", table.factStatus, GEO_FACT_STATUSES),
 	],
 ).enableRLS();
 
@@ -224,7 +231,9 @@ export const geoDictionaryVersions = pgTable(
 		id: pk(),
 		organizationId: org(),
 		version: integer("version").notNull(),
-		snapshot: jsonb("snapshot").notNull(),
+		snapshot: jsonb("snapshot").$type<GeoDictionarySnapshot>().notNull(),
+		changes: jsonb("changes").$type<GeoDictionaryEntityChange[]>().notNull().default([]),
+		changedEntityIds: uuid("changed_entity_ids").array().notNull().default([]),
 		changeNote: text("change_note"),
 		createdBy: text("created_by").notNull(),
 		createdAt: createdAt(),
@@ -299,6 +308,7 @@ export const geoPrompts = pgTable(
 		ownerId: text("owner_id"),
 		reviewerId: text("reviewer_id"),
 		reviewNote: text("review_note"),
+		sourceNote: text("source_note"),
 		currentRevision: integer("current_revision").notNull().default(1),
 		createdBy: text("created_by").notNull(),
 		createdAt: createdAt(),
@@ -321,7 +331,7 @@ export const geoPromptRevisions = pgTable(
 			.notNull()
 			.references(() => geoPrompts.id),
 		revision: integer("revision").notNull(),
-		snapshot: jsonb("snapshot").notNull(),
+		snapshot: jsonb("snapshot").$type<GeoPromptRevisionSnapshot>().notNull(),
 		editorId: text("editor_id").notNull(),
 		createdAt: createdAt(),
 	},
@@ -361,7 +371,10 @@ export const geoPromptSetItems = pgTable(
 			.references(() => geoPrompts.id),
 		promptRevision: integer("prompt_revision").notNull(),
 		questionText: text("question_text").notNull(),
-		labels: jsonb("labels").notNull().default({}),
+		labels: jsonb("labels")
+			.$type<GeoPromptLabels>()
+			.notNull()
+			.default({} as GeoPromptLabels),
 		createdAt: createdAt(),
 	},
 	(table) => [

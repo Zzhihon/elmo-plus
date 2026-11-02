@@ -55,7 +55,11 @@
 		"./rollups/fanout": "./src/rollups/fanout.ts",
 		"./geo/alerts": "./src/geo/alerts.ts",
 		"./geo/audit": "./src/geo/audit.ts",
+		"./geo/bootstrap": "./src/geo/bootstrap.ts",
+		"./geo/buyer-roles": "./src/geo/buyer-roles.ts",
+		"./geo/dictionary": "./src/geo/dictionary.ts",
 		"./geo/idempotency": "./src/geo/idempotency.ts",
+		"./geo/prompt-sets": "./src/geo/prompt-sets.ts",
 		"./geo/roles": "./src/geo/roles.ts",
 		"./geo/tasks": "./src/geo/tasks.ts"
 	},
