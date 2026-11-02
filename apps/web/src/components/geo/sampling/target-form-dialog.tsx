@@ -205,7 +205,7 @@ export function TargetFormDialog({
 				<DialogHeader>
 					<DialogTitle>{target ? "编辑采样目标" : "新增采样目标"}</DialogTitle>
 					<DialogDescription>
-						更改平台、源模式、服务方、模型或配置后，验证状态会重置为未验证。凭据请通过“设置凭据”保存，不要写入配置。
+						更改平台、源模式、服务方、模型或配置后，验证状态会重置为未验证；端点换到新的主机时，已保存的凭据会被清除，需要重新设置。凭据请通过“设置凭据”保存，不要写入配置。
 					</DialogDescription>
 				</DialogHeader>
 				<form

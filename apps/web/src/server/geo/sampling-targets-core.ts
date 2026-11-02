@@ -6,6 +6,9 @@ import {
 	parseAvailableWindow,
 	redactSecrets,
 	secretNameFromRef,
+	type FetchLike,
+	targetEndpointHosts,
+	targetEndpointUrls,
 	targetSecretName,
 	validateTargetConfig,
 } from "@workspace/geo-cn-providers";
@@ -17,9 +20,16 @@ import {
 	GeoError,
 	type GeoPrincipal,
 } from "@workspace/geo-domain";
+import {
+	checkEndpointReachable,
+	checkEndpointUrl,
+	guardedFetch,
+	type Resolver,
+	URL_REFUSAL_LABELS,
+} from "@workspace/geo-site-ingestion";
 import { db } from "@workspace/lib/db/db";
 import { geoSamplingAttempts, geoSamplingTargets, secrets } from "@workspace/lib/db/schema";
-import { writeGeoAudit } from "@workspace/lib/geo/audit";
+import { geoAuditHash, writeGeoAudit } from "@workspace/lib/geo/audit";
 import { and, asc, eq, gt, sql } from "drizzle-orm";
 import { z } from "zod";
 import { readTargetCredential, storedCredentialNames, writeTargetCredential } from "./sampling-credentials";
@@ -203,6 +213,12 @@ function checkTargetInput(input: TargetInput): void {
 	}
 	const window = parseAvailableWindow(input.availableWindow ?? null);
 	if (!window.ok) throw new GeoError("VALIDATION_ERROR", `可用时间窗口无效：${window.error}`);
+	for (const url of targetEndpointUrls(input.surfaceMode, input.config)) {
+		const decision = checkEndpointUrl(url);
+		if (!decision.ok && decision.reason !== "INVALID") {
+			throw new GeoError("VALIDATION_ERROR", `端点 ${url} 不允许使用：${URL_REFUSAL_LABELS[decision.reason]}`);
+		}
+	}
 	if (input.enabled) {
 		const config = validateTargetConfig(input.surfaceMode, input.config, input.modelId ?? null);
 		if (!config.ok) throw new GeoError("VALIDATION_ERROR", `配置不完整，不能启用：${config.errors.join("；")}`);
@@ -254,7 +270,11 @@ export async function createSamplingTarget(principal: GeoPrincipal, input: Targe
 
 const VERIFICATION_SENSITIVE = ["platform", "surfaceMode", "provider", "modelId", "config"] as const;
 
-/** What was verified was a particular source; changing which source it is sends it back to UNVERIFIED. */
+/**
+ * What was verified was a particular source; changing which source it is sends it back to
+ * UNVERIFIED. A stored credential was given for particular hosts, so pointing the target
+ * at a new one removes it: nothing is ever sent there until someone enters it again.
+ */
 export async function updateSamplingTarget(
 	principal: GeoPrincipal,
 	targetId: string,
@@ -271,12 +291,20 @@ export async function updateSamplingTarget(
 		if (!before) throw new GeoError("NOT_FOUND", "采样目标不存在");
 		const values = targetValues(input);
 		const sourceChanged = VERIFICATION_SENSITIVE.some(
-			(field) => JSON.stringify(before[field] ?? null) !== JSON.stringify(values[field] ?? null),
+			(field) => geoAuditHash(before[field] ?? null) !== geoAuditHash(values[field] ?? null),
 		);
+		const trustedHosts = targetEndpointHosts(before.surfaceMode, before.config);
+		const credentialCleared =
+			before.credentialRef !== null &&
+			[...targetEndpointHosts(values.surfaceMode, values.config)].some((host) => !trustedHosts.has(host));
+		if (credentialCleared && secretNameFromRef(before.credentialRef) === targetSecretName(before.id)) {
+			await tx.delete(secrets).where(eq(secrets.name, targetSecretName(before.id)));
+		}
 		const [after] = await tx
 			.update(geoSamplingTargets)
 			.set({
 				...values,
+				...(credentialCleared ? { credentialRef: null } : {}),
 				...(sourceChanged && before.verificationStatus !== "UNVERIFIED"
 					? {
 							verificationStatus: "UNVERIFIED" as const,
@@ -295,7 +323,7 @@ export async function updateSamplingTarget(
 			entityId: targetId,
 			before,
 			after,
-			metadata: { verificationReset: sourceChanged && before.verificationStatus !== "UNVERIFIED" },
+			metadata: { verificationReset: sourceChanged && before.verificationStatus !== "UNVERIFIED", credentialCleared },
 		});
 		return after;
 	});
@@ -369,6 +397,31 @@ export async function setSamplingTargetCredential(
 	return { credentialConfigured: trimmed !== null };
 }
 
+/** Checked before the credential is even read, so a refused endpoint never comes near one. */
+async function refusedEndpoint(
+	target: SamplingTargetRow,
+	deps: { resolve?: Resolver; addressAllowed?: (address: string) => boolean },
+): Promise<string | null> {
+	for (const url of targetEndpointUrls(target.surfaceMode, target.config)) {
+		const checked = await checkEndpointReachable(url, deps);
+		if (!checked.ok) {
+			return checked.code === "DNS_FAILED" ? `端点无法解析：${checked.detail}` : `端点不允许访问：${checked.detail}`;
+		}
+	}
+	return null;
+}
+
+async function probeTarget(target: SamplingTargetRow, fetchImpl: FetchLike) {
+	const credential = await readTargetCredential(target.credentialRef);
+	const adapter = createCaptureAdapter(target, { credential, timeoutMs: 15_000, fetch: fetchImpl });
+	try {
+		const capabilities = await adapter.capabilities();
+		return { credential, result: { available: capabilities.available, detail: capabilities.detail ?? "" } };
+	} catch {
+		return { credential, result: { available: false, detail: "检测过程中发生未预期的错误" } };
+	}
+}
+
 export interface ConnectivityResult {
 	available: boolean;
 	detail: string;
@@ -383,18 +436,14 @@ export interface ConnectivityResult {
 export async function checkSamplingTargetConnectivity(
 	principal: GeoPrincipal,
 	targetId: string,
+	deps: { fetch?: FetchLike; resolve?: Resolver; addressAllowed?: (address: string) => boolean } = {},
 ): Promise<ConnectivityResult> {
 	assertGeoPermission(principal, "target.manage");
 	const target = await loadTarget(principal, targetId);
-	const credential = await readTargetCredential(target.credentialRef);
-	const adapter = createCaptureAdapter(target, { credential, timeoutMs: 15_000 });
-	let result: { available: boolean; detail: string };
-	try {
-		const capabilities = await adapter.capabilities();
-		result = { available: capabilities.available, detail: capabilities.detail ?? "" };
-	} catch {
-		result = { available: false, detail: "检测过程中发生未预期的错误" };
-	}
+	const refusal = await refusedEndpoint(target, deps);
+	const { result, credential } = refusal
+		? { result: { available: false, detail: refusal }, credential: null }
+		: await probeTarget(target, deps.fetch ?? guardedFetch);
 	const detail = redactSecrets(result.detail, [credential]).slice(0, 500);
 	const checkedAt = new Date().toISOString();
 	await db.transaction((tx) =>

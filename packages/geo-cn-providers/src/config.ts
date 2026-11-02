@@ -58,7 +58,17 @@ export interface LiveSurfaceConfig {
 
 const SECRETISH_KEY =
 	/secret|password|passwd|credential|api[-_]?key|authorization|cookie|bearer|access[-_]?token|auth[-_]?token|^token$/i;
-const RESERVED_HEADERS = new Set(["authorization", "cookie", "host", "content-length", "content-type"]);
+/** Configured headers are readable by everyone who can see a target, so only known-harmless ones may be stored. */
+const ALLOWED_HEADERS = new Set([
+	"accept",
+	"accept-language",
+	"user-agent",
+	"api-version",
+	"x-api-version",
+	"x-client-name",
+	"x-client-version",
+	"x-request-source",
+]);
 
 function asRecord(value: unknown): Record<string, unknown> | null {
 	return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
@@ -119,8 +129,8 @@ function plainHeaders(value: unknown, errors: string[]): Record<string, string> 
 	}
 	const headers: Record<string, string> = {};
 	for (const [name, item] of Object.entries(record)) {
-		if (RESERVED_HEADERS.has(name.toLowerCase()) || SECRETISH_KEY.test(name)) {
-			errors.push(`headers.${name} 不允许在配置中设置`);
+		if (!ALLOWED_HEADERS.has(name.toLowerCase())) {
+			errors.push(`headers.${name} 不允许在配置中设置；密钥类请求头请用 auth 配置并通过“设置凭据”保存`);
 		} else if (typeof item !== "string" || !/^[\x20-\x7e]{0,500}$/.test(item)) {
 			errors.push(`headers.${name} 必须是 ASCII 字符串`);
 		} else {
@@ -277,6 +287,27 @@ export function validateTargetConfig(
 	}
 	const result = mode === "MODEL_API" ? parseModelApiConfig(config, modelId) : parseLiveSurfaceConfig(config);
 	return result.ok ? { ok: true } : { ok: false, errors: result.errors };
+}
+
+/** Every URL a target's configuration would send requests to, valid or not. */
+export function targetEndpointUrls(mode: GeoSurfaceMode, config: unknown): string[] {
+	const record = asRecord(config) ?? {};
+	const candidates =
+		mode === "MODEL_API" ? [record.baseUrl] : mode === "LIVE_SURFACE" ? [record.endpoint, record.healthEndpoint] : [];
+	return candidates.filter((value): value is string => typeof value === "string" && value.length > 0);
+}
+
+/** The hosts a target's credential would be sent to. */
+export function targetEndpointHosts(mode: GeoSurfaceMode, config: unknown): Set<string> {
+	const hosts = new Set<string>();
+	for (const url of targetEndpointUrls(mode, config)) {
+		try {
+			hosts.add(new URL(url).host.toLowerCase());
+		} catch {
+			hosts.add(url);
+		}
+	}
+	return hosts;
 }
 
 /** The cost one run is expected to add, used for budget checks before anything is sent. */

@@ -68,14 +68,14 @@ export class LicensedHttpAdapter implements GeoCaptureAdapter {
 			config: LiveSurfaceConfig;
 			credential: string | null;
 			platform: string;
-			fetch?: FetchLike;
+			fetch: FetchLike;
 			timeoutMs: number;
 			now?: () => Date;
 		},
 	) {}
 
 	private get fetchImpl(): FetchLike {
-		return this.options.fetch ?? fetch;
+		return this.options.fetch;
 	}
 
 	private authHeaders(): Record<string, string> | null {

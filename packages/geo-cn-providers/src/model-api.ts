@@ -64,14 +64,14 @@ export class ModelApiAdapter implements GeoCaptureAdapter {
 		private readonly options: {
 			config: ModelApiConfig;
 			credential: string | null;
-			fetch?: FetchLike;
+			fetch: FetchLike;
 			timeoutMs: number;
 			now?: () => Date;
 		},
 	) {}
 
 	private get fetchImpl(): FetchLike {
-		return this.options.fetch ?? fetch;
+		return this.options.fetch;
 	}
 
 	private authHeaders(): Record<string, string> {

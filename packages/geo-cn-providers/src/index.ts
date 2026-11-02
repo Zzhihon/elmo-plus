@@ -20,6 +20,8 @@ export {
 	type ModelApiConfig,
 	parseLiveSurfaceConfig,
 	parseModelApiConfig,
+	targetEndpointHosts,
+	targetEndpointUrls,
 	validateTargetConfig,
 } from "./config";
 export {

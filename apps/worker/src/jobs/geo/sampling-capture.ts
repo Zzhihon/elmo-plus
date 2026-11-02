@@ -22,6 +22,7 @@ import {
 } from "@workspace/geo-cn-providers";
 import { isTerminalRunStatus } from "@workspace/geo-domain";
 import { geoObjectKey, getObjectStore } from "@workspace/geo-evidence";
+import { guardedFetch } from "@workspace/geo-site-ingestion";
 import { db } from "@workspace/lib/db/db";
 import { geoSamplingAttempts, geoSamplingRuns, geoSamplingTargets } from "@workspace/lib/db/schema";
 import { raiseGeoAlert, resolveGeoAlert } from "@workspace/lib/geo/alerts";
@@ -208,7 +209,11 @@ async function storeRawEvidence(ctx: RunContext, attemptNo: number, result: Capt
 
 async function runCapture(ctx: RunContext, policy: RetryPolicy, fetchImpl?: FetchLike): Promise<CaptureResult> {
 	const credential = await loadTargetCredential(ctx.target.credentialRef);
-	const adapter = createCaptureAdapter(ctx.target, { credential, timeoutMs: policy.timeoutMs, fetch: fetchImpl });
+	const adapter = createCaptureAdapter(ctx.target, {
+		credential,
+		timeoutMs: policy.timeoutMs,
+		fetch: fetchImpl ?? guardedFetch,
+	});
 	try {
 		return await adapter.capture({
 			promptId: ctx.run.promptId,

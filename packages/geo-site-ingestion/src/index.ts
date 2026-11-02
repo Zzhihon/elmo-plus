@@ -6,6 +6,7 @@ export * from "./hash";
 export * from "./knowledge";
 export * from "./net/address";
 export * from "./net/charset";
+export * from "./net/guarded-fetch";
 export * from "./net/robots";
 export * from "./net/safe-fetch";
 export * from "./net/url-policy";
