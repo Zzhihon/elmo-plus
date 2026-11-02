@@ -7,17 +7,35 @@ import { geoObservations, geoOrgSettings, geoSamplingRuns } from "@workspace/lib
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { listCredentials } from "@/server/geo/admin-core";
+import {
+	exportObservation,
+	getObservation,
+	listObservations,
+	readObservationEvidence,
+} from "@/server/geo/observations-core";
 import { importManualObservations } from "@/server/geo/observations-import-core";
 import {
 	createPrompt,
 	createPromptSet,
+	exportPromptsCsv,
 	freezePromptSet,
+	importPromptsCsv,
 	listBuyerRoles,
+	listPrompts,
+	promptRoleCoverage,
+	promptStatusCounts,
 	transitionPrompt,
 } from "@/server/geo/prompts-core";
-import { createSamplingBatch, resampleRun } from "@/server/geo/sampling-core";
+import {
+	createSamplingBatch,
+	getSamplingBatch,
+	listFrozenPromptSets,
+	listSamplingBatches,
+	resampleRun,
+} from "@/server/geo/sampling-core";
 import {
 	createSamplingTarget,
+	listSamplingTargets,
 	setSamplingTargetCredential,
 	setSamplingTargetVerification,
 } from "@/server/geo/sampling-targets-core";
@@ -111,6 +129,14 @@ describe("planning a sampling batch", () => {
 			repeatIndex: runs[0].repeatIndex,
 		});
 		await expectGeoError(resampleRun(operator, runs[0].id, { reason: "平台抖动" }), "CONFLICT");
+
+		const listed = await listSamplingBatches(operator, { page: 1, limit: 20, offset: 0 });
+		expect(listed.rows.find((row) => row.id === first.batch.id)).toMatchObject({ targetCount: 1, plannedCount: 6 });
+		const detail = await getSamplingBatch(operator, first.batch.id, { page: 1, limit: 50, offset: 0 });
+		expect(detail).toBeTruthy();
+		expect((await listFrozenPromptSets(operator)).find((set) => set.id === frozenSetId)?.itemCount).toBe(2);
+		const targets = await listSamplingTargets(operator);
+		expect(targets.find((row) => row.id === target.id)).toMatchObject({ runnable: true, credentialConfigured: false });
 	});
 
 	it("refuses a batch over the organization's per-batch limit", async () => {
@@ -204,5 +230,45 @@ describe("manual evidence import", () => {
 
 		const replay = await importManualObservations(operator, input);
 		expect(replay).toMatchObject({ ok: true, created: 0, skipped: 2 });
+
+		const { rows } = await listObservations(operator, { targetId: manualTargetId }, { page: 1, limit: 20, offset: 0 });
+		expect(rows).toHaveLength(2);
+		expect(rows[0]).toMatchObject({ imported: true, citationCount: 1 });
+		const detail = await getObservation(operator, rows[0].id);
+		expect(detail.target.surfaceMode).toBe("MANUAL_EVIDENCE");
+		const exported = await exportObservation(operator, rows[0].id);
+		expect(exported.method.note).toContain("人工采样");
+		// A location outside the object store is shown as written, never fetched.
+		await expectGeoError(readObservationEvidence(operator, rows[0].id), "NOT_FOUND");
+	});
+});
+
+describe("the prompt library", () => {
+	it("exports its CSV, imports new rows from it as drafts, and counts statuses and role coverage", async () => {
+		const csv = await exportPromptsCsv(operator, {});
+		expect(csv).toContain("高低压开关柜哪家好？");
+		const [header] = csv.replace(/^\uFEFF/, "").split(/\r?\n/);
+		const columns = (header as string).split(",");
+		const row: Record<string, string> = {
+			question: "开关柜厂家售后服务怎么样",
+			buyer_role: "procurement",
+			intent: "售后",
+			product_line: "开关柜",
+			geo_region: "华东",
+			priority: "P2",
+			language: "zh-CN",
+			tier: "CORE",
+		};
+		const roles = await listBuyerRoles(operator);
+		row.buyer_role = roles[0]?.code ?? "";
+		const result = await importPromptsCsv(
+			operator,
+			`${header}\n${columns.map((column) => row[column.replace(/"/g, "")] ?? "").join(",")}\n`,
+		);
+		expect(result).toMatchObject({ created: 1, errors: [] });
+		const { total } = await listPrompts(operator, { status: "FROZEN" }, { limit: 50, offset: 0 });
+		expect(total).toBe(2);
+		expect(await promptStatusCounts(operator)).toMatchObject({ FROZEN: 2, DRAFT: 1 });
+		expect((await promptRoleCoverage(operator)).length).toBeGreaterThan(0);
 	});
 });
