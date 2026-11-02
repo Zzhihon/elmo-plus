@@ -773,6 +773,11 @@ export const geoSiteCrawlRuns = pgTable(
 		/** What this run was asked to do: seed override, link following, page budget. */
 		config: jsonb("config").notNull().default({}),
 		idempotencyKey: text("idempotency_key").notNull(),
+		/** robots.txt as read this run, by origin: complete, and apart from `counts`, which the UI reads. */
+		robots: jsonb("robots").notNull().default({}),
+		/** Who is executing the run right now; a job that cannot take this lease leaves the run alone. */
+		leaseHolder: text("lease_holder"),
+		leaseUntil: at("lease_until"),
 		startedAt: at("started_at"),
 		finishedAt: at("finished_at"),
 		requestedBy: text("requested_by").notNull(),
@@ -781,6 +786,9 @@ export const geoSiteCrawlRuns = pgTable(
 	},
 	(table) => [
 		uniqueIndex("geo_site_crawl_runs_org_key_idx").on(table.organizationId, table.idempotencyKey),
+		uniqueIndex("geo_site_crawl_runs_source_active_idx")
+			.on(table.siteSourceId)
+			.where(sql`${table.status} in ('QUEUED', 'RUNNING', 'PAUSED')`),
 		index("geo_site_crawl_runs_source_created_idx").on(table.siteSourceId, table.createdAt),
 		oneOf("geo_site_crawl_runs_mode_check", table.mode, GEO_CRAWL_MODES),
 		oneOf("geo_site_crawl_runs_status_check", table.status, GEO_CRAWL_STATUSES),
@@ -803,6 +811,13 @@ export const geoSitePages = pgTable(
 		lastSeenAt: at("last_seen_at"),
 		lastFetchedAt: at("last_fetched_at"),
 		consecutiveFailures: integer("consecutive_failures").notNull().default(0),
+		/** Hash of the content the page last served; set at fetch time, ahead of any parse. */
+		currentContentHash: text("current_content_hash"),
+		/**
+		 * The version the page shows now. Content that changes back reuses its older
+		 * version, so neither fetch time nor insertion order can say this.
+		 */
+		currentVersionId: uuid("current_version_id").references((): AnyPgColumn => geoSitePageVersions.id),
 		createdAt: createdAt(),
 		updatedAt: updatedAt(),
 	},
@@ -827,6 +842,8 @@ export const geoSitePageVersions = pgTable(
 		parserVersion: text("parser_version").notNull(),
 		htmlObjectKey: text("html_object_key").notNull(),
 		parsedObjectKey: text("parsed_object_key"),
+		/** The address that served these bytes, which relative links resolve against. */
+		fetchedUrl: text("fetched_url"),
 		title: text("title"),
 		parsed: jsonb("parsed"),
 		fetchedAt: at("fetched_at").notNull(),

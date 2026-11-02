@@ -76,6 +76,7 @@ export function CrawlStatusBadge({ status }: { status: string }) {
 export const OUTCOME_LABELS: Record<GeoCrawlItemOutcome, string> = {
 	NEW_VERSION: "新版本",
 	UNCHANGED: "未变化",
+	REVERTED: "内容回到历史版本",
 	DUPLICATE: "重复网址",
 	REDIRECTED: "重定向",
 	GONE: "已失效（404/410）",

@@ -221,7 +221,7 @@ async function purgeEvidence(
 // ---------------------------------------------------------------------------
 
 /**
- * The latest version of a page and any version a knowledge or entity source, an
+ * The latest and the current version of a page, and any version a knowledge or entity source, an
  * audit finding or a QA spot check cites stay, so no reviewed fact, finding or
  * acceptance record loses its evidence. Crawl items are only the per-URL log of a
  * run (its totals live on the run), so they go with the version they point at.
@@ -232,14 +232,9 @@ function expiredPageVersionFilter(organizationId: string, cutoff: Date) {
 				select 1 from geo_site_page_versions n
 				where n.page_id = v.page_id and (n.fetched_at > v.fetched_at or (n.fetched_at = v.fetched_at and n.id > v.id))
 			)
-			-- Content that reverts to an earlier state reuses that older version, so the newest
-			-- fetch, not the newest version, says which snapshot the page shows now.
-			and v.id is distinct from (
-				select c.version_id from geo_site_crawl_items c
-				where c.page_id = v.page_id and c.version_id is not null
-				order by c.fetched_at desc nulls last, c.created_at desc
-				limit 1
-			)
+			-- Content that reverts to an earlier state reuses that older version, so what the
+			-- page shows now is recorded on the page rather than implied by any ordering.
+			and v.id is distinct from (select p.current_version_id from geo_site_pages p where p.id = v.page_id)
 			and not exists (select 1 from geo_assertion_sources s where s.page_version_id = v.id)
 			and not exists (select 1 from geo_site_entity_sources e where e.page_version_id = v.id)
 			and not exists (select 1 from geo_site_audit_findings f where f.page_version_id = v.id)
