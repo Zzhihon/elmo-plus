@@ -38,6 +38,8 @@ const PERMISSIONS = {
 
 	"observation.read": { access: "read", roles: ALL_ROLES },
 	"observation.review": { access: "write", roles: ["tech_reviewer", "marketing_reviewer"] },
+	// Only a technical review may call an answer's fact wrong: the error rate counts nothing else.
+	"claim.review": { access: "write", roles: ["tech_reviewer"] },
 
 	"metric.read": { access: "read", roles: ALL_ROLES },
 

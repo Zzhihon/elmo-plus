@@ -5,6 +5,7 @@ export * from "./content-state";
 export * from "./draft-validation";
 export * from "./enums";
 export * from "./errors";
+export * from "./evaluation";
 export * from "./knowledge-gates";
 export * from "./knowledge-upload";
 export * from "./labels";
