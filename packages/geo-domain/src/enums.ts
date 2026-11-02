@@ -237,3 +237,15 @@ export const GEO_DEFAULT_BUYER_ROLES = [
 	{ code: "OPERATIONS_SUPERVISOR", title: "运维主管", priority: 5 },
 	{ code: "FINANCE_COST_LEAD", title: "财务/成本负责人", priority: 6 },
 ] as const;
+
+export const GEO_ADMIN_REQUEST_KINDS = ["LLM_USE_APPROVAL", "RETENTION_CHANGE", "ADMIN_MFA_POLICY"] as const;
+export type GeoAdminRequestKind = (typeof GEO_ADMIN_REQUEST_KINDS)[number];
+
+export const GEO_ADMIN_REQUEST_STATUSES = ["PENDING", "APPROVED", "REJECTED", "CANCELLED", "EXPIRED"] as const;
+export type GeoAdminRequestStatus = (typeof GEO_ADMIN_REQUEST_STATUSES)[number];
+
+export const GEO_BACKUP_KINDS = ["DAILY", "PRE_MIGRATION", "RESTORE_DRILL"] as const;
+export type GeoBackupKind = (typeof GEO_BACKUP_KINDS)[number];
+
+export const GEO_BACKUP_STATUSES = ["SUCCEEDED", "FAILED"] as const;
+export type GeoBackupStatus = (typeof GEO_BACKUP_STATUSES)[number];

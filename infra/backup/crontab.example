@@ -1,0 +1,5 @@
+# Daily backup at 02:00 UTC. Output goes to syslog; the run is also recorded in
+# geo_backup_runs, and the worker alerts when no successful daily backup exists
+# for 26 hours.
+CRON_TZ=UTC
+0 2 * * * elmo-backup BACKUP_ENV_FILE=/opt/elmo/infra/compose/.env /opt/elmo/infra/backup/backup.sh 2>&1 | logger -t elmo-backup

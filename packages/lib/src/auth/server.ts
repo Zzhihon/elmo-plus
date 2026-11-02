@@ -5,6 +5,7 @@ import { mcp } from "@better-auth/mcp";
 import { oauthProviderAuthServerMetadata } from "@better-auth/oauth-provider";
 import { type SSOOptions, sso } from "@better-auth/sso";
 import { API_KEY_RATE_LIMIT_PER_MINUTE, MCP_PATH } from "@workspace/config/constants";
+import { isGeoWorkspaceEnabled } from "@workspace/config/geo";
 import { type BetterAuthOptions, type BetterAuthPlugin, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
@@ -14,7 +15,7 @@ import {
 	parseAccessTokenAuthorization,
 	verifyJwsAccessToken,
 } from "better-auth/oauth2";
-import { admin, customSession, jwt, organization } from "better-auth/plugins";
+import { admin, customSession, jwt, organization, twoFactor } from "better-auth/plugins";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import type { JWTPayload } from "jose";
 import { db } from "../db/db";
@@ -84,6 +85,12 @@ function mcpResourceDefault(resource: string) {
 			],
 		},
 	} satisfies BetterAuthPlugin;
+}
+
+/** GEO administrators must hold a second factor; outside GEO nothing asks for one. */
+function geoAuthPlugins(): BetterAuthPlugin[] {
+	if (!isGeoWorkspaceEnabled()) return [];
+	return [twoFactor({ issuer: process.env.VITE_APP_NAME || "Elmo" })];
 }
 
 export function createAuth(options?: CreateAuthOptions) {
@@ -192,6 +199,7 @@ export function createAuth(options?: CreateAuthOptions) {
 				allowUnauthenticatedClientRegistration: true,
 			}),
 			sso(options?.sso),
+			...geoAuthPlugins(),
 			...(options?.extraPlugins ?? []),
 			// Runs on every session read, including cookie-cache hits. Keep it free
 			// of queries.

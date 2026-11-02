@@ -7,6 +7,9 @@
 		"architecture",
 		"configuration",
 		"cloud-deployment",
+		"geo-deployment",
+		"geo-backup-restore",
+		"geo-admin-guide",
 		"telemetry",
 		"ai-policy",
 		"releases"

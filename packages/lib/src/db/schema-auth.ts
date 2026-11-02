@@ -48,6 +48,7 @@ export const user = pgTable("user", {
   banned: boolean("banned").default(false),
   banReason: text("ban_reason"),
   banExpires: timestamp("ban_expires"),
+  twoFactorEnabled: boolean("two_factor_enabled").default(false),
   stripeCustomerId: text("stripe_customer_id"),
   hasReportGeneratorAccess: boolean("has_report_generator_access").default(
     false,
@@ -412,6 +413,25 @@ export const ssoProvider = pgTable("sso_provider", {
   domain: text("domain").notNull(),
 });
 
+export const twoFactor = pgTable(
+  "two_factor",
+  {
+    id: text("id").primaryKey(),
+    secret: text("secret").notNull(),
+    backupCodes: text("backup_codes").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    verified: boolean("verified").default(true),
+    failedVerificationCount: integer("failed_verification_count").default(0),
+    lockedUntil: timestamp("locked_until"),
+  },
+  (table) => [
+    index("twoFactor_secret_idx").on(table.secret),
+    index("twoFactor_userId_idx").on(table.userId),
+  ],
+);
+
 export const subscription = pgTable("subscription", {
   id: text("id").primaryKey(),
   plan: text("plan").notNull(),
@@ -449,6 +469,7 @@ export const userRelations = relations(user, ({ many }) => ({
   oauthAccessTokens: many(oauthAccessToken),
   oauthConsents: many(oauthConsent),
   ssoProviders: many(ssoProvider),
+  twoFactors: many(twoFactor),
 }));
 
 export const sessionRelations = relations(session, ({ one, many }) => ({
@@ -578,6 +599,13 @@ export const oauthConsentRelations = relations(oauthConsent, ({ one }) => ({
 export const ssoProviderRelations = relations(ssoProvider, ({ one }) => ({
   user: one(user, {
     fields: [ssoProvider.userId],
+    references: [user.id],
+  }),
+}));
+
+export const twoFactorRelations = relations(twoFactor, ({ one }) => ({
+  user: one(user, {
+    fields: [twoFactor.userId],
     references: [user.id],
   }),
 }));

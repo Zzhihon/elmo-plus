@@ -8,7 +8,7 @@
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { ssoClient } from "@better-auth/sso/client";
 import { stripeClient } from "@better-auth/stripe/client";
-import { adminClient, lastLoginMethodClient, organizationClient } from "better-auth/client/plugins";
+import { adminClient, lastLoginMethodClient, organizationClient, twoFactorClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 import { ac, adminRole, userRole } from "./permissions";
 
@@ -34,6 +34,9 @@ export const authClient = createAuthClient({
 		// The subscription endpoints exist only in cloud mode (the server plugin
 		// is injected there); no cloud UI calls these methods elsewhere.
 		stripeClient({ subscription: true }),
+		// The server plugin exists only with the GEO workspace on. No redirect page is
+		// set here: the login page routes a two-factor sign-in itself, keeping returnTo.
+		twoFactorClient(),
 	],
 });
 

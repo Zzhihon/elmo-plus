@@ -1,6 +1,8 @@
 import {
 	GEO_ACTIVE_STATUSES,
 	GEO_ACTOR_KINDS,
+	GEO_ADMIN_REQUEST_KINDS,
+	GEO_ADMIN_REQUEST_STATUSES,
 	GEO_ALERT_SEVERITIES,
 	GEO_ALERT_STATUSES,
 	GEO_ASSERTION_REVIEW_DECISIONS,
@@ -9,6 +11,8 @@ import {
 	GEO_ASSET_APPROVAL_STATUSES,
 	GEO_ASSET_TYPES,
 	GEO_ATTEMPT_STATUSES,
+	GEO_BACKUP_KINDS,
+	GEO_BACKUP_STATUSES,
 	GEO_BATCH_STATUSES,
 	GEO_BRAND_KINDS,
 	GEO_BREAKER_STATES,
@@ -49,6 +53,8 @@ import {
 	GEO_VERIFICATION_STATUSES,
 	type GeoActiveStatus,
 	type GeoActorKind,
+	type GeoAdminRequestKind,
+	type GeoAdminRequestStatus,
 	type GeoAlertSeverity,
 	type GeoAlertStatus,
 	type GeoAssertionReviewDecision,
@@ -57,6 +63,8 @@ import {
 	type GeoAssetApprovalStatus,
 	type GeoAssetType,
 	type GeoAttemptStatus,
+	type GeoBackupKind,
+	type GeoBackupStatus,
 	type GeoBatchStatus,
 	type GeoBrandKind,
 	type GeoBreakerState,
@@ -190,6 +198,7 @@ export const geoOrgSettings = pgTable("geo_org_settings", {
 	snapshotRetentionDays: integer("snapshot_retention_days"),
 	auditRetentionDays: integer("audit_retention_days"),
 	alertRecipients: text("alert_recipients").array().notNull().default([]),
+	adminMfaRequired: boolean("admin_mfa_required").notNull().default(true),
 	updatedBy: text("updated_by"),
 	createdAt: createdAt(),
 	updatedAt: updatedAt(),
@@ -1057,6 +1066,9 @@ export const geoOptimizationTasks = pgTable(
 		publishedUrl: text("published_url"),
 		publishedAt: at("published_at"),
 		proof: jsonb("proof"),
+		launchApprovalRef: text("launch_approval_ref"),
+		backupPlan: text("backup_plan"),
+		rollbackPlan: text("rollback_plan"),
 		riskLevel: text("risk_level").$type<GeoRiskLevel>().notNull().default("NORMAL"),
 		sourceKind: text("source_kind").$type<GeoTaskSourceKind>().notNull(),
 		sourceRef: text("source_ref"),
@@ -1269,6 +1281,7 @@ export const geoAlerts = pgTable(
 		firstSeen: at("first_seen").defaultNow().notNull(),
 		lastSeen: at("last_seen").defaultNow().notNull(),
 		resolvedAt: at("resolved_at"),
+		notifiedAt: at("notified_at"),
 	},
 	(table) => [
 		uniqueIndex("geo_alerts_org_dedupe_active_idx")
@@ -1295,5 +1308,60 @@ export const geoIdempotencyKeys = pgTable(
 	(table) => [
 		primaryKey({ columns: [table.organizationId, table.key, table.route] }),
 		index("geo_idempotency_keys_created_idx").on(table.createdAt),
+	],
+).enableRLS();
+
+/** A change one platform admin proposes and a different one must approve. */
+export const geoAdminRequests = pgTable(
+	"geo_admin_requests",
+	{
+		id: pk(),
+		organizationId: org(),
+		kind: text("kind").$type<GeoAdminRequestKind>().notNull(),
+		payload: jsonb("payload").notNull().default({}),
+		reason: text("reason").notNull(),
+		status: text("status").$type<GeoAdminRequestStatus>().notNull().default("PENDING"),
+		requestedBy: text("requested_by").notNull(),
+		decidedBy: text("decided_by"),
+		decisionComment: text("decision_comment"),
+		decidedAt: at("decided_at"),
+		expiresAt: at("expires_at").notNull(),
+		createdAt: createdAt(),
+	},
+	(table) => [
+		uniqueIndex("geo_admin_requests_org_kind_pending_idx")
+			.on(table.organizationId, table.kind)
+			.where(sql`${table.status} = 'PENDING'`),
+		index("geo_admin_requests_org_created_idx").on(table.organizationId, table.createdAt),
+		oneOf("geo_admin_requests_kind_check", table.kind, GEO_ADMIN_REQUEST_KINDS),
+		oneOf("geo_admin_requests_status_check", table.status, GEO_ADMIN_REQUEST_STATUSES),
+	],
+).enableRLS();
+
+/**
+ * Written by the backup and restore-drill scripts in infra/backup, which run outside
+ * the app. Instance-wide on purpose: one backup covers every organization.
+ */
+export const geoBackupRuns = pgTable(
+	"geo_backup_runs",
+	{
+		id: pk(),
+		kind: text("kind").$type<GeoBackupKind>().notNull(),
+		status: text("status").$type<GeoBackupStatus>().notNull(),
+		startedAt: at("started_at").notNull(),
+		finishedAt: at("finished_at").notNull(),
+		databaseBytes: bigint("database_bytes", { mode: "number" }),
+		objectCount: integer("object_count"),
+		offsiteCopied: boolean("offsite_copied").notNull().default(false),
+		durationSeconds: integer("duration_seconds"),
+		location: text("location"),
+		host: text("host"),
+		message: text("message"),
+		createdAt: createdAt(),
+	},
+	(table) => [
+		index("geo_backup_runs_kind_finished_idx").on(table.kind, table.finishedAt),
+		oneOf("geo_backup_runs_kind_check", table.kind, GEO_BACKUP_KINDS),
+		oneOf("geo_backup_runs_status_check", table.status, GEO_BACKUP_STATUSES),
 	],
 ).enableRLS();

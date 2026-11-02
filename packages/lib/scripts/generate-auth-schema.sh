@@ -48,6 +48,9 @@ trap cleanup EXIT
 
 # The adapter is named rather than resolved from the config so the CLI reads the
 # table definitions without opening a connection.
+# The two-factor plugin is only installed when the GEO workspace is on, but its
+# tables must exist in every deployment so that switching it on needs no migration.
+export GEO_WORKSPACE_ENABLED=1
 export APP_URL="${APP_URL:-http://localhost:3000}"
 export BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET:-schema-generation}"
 export DATABASE_URL="${DATABASE_URL:-postgres://schema:gen@127.0.0.1:5432/gen}"

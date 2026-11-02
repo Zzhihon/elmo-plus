@@ -28,6 +28,7 @@ async function main() {
 		.description("set up local Elmo instance")
 		.option("--dev", "Use local build context (repo only)")
 		.option("--docker-dir <path>", "Path to Docker build context (dev mode)")
+		.option("--geo", "Enable the GEO workspace with its object store and optional ClamAV")
 		.action(async (_opts: object, cmd: Command) => {
 			await withVersionCheck(version, () => runInit(cmd.optsWithGlobals<InitOptions>(), version));
 		});

@@ -246,6 +246,11 @@ export function EmailPasswordLogin({
 				return;
 			}
 
+			if ((result.data as { twoFactorRedirect?: boolean } | null)?.twoFactorRedirect) {
+				window.location.href = `/auth/two-factor?returnTo=${encodeURIComponent(destination)}`;
+				return;
+			}
+
 			window.location.href = destination;
 		} catch (err) {
 			setError(err instanceof CaptchaError ? err.message : "Something went wrong. Please try again.");
