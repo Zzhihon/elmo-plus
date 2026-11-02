@@ -96,7 +96,7 @@ function startFakeModelApi(): Promise<void> {
 					model: `${model}-2026`,
 					choices: [{ message: { content: ANSWER }, finish_reason: "stop" }],
 					usage: { prompt_tokens: 100, completion_tokens: 200 },
-					citations: [{ url: "https://www.example-electric.test/products/kyn28?utm_source=x", title: "产品" }],
+					citations: [{ url: "https://www.example-electric.test/products/xg900?utm_source=x", title: "产品" }],
 				},
 				{ "x-request-id": `trace-${count}` },
 			);

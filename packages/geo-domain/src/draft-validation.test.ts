@@ -6,7 +6,7 @@ const facts: GeoDraftFact[] = [
 	{
 		ref: "F1",
 		assertionId: "a1",
-		entityTitle: "KYN28A-12 高压开关柜",
+		entityTitle: "XG-900A 高压开关柜",
 		claimText: "额定电压 12kV，额定电流 630A",
 		normalizedValue: "额定电压 12kV，额定电流 630A",
 		riskLevel: "HIGH",
@@ -32,7 +32,7 @@ const facts: GeoDraftFact[] = [
 describe("draft fact check", () => {
 	it("accepts numbers, models and standards found in the facts the sentence cites", () => {
 		const result = validateDraft(
-			"KYN28A-12 的额定电压为 12kV，额定电流 630A [F1]。产品执行 GB/T 11022-2020。[F2]",
+			"XG-900A 的额定电压为 12kV，额定电流 630A [F1]。产品执行 GB/T 11022-2020。[F2]",
 			facts,
 		);
 		expect(result.blocking).toBe(false);
@@ -47,10 +47,10 @@ describe("draft fact check", () => {
 	});
 
 	it("blocks a key number no fact supports and a model the facts do not name", () => {
-		const result = validateDraft("产品额定短时耐受电流 31.5kA。另有 XGN15-12 可选 [F1]。", facts);
+		const result = validateDraft("产品额定短时耐受电流 31.5kA。另有 QZ-700B 可选 [F1]。", facts);
 		expect(result.blocking).toBe(true);
 		const unsupported = result.checks.filter((check) => check.status !== "SUPPORTED").map((check) => check.token);
-		expect(unsupported).toEqual(expect.arrayContaining(["31.5kA", "XGN15-12"]));
+		expect(unsupported).toEqual(expect.arrayContaining(["31.5kA", "QZ-700B"]));
 	});
 
 	it("marks an ordinary unsourced claim as pending instead of blocking it", () => {
@@ -65,6 +65,57 @@ describe("draft fact check", () => {
 		expect(result.checks[0]).toMatchObject({ status: "UNCITED", supportingRefs: ["F3"] });
 		expect(result.blocking).toBe(false);
 	});
+
+	it("blocks a high-risk value whose sentence does not cite the fact behind it", () => {
+		const result = validateDraft("该柜型额定电压 12kV。", facts);
+		expect(result.checks[0]).toMatchObject({ token: "12kV", status: "UNCITED", risk: "HIGH", supportingRefs: ["F1"] });
+		expect(result.blocking).toBe(true);
+	});
+
+	it.each([
+		["注册资本伍仟万元。", "5000万元"],
+		["公司拥有三十项专利。", "30项"],
+		["获得两项发明专利。", "2项"],
+		["额定电压十二千伏。", "12kv"],
+		["市场占有率百分之三十。", "30%"],
+		["注册资本3千万元。", "3000万元"],
+		["具备一级资质。", "1级"],
+	])("treats the written-out amount in %s as a high-risk number", (body, norm) => {
+		const result = validateDraft(body, facts);
+		expect(result.blocking).toBe(true);
+		const check = result.checks.find((entry) => entry.kind === "NUMBER");
+		expect(check?.risk).toBe("HIGH");
+		expect(`${check?.token}`.toLowerCase().replace("千伏", "kv")).toBe(norm);
+	});
+
+	it("matches a written-out amount to the digits in the cited fact", () => {
+		const capital: GeoDraftFact = {
+			ref: "F4",
+			assertionId: "a4",
+			entityTitle: "示例电气",
+			claimText: "注册资本 5000万元",
+			normalizedValue: null,
+			riskLevel: "HIGH",
+		};
+		expect(validateDraft("注册资本伍仟万元 [F4]。", [capital]).blocking).toBe(false);
+		expect(validateDraft("注册资本叁仟万元 [F4]。", [capital]).checks[0]).toMatchObject({ status: "MISMATCH" });
+	});
+
+	it.each(["资质有效期至2030年。", "资质有效期至二〇三〇年。", "证书有效期 3 年。"])(
+		"reads a validity period in %s as high risk",
+		(body) => {
+			const result = validateDraft(body, facts);
+			expect(result.checks.find((check) => check.kind === "NUMBER")?.risk).toBe("HIGH");
+			expect(result.blocking).toBe(true);
+		},
+	);
+
+	it.each(["我们是一家一流的公司。", "这一项服务十分周到。", "第一项优势是交付快。", "万元户的故事。"])(
+		"leaves ordinary wording in %s alone",
+		(body) => {
+			expect(validateDraft(body, facts).checks).toEqual([]);
+		},
+	);
 
 	it("refuses a citation to a fact that was never supplied", () => {
 		const result = validateDraft("质保期两年 [F9]。", facts);
