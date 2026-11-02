@@ -4439,6 +4439,828 @@
 						"format": "date-time"
 					}
 				}
+			},
+			"GeoSiteOpWindow": {
+				"type": "object",
+				"required": ["start", "end"],
+				"properties": {
+					"timezone": {
+						"type": "string",
+						"default": "Asia/Shanghai"
+					},
+					"days": {
+						"type": "array",
+						"items": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 7
+						}
+					},
+					"start": {
+						"type": "string",
+						"example": "01:00"
+					},
+					"end": {
+						"type": "string",
+						"example": "06:00"
+					}
+				}
+			},
+			"GeoSiteProfile": {
+				"type": "object",
+				"description": "版本化的站点规则：范围、分页、栏目、字段选择器、附件、高风险字段与告警阈值。",
+				"required": ["id", "version"],
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"version": {
+						"type": "integer",
+						"minimum": 1
+					},
+					"scope": {
+						"type": "object"
+					},
+					"respectNofollow": {
+						"type": "boolean"
+					},
+					"volatile": {
+						"type": "object"
+					},
+					"pagination": {
+						"type": "object"
+					},
+					"defaults": {
+						"type": "object"
+					},
+					"categories": {
+						"type": "array",
+						"items": {
+							"type": "object"
+						}
+					},
+					"assets": {
+						"type": "object"
+					},
+					"highRiskFields": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"qaFields": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"alerts": {
+						"type": "object"
+					}
+				},
+				"additionalProperties": false
+			},
+			"GeoSiteSourceInput": {
+				"type": "object",
+				"required": ["baseUrl", "allowedHosts", "profile"],
+				"properties": {
+					"baseUrl": {
+						"type": "string"
+					},
+					"allowedHosts": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"minItems": 1,
+						"maxItems": 10
+					},
+					"seedUrls": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"keyUrls": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "客户确认的重点网址清单"
+					},
+					"profile": {
+						"$ref": "#/components/schemas/GeoSiteProfile"
+					},
+					"requestsPerSecond": {
+						"type": "number",
+						"maximum": 2,
+						"default": 1
+					},
+					"maxPages": {
+						"type": "integer",
+						"default": 500
+					},
+					"maxAssetBytes": {
+						"type": "integer"
+					},
+					"opWindow": {
+						"oneOf": [
+							{
+								"$ref": "#/components/schemas/GeoSiteOpWindow"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"crawlCron": {
+						"type": ["string", "null"],
+						"default": null,
+						"description": "空值表示默认 0 3 * * *（每 24 小时）"
+					},
+					"userAgentContact": {
+						"type": ["string", "null"]
+					},
+					"authorizationNote": {
+						"type": ["string", "null"]
+					},
+					"enabled": {
+						"type": "boolean",
+						"default": true
+					}
+				}
+			},
+			"GeoSiteSourcePatch": {
+				"type": "object",
+				"additionalProperties": false,
+				"properties": {
+					"baseUrl": {
+						"type": "string"
+					},
+					"allowedHosts": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"seedUrls": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"keyUrls": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"profile": {
+						"$ref": "#/components/schemas/GeoSiteProfile"
+					},
+					"requestsPerSecond": {
+						"type": "number"
+					},
+					"maxPages": {
+						"type": "integer"
+					},
+					"maxAssetBytes": {
+						"type": "integer"
+					},
+					"opWindow": {},
+					"crawlCron": {
+						"type": ["string", "null"]
+					},
+					"userAgentContact": {
+						"type": ["string", "null"]
+					},
+					"authorizationNote": {
+						"type": ["string", "null"]
+					},
+					"enabled": {
+						"type": "boolean"
+					}
+				}
+			},
+			"GeoSiteSource": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "string",
+						"format": "uuid"
+					},
+					"baseUrl": {
+						"type": "string"
+					},
+					"allowedHosts": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"seedUrls": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"keyUrls": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"profile": {
+						"$ref": "#/components/schemas/GeoSiteProfile"
+					},
+					"profileVersion": {
+						"type": "integer"
+					},
+					"categories": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"key": {
+									"type": "string"
+								},
+								"label": {
+									"type": "string"
+								},
+								"keySection": {
+									"type": "boolean"
+								},
+								"entityKind": {
+									"type": ["string", "null"]
+								}
+							}
+						}
+					},
+					"policyVersion": {
+						"type": "string"
+					},
+					"requestsPerSecond": {
+						"type": "number"
+					},
+					"concurrency": {
+						"type": "integer"
+					},
+					"maxPages": {
+						"type": ["integer", "null"]
+					},
+					"maxAssetBytes": {
+						"type": ["integer", "null"]
+					},
+					"opWindow": {},
+					"crawlCron": {
+						"type": ["string", "null"]
+					},
+					"userAgentContact": {
+						"type": ["string", "null"]
+					},
+					"authorizationNote": {
+						"type": ["string", "null"]
+					},
+					"enabled": {
+						"type": "boolean"
+					},
+					"lastSuccessAt": {
+						"type": ["string", "null"],
+						"format": "date-time"
+					},
+					"latestRun": {
+						"oneOf": [
+							{
+								"$ref": "#/components/schemas/GeoCrawlRun"
+							},
+							{
+								"type": "null"
+							}
+						]
+					}
+				}
+			},
+			"GeoSiteMetrics": {
+				"type": "object",
+				"description": "PRD 10.4 采集指标",
+				"properties": {
+					"discoveredUrls": {
+						"type": "integer"
+					},
+					"pagesByStatus": {
+						"type": "object",
+						"additionalProperties": {
+							"type": "integer"
+						}
+					},
+					"suspectedDeadPages": {
+						"type": "integer"
+					},
+					"lastRun": {
+						"type": ["object", "null"]
+					},
+					"parse": {
+						"type": "object",
+						"properties": {
+							"versions": {
+								"type": "integer"
+							},
+							"failed": {
+								"type": "integer"
+							},
+							"failureRate": {
+								"type": ["number", "null"]
+							}
+						}
+					},
+					"approvedEntitiesBySection": {
+						"type": "object",
+						"additionalProperties": {
+							"type": "integer"
+						}
+					},
+					"hosts": {
+						"type": "array",
+						"items": {
+							"type": "object"
+						}
+					},
+					"lastSuccessAt": {
+						"type": ["string", "null"]
+					},
+					"configuredRequestsPerSecond": {
+						"type": "number"
+					},
+					"keyUrls": {
+						"type": "object",
+						"properties": {
+							"total": {
+								"type": "integer"
+							},
+							"covered": {
+								"type": "integer"
+							},
+							"ratio": {
+								"type": ["number", "null"]
+							},
+							"missing": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								}
+							}
+						}
+					}
+				}
+			},
+			"GeoSiteDetail": {
+				"type": "object",
+				"properties": {
+					"source": {
+						"$ref": "#/components/schemas/GeoSiteSource"
+					},
+					"metrics": {
+						"$ref": "#/components/schemas/GeoSiteMetrics"
+					},
+					"profileVersions": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"version": {
+									"type": "integer"
+								},
+								"createdBy": {
+									"type": "string"
+								},
+								"createdAt": {
+									"type": "string"
+								}
+							}
+						}
+					},
+					"alerts": {
+						"type": "array",
+						"items": {
+							"type": "object"
+						}
+					}
+				}
+			},
+			"GeoCrawlRunInput": {
+				"type": "object",
+				"properties": {
+					"mode": {
+						"type": "string",
+						"enum": ["FULL", "INCREMENTAL"],
+						"default": "INCREMENTAL"
+					},
+					"urls": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"maxItems": 500,
+						"description": "只抓取这些网址（须在白名单内），不跟随链接"
+					},
+					"maxPages": {
+						"type": "integer",
+						"minimum": 1,
+						"maximum": 20000
+					}
+				}
+			},
+			"GeoCrawlRunSummary": {
+				"type": "object",
+				"properties": {
+					"total": {
+						"type": "integer"
+					},
+					"queued": {
+						"type": "integer"
+					},
+					"done": {
+						"type": "integer"
+					},
+					"failed": {
+						"type": "integer"
+					},
+					"skipped": {
+						"type": "integer"
+					},
+					"requests": {
+						"type": "integer"
+					},
+					"succeeded": {
+						"type": "integer"
+					},
+					"newVersions": {
+						"type": "integer"
+					},
+					"unchanged": {
+						"type": "integer"
+					},
+					"duplicates": {
+						"type": "integer"
+					},
+					"gone": {
+						"type": "integer"
+					},
+					"status403": {
+						"type": "integer"
+					},
+					"status429": {
+						"type": "integer"
+					},
+					"outcomes": {
+						"type": "object",
+						"additionalProperties": {
+							"type": "integer"
+						}
+					},
+					"p50Ms": {
+						"type": ["integer", "null"]
+					},
+					"p95Ms": {
+						"type": ["integer", "null"]
+					},
+					"successRate": {
+						"type": ["number", "null"]
+					},
+					"unchangedRate": {
+						"type": ["number", "null"]
+					},
+					"sections": {
+						"type": "object",
+						"additionalProperties": {
+							"type": "integer"
+						}
+					}
+				}
+			},
+			"GeoCrawlRun": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "string",
+						"format": "uuid"
+					},
+					"siteSourceId": {
+						"type": "string",
+						"format": "uuid"
+					},
+					"mode": {
+						"type": "string",
+						"enum": ["FULL", "INCREMENTAL"]
+					},
+					"status": {
+						"type": "string",
+						"enum": ["QUEUED", "RUNNING", "PAUSED", "SUCCEEDED", "PARTIAL", "FAILED", "CANCELLED"]
+					},
+					"config": {
+						"type": "object"
+					},
+					"policyVersion": {
+						"type": "string"
+					},
+					"summary": {
+						"oneOf": [
+							{
+								"$ref": "#/components/schemas/GeoCrawlRunSummary"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"meta": {
+						"type": ["object", "null"],
+						"description": "robots.txt 结果、站点地图、范围外链接样例等"
+					},
+					"requestedBy": {
+						"type": "string"
+					},
+					"errorSummary": {
+						"type": ["string", "null"]
+					},
+					"createdAt": {
+						"type": "string"
+					},
+					"startedAt": {
+						"type": ["string", "null"]
+					},
+					"finishedAt": {
+						"type": ["string", "null"]
+					}
+				}
+			},
+			"GeoCrawlRunCreated": {
+				"type": "object",
+				"properties": {
+					"run": {
+						"$ref": "#/components/schemas/GeoCrawlRun"
+					},
+					"created": {
+						"type": "boolean"
+					},
+					"jobId": {
+						"type": ["string", "null"],
+						"description": "pg-boss 作业 id；已有同名作业排队时为 null"
+					}
+				}
+			},
+			"GeoCrawlRunAction": {
+				"type": "object",
+				"properties": {
+					"run": {
+						"$ref": "#/components/schemas/GeoCrawlRun"
+					},
+					"jobId": {
+						"type": ["string", "null"]
+					}
+				}
+			},
+			"GeoCrawlRunDetail": {
+				"type": "object",
+				"properties": {
+					"run": {
+						"$ref": "#/components/schemas/GeoCrawlRun"
+					},
+					"progress": {
+						"$ref": "#/components/schemas/GeoCrawlRunSummary"
+					},
+					"items": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"id": {
+									"type": "string",
+									"format": "uuid"
+								},
+								"url": {
+									"type": "string"
+								},
+								"status": {
+									"type": "string"
+								},
+								"outcome": {
+									"type": ["string", "null"]
+								},
+								"httpStatus": {
+									"type": ["integer", "null"]
+								},
+								"attempts": {
+									"type": "integer"
+								},
+								"detail": {
+									"type": ["string", "null"]
+								},
+								"pageId": {
+									"type": ["string", "null"]
+								}
+							}
+						}
+					}
+				}
+			},
+			"GeoSitePage": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "string",
+						"format": "uuid"
+					},
+					"siteSourceId": {
+						"type": "string",
+						"format": "uuid"
+					},
+					"url": {
+						"type": "string"
+					},
+					"canonicalUrl": {
+						"type": ["string", "null"]
+					},
+					"category": {
+						"type": ["string", "null"]
+					},
+					"status": {
+						"type": "string",
+						"enum": ["ACTIVE", "REDIRECTED", "GONE", "BLOCKED", "ERROR"]
+					},
+					"httpStatus": {
+						"type": ["integer", "null"]
+					},
+					"lastSeenAt": {
+						"type": ["string", "null"]
+					},
+					"lastFetchedAt": {
+						"type": ["string", "null"]
+					},
+					"consecutiveFailures": {
+						"type": "integer"
+					},
+					"latestVersionId": {
+						"type": ["string", "null"]
+					},
+					"title": {
+						"type": ["string", "null"]
+					},
+					"parseStatus": {
+						"type": ["string", "null"]
+					},
+					"parserVersion": {
+						"type": ["string", "null"]
+					},
+					"versionCount": {
+						"type": "integer"
+					}
+				}
+			},
+			"GeoSitePageVersion": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "string",
+						"format": "uuid"
+					},
+					"contentHash": {
+						"type": "string"
+					},
+					"parserVersion": {
+						"type": "string"
+					},
+					"title": {
+						"type": ["string", "null"]
+					},
+					"parseStatus": {
+						"type": "string"
+					},
+					"errorCode": {
+						"type": ["string", "null"]
+					},
+					"fetchedAt": {
+						"type": "string"
+					},
+					"createdAt": {
+						"type": "string"
+					},
+					"parsed": {
+						"type": ["object", "null"]
+					},
+					"snapshotUrl": {
+						"type": "string"
+					}
+				}
+			},
+			"GeoSitePageVersionDetail": {
+				"type": ["object", "null"],
+				"properties": {
+					"version": {
+						"$ref": "#/components/schemas/GeoSitePageVersion"
+					},
+					"parsed": {
+						"type": ["object", "null"],
+						"description": "标题、正文、表格、图片、字段及其定位"
+					},
+					"compareTo": {
+						"oneOf": [
+							{
+								"$ref": "#/components/schemas/GeoSitePageVersion"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"diff": {
+						"type": ["object", "null"],
+						"properties": {
+							"lines": {
+								"type": "array",
+								"items": {
+									"type": "object",
+									"properties": {
+										"op": {
+											"type": "string",
+											"enum": ["same", "added", "removed"]
+										},
+										"text": {
+											"type": "string"
+										}
+									}
+								}
+							},
+							"truncated": {
+								"type": "boolean"
+							}
+						}
+					}
+				}
+			},
+			"GeoSitePageDetail": {
+				"type": "object",
+				"properties": {
+					"page": {
+						"type": "object"
+					},
+					"versions": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/GeoSitePageVersion"
+						}
+					},
+					"entities": {
+						"type": "array",
+						"items": {
+							"type": "object"
+						}
+					},
+					"assertions": {
+						"type": "array",
+						"items": {
+							"type": "object"
+						}
+					},
+					"profileVersions": {
+						"type": "array",
+						"items": {
+							"type": "object"
+						}
+					}
+				}
+			},
+			"GeoReparseInput": {
+				"type": "object",
+				"properties": {
+					"versionId": {
+						"type": ["string", "null"],
+						"format": "uuid",
+						"description": "省略时用最新版本的原始 HTML"
+					},
+					"profileVersion": {
+						"type": ["integer", "null"],
+						"description": "省略时用当前解析配置"
+					}
+				}
+			},
+			"GeoReparseQueued": {
+				"type": "object",
+				"properties": {
+					"jobId": {
+						"type": ["string", "null"]
+					},
+					"pageId": {
+						"type": "string",
+						"format": "uuid"
+					},
+					"versionId": {
+						"type": ["string", "null"]
+					},
+					"profileVersion": {
+						"type": ["integer", "null"]
+					}
+				}
 			}
 		},
 		"responses": {
@@ -9920,6 +10742,1329 @@
 					}
 				}
 			}
+		},
+		"/geo/sites": {
+			"get": {
+				"operationId": "listGeoSites",
+				"summary": "列出授权站点",
+				"tags": ["GEO Site Ingestion"],
+				"x-elmo-scopes": ["read"],
+				"description": "需要 GEO 权限 `site.read`。",
+				"responses": {
+					"200": {
+						"description": "站点列表",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"data": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/GeoSiteSource"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"post": {
+				"operationId": "createGeoSite",
+				"summary": "登记授权站点",
+				"tags": ["GEO Site Ingestion"],
+				"x-elmo-scopes": ["write"],
+				"description": "需要 GEO 权限 `site.manage`。所有网址必须在 allowedHosts 内；任何越界、内网、IP 字面量或危险协议的网址会使整个请求失败（VALIDATION_ERROR）并写入审计。",
+				"responses": {
+					"201": {
+						"description": "已登记",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"data": {
+											"$ref": "#/components/schemas/GeoSiteSource"
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"409": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "Idempotency-Key",
+						"in": "header",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"maxLength": 255
+						},
+						"description": "同 key 同内容回放已保存的 2xx 响应；同 key 不同内容返回 CONFLICT。"
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/GeoSiteSourceInput"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/geo/sites/{siteId}": {
+			"get": {
+				"operationId": "getGeoSite",
+				"summary": "站点详情、采集指标与告警",
+				"tags": ["GEO Site Ingestion"],
+				"x-elmo-scopes": ["read"],
+				"description": "需要 GEO 权限 `site.read`。",
+				"responses": {
+					"200": {
+						"description": "站点详情",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"data": {
+											"$ref": "#/components/schemas/GeoSiteDetail"
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "siteId",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					}
+				]
+			},
+			"patch": {
+				"operationId": "updateGeoSite",
+				"summary": "修改站点配置、暂停或恢复",
+				"tags": ["GEO Site Ingestion"],
+				"x-elmo-scopes": ["write"],
+				"description": "需要 GEO 权限 `site.manage`。解析配置有改动时 profile.version 必须提升；enabled=false 即暂停站点。",
+				"responses": {
+					"200": {
+						"description": "已更新",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"data": {
+											"$ref": "#/components/schemas/GeoSiteSource"
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "siteId",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					},
+					{
+						"name": "Idempotency-Key",
+						"in": "header",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"maxLength": 255
+						},
+						"description": "同 key 同内容回放已保存的 2xx 响应；同 key 不同内容返回 CONFLICT。"
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/GeoSiteSourcePatch"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/geo/sites/{siteId}/crawl-runs": {
+			"get": {
+				"operationId": "listGeoCrawlRuns",
+				"summary": "列出采集任务",
+				"tags": ["GEO Site Ingestion"],
+				"x-elmo-scopes": ["read"],
+				"description": "需要 GEO 权限 `site.read`。",
+				"responses": {
+					"200": {
+						"description": "采集任务",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"data": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/GeoCrawlRun"
+											}
+										},
+										"pagination": {
+											"$ref": "#/components/schemas/GeoPagination"
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "siteId",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					},
+					{
+						"name": "page",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 100
+						}
+					}
+				]
+			},
+			"post": {
+				"operationId": "createGeoCrawlRun",
+				"summary": "创建全量或增量采集任务",
+				"tags": ["GEO Site Ingestion"],
+				"x-elmo-scopes": ["write"],
+				"description": "需要 GEO 权限 `site.crawl`。只建任务、不同步抓取。同一站点同时只有一个进行中的任务；组织并发与站点每日次数受配额限制（RATE_LIMITED）。",
+				"responses": {
+					"202": {
+						"description": "任务已创建并入队（返回 job id）",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"data": {
+											"$ref": "#/components/schemas/GeoCrawlRunCreated"
+										}
+									}
+								}
+							}
+						}
+					},
+					"200": {
+						"description": "该站点已有进行中的任务或幂等键命中，返回已有任务",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"data": {
+											"$ref": "#/components/schemas/GeoCrawlRunCreated"
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"409": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"429": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"503": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "siteId",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					},
+					{
+						"name": "Idempotency-Key",
+						"in": "header",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"maxLength": 255
+						},
+						"description": "同 key 同内容回放已保存的 2xx 响应；同 key 不同内容返回 CONFLICT。"
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/GeoCrawlRunInput"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/geo/sites/{siteId}/crawl-runs/{runId}": {
+			"get": {
+				"operationId": "getGeoCrawlRun",
+				"summary": "采集任务进度与统计",
+				"tags": ["GEO Site Ingestion"],
+				"x-elmo-scopes": ["read"],
+				"description": "需要 GEO 权限 `site.read`。统计成功、未变化、新版本、重复、跳过、失败和队列进度。",
+				"responses": {
+					"200": {
+						"description": "任务详情",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"data": {
+											"$ref": "#/components/schemas/GeoCrawlRunDetail"
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "siteId",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					},
+					{
+						"name": "runId",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					}
+				]
+			}
+		},
+		"/geo/sites/{siteId}/crawl-runs/{runId}/pause": {
+			"post": {
+				"operationId": "pauseGeoCrawlRun",
+				"summary": "暂停采集任务",
+				"tags": ["GEO Site Ingestion"],
+				"x-elmo-scopes": ["write"],
+				"description": "需要 GEO 权限 `site.crawl`。",
+				"responses": {
+					"200": {
+						"description": "已暂停",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"data": {
+											"$ref": "#/components/schemas/GeoCrawlRunAction"
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"409": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "siteId",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					},
+					{
+						"name": "runId",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					},
+					{
+						"name": "Idempotency-Key",
+						"in": "header",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"maxLength": 255
+						},
+						"description": "同 key 同内容回放已保存的 2xx 响应；同 key 不同内容返回 CONFLICT。"
+					}
+				]
+			}
+		},
+		"/geo/sites/{siteId}/crawl-runs/{runId}/resume": {
+			"post": {
+				"operationId": "resumeGeoCrawlRun",
+				"summary": "恢复采集任务",
+				"tags": ["GEO Site Ingestion"],
+				"x-elmo-scopes": ["write"],
+				"description": "需要 GEO 权限 `site.crawl`。",
+				"responses": {
+					"200": {
+						"description": "已恢复并重新入队",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"data": {
+											"$ref": "#/components/schemas/GeoCrawlRunAction"
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"409": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"503": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "siteId",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					},
+					{
+						"name": "runId",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					},
+					{
+						"name": "Idempotency-Key",
+						"in": "header",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"maxLength": 255
+						},
+						"description": "同 key 同内容回放已保存的 2xx 响应；同 key 不同内容返回 CONFLICT。"
+					}
+				]
+			}
+		},
+		"/geo/site-pages": {
+			"get": {
+				"operationId": "listGeoSitePages",
+				"summary": "按栏目、网址、异常、审核状态与时间过滤页面",
+				"tags": ["GEO Site Ingestion"],
+				"x-elmo-scopes": ["read"],
+				"description": "需要 GEO 权限 `site.read`。",
+				"responses": {
+					"200": {
+						"description": "页面列表",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"data": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/GeoSitePage"
+											}
+										},
+										"pagination": {
+											"$ref": "#/components/schemas/GeoPagination"
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "siteId",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					},
+					{
+						"name": "category",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "栏目键；uncategorized 表示未分类"
+					},
+					{
+						"name": "status",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": ["ACTIVE", "REDIRECTED", "GONE", "BLOCKED", "ERROR"]
+						}
+					},
+					{
+						"name": "parseStatus",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": ["PENDING", "PARSED", "FAILED", "SKIPPED"]
+						}
+					},
+					{
+						"name": "reviewStatus",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": ["PENDING_REVIEW", "APPROVED", "NONE"]
+						}
+					},
+					{
+						"name": "hasError",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "boolean"
+						}
+					},
+					{
+						"name": "q",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"maxLength": 200
+						},
+						"description": "网址片段"
+					},
+					{
+						"name": "seenAfter",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"format": "date-time"
+						}
+					},
+					{
+						"name": "seenBefore",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"format": "date-time"
+						}
+					},
+					{
+						"name": "page",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 100
+						}
+					}
+				]
+			}
+		},
+		"/geo/site-pages/{pageId}": {
+			"get": {
+				"operationId": "getGeoSitePage",
+				"summary": "页面详情、版本、实体与事实候选",
+				"tags": ["GEO Site Ingestion"],
+				"x-elmo-scopes": ["read"],
+				"description": "需要 GEO 权限 `site.read`。",
+				"responses": {
+					"200": {
+						"description": "页面详情",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"data": {
+											"$ref": "#/components/schemas/GeoSitePageDetail"
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "pageId",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					}
+				]
+			}
+		},
+		"/geo/site-pages/{pageId}/versions": {
+			"get": {
+				"operationId": "listGeoSitePageVersions",
+				"summary": "页面版本、解析结果与文本差异",
+				"tags": ["GEO Site Ingestion"],
+				"x-elmo-scopes": ["read"],
+				"description": "需要 GEO 权限 `site.read`。",
+				"responses": {
+					"200": {
+						"description": "版本列表；selected 为选中版本的完整解析与和上一个不同内容版本的行级差异",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"data": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/GeoSitePageVersion"
+											}
+										},
+										"selected": {
+											"$ref": "#/components/schemas/GeoSitePageVersionDetail"
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "pageId",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					},
+					{
+						"name": "versionId",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					},
+					{
+						"name": "compareTo",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					}
+				]
+			}
+		},
+		"/geo/site-pages/{pageId}/versions/{versionId}/snapshot": {
+			"get": {
+				"operationId": "downloadGeoSiteSnapshot",
+				"summary": "下载原始快照",
+				"tags": ["GEO Site Ingestion"],
+				"x-elmo-scopes": ["read"],
+				"description": "需要 GEO 权限 `site.read_snapshot`。每次下载写审计。不暴露对象存储地址或密钥。",
+				"responses": {
+					"200": {
+						"description": "原始字节，以附件形式返回（text/plain 或 application/octet-stream，带 sandbox CSP），不在本域渲染。",
+						"content": {
+							"text/plain": {
+								"schema": {
+									"type": "string"
+								}
+							},
+							"application/octet-stream": {
+								"schema": {
+									"type": "string",
+									"format": "binary"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "pageId",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					},
+					{
+						"name": "versionId",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					}
+				]
+			}
+		},
+		"/geo/site-pages/{pageId}/reparse": {
+			"post": {
+				"operationId": "reparseGeoSitePage",
+				"summary": "选定解析配置版本重新解析，不重新下载",
+				"tags": ["GEO Site Ingestion"],
+				"x-elmo-scopes": ["write"],
+				"description": "需要 GEO 权限 `site.reparse`。以已存原始 HTML 为输入；同一 HTML 与解析版本的组合只会产生一个版本。",
+				"responses": {
+					"202": {
+						"description": "已入队",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"data": {
+											"$ref": "#/components/schemas/GeoReparseQueued"
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"403": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					},
+					"503": {
+						"description": "GEO 错误信封",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GeoError"
+								}
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "pageId",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid"
+						}
+					},
+					{
+						"name": "Idempotency-Key",
+						"in": "header",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"maxLength": 255
+						},
+						"description": "同 key 同内容回放已保存的 2xx 响应；同 key 不同内容返回 CONFLICT。"
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/GeoReparseInput"
+							}
+						}
+					}
+				}
+			}
 		}
 	},
 	"tags": [
@@ -9985,6 +12130,10 @@
 		},
 		{
 			"name": "GEO Evidence",
+			"description": "GEO workspace (enabled with GEO_WORKSPACE_ENABLED)."
+		},
+		{
+			"name": "GEO Site Ingestion",
 			"description": "GEO workspace (enabled with GEO_WORKSPACE_ENABLED)."
 		}
 	]
