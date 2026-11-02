@@ -47,6 +47,7 @@ export const createReportInputSchema = z
 		promptSetId: z.guid().nullable().optional(),
 		notes: narrative.optional(),
 		nextPlan: z.array(narrative).max(10).optional(),
+		crossModeSummary: z.boolean().optional(),
 	})
 	.refine((input) => Boolean(input.month) !== Boolean(input.from && input.to), {
 		message: "请指定月份，或同时指定开始与结束日期",
@@ -70,6 +71,7 @@ export interface ReportSummary {
 	createdAt: string;
 	hasPdf: boolean;
 	hasCsv: boolean;
+	pdfUnavailableReason: string | null;
 }
 
 function summarize(row: ReportRow): ReportSummary {
@@ -91,6 +93,7 @@ function summarize(row: ReportRow): ReportSummary {
 		createdAt: row.createdAt.toISOString(),
 		hasPdf: row.pdfObjectKey !== null,
 		hasCsv: row.csvObjectKey !== null,
+		pdfUnavailableReason: row.pdfUnavailableReason,
 	};
 }
 
@@ -207,6 +210,7 @@ export async function createReport(principal: GeoPrincipal, input: CreateReportI
 		promptSetId: input.promptSetId ?? null,
 		notes: input.notes || null,
 		nextPlan: nextPlan.length > 0 ? nextPlan : null,
+		crossModeSummary: input.crossModeSummary ?? false,
 	};
 	const row = await db.transaction(async (tx) => {
 		const [created] = await tx
@@ -241,7 +245,7 @@ export async function retryReport(principal: GeoPrincipal, reportId: string) {
 	const row = await db.transaction(async (tx) => {
 		const [updated] = await tx
 			.update(geoGeneratedReports)
-			.set({ status: "QUEUED", errorSummary: null })
+			.set({ status: "QUEUED", errorSummary: null, claimToken: null })
 			.where(
 				and(
 					eq(geoGeneratedReports.id, reportId),
@@ -286,6 +290,7 @@ export async function reviewReport(
 		if (!row) throw new GeoError("NOT_FOUND", "报告不存在");
 		if (row.status !== "SUCCEEDED") throw new GeoError("CONFLICT", "报告尚未生成成功，不能审核");
 		if (row.generatedBy === principal.actorId) throw new GeoError("FORBIDDEN", "不能审核自己发起的报告");
+		if (row.reviewStatus !== "PENDING") throw new GeoError("CONFLICT", "该报告已经审核过，不能重复审核");
 		const reviewStatus: GeoReportReviewStatus = input.decision === "APPROVE" ? "APPROVED" : "REJECTED";
 		const [updated] = await tx
 			.update(geoGeneratedReports)
@@ -312,6 +317,9 @@ export type ReportFormat = z.infer<typeof reportFormatSchema>;
 export async function exportReport(principal: GeoPrincipal, reportId: string, format: ReportFormat) {
 	assertGeoPermission(principal, "report.read");
 	const row = await loadReport(principal.organizationId, reportId);
+	if (format === "pdf" && row.pdfUnavailableReason) {
+		throw new GeoError("CONFLICT", `该报告没有 PDF：${row.pdfUnavailableReason}`);
+	}
 	const key = format === "pdf" ? row.pdfObjectKey : row.csvObjectKey;
 	if (row.status !== "SUCCEEDED" || !key) throw new GeoError("CONFLICT", "报告尚未生成成功，暂无可下载的文件");
 	const object = await getObjectStore().get(key);

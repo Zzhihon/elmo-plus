@@ -7,8 +7,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { credentialRefFor, type FetchLike, targetSecretName } from "@workspace/geo-cn-providers";
 import { GEO_EVALUATE_OBSERVATION_QUEUE, GEO_QUEUE, samplingRunIdempotencyKey } from "@workspace/geo-domain";
+import { getObjectStore } from "@workspace/geo-evidence";
 import { applyGeoBootstrapSites } from "@workspace/geo-site-ingestion/store";
 import { db } from "@workspace/lib/db/db";
+import type { DbConnection } from "@workspace/lib/db/db-connection";
 import {
 	geoBrandEntities,
 	geoBuyerRoles,
@@ -37,6 +39,7 @@ import { generateReport, reportTick } from "./reports-generate";
 import { applyGeoBootstrapTargets } from "./sampling-bootstrap";
 import { processCaptureJob } from "./sampling-capture";
 import { dispatchBatch, sweepSampling } from "./sampling-dispatch";
+import { recountBatch } from "./sampling-store";
 
 const sent = vi.hoisted(() => {
 	process.env.ELMO_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
@@ -614,17 +617,54 @@ describe("sampling a frozen set through a model API", () => {
 			return report;
 		}
 
-		it("fails plainly, with no files, when no Chinese font is available", async () => {
+		it("still stores the snapshot and CSV when no Chinese font is available, and says why there is no PDF", async () => {
 			vi.stubEnv("GEO_PDF_FONT_PATH", path.join(objectRoot, "missing-font.ttc"));
 			try {
 				const report = await queueReport();
-				expect(await generateReport(organizationId, report.id)).toEqual({ status: "FAILED", reason: "font" });
+				expect(await generateReport(organizationId, report.id)).toEqual({
+					status: "SUCCEEDED",
+					reason: "pdf-unavailable",
+				});
 				const [row] = await db.select().from(geoGeneratedReports).where(eq(geoGeneratedReports.id, report.id));
-				expect(row).toMatchObject({ status: "FAILED", pdfObjectKey: null, csvObjectKey: null, snapshot: null });
-				expect(row?.errorSummary).toMatch(/GEO_PDF_FONT_PATH/);
+				expect(row).toMatchObject({ status: "SUCCEEDED", pdfObjectKey: null });
+				expect(row?.pdfUnavailableReason).toMatch(/GEO_PDF_FONT_PATH/);
+				expect(row?.snapshot).not.toBeNull();
+				const csv = await readFile(path.join(objectRoot, row?.csvObjectKey as string), "utf8");
+				expect(csv).toContain("DeepSeek");
 			} finally {
 				vi.unstubAllEnvs();
 			}
+		});
+
+		it("does not let a worker that lost its claim overwrite the report that replaced it", async () => {
+			vi.stubEnv("GEO_PDF_FONT_PATH", path.join(objectRoot, "missing-font.ttc"));
+			const store = getObjectStore();
+			const put = store.put.bind(store);
+			const report = await queueReport();
+			const spy = vi.spyOn(store, "put").mockImplementationOnce(async (key, body, options) => {
+				await db
+					.update(geoGeneratedReports)
+					.set({ status: "SUCCEEDED", reviewStatus: "APPROVED", claimToken: null })
+					.where(eq(geoGeneratedReports.id, report.id));
+				return put(key, body, options);
+			});
+			try {
+				expect(await generateReport(organizationId, report.id)).toEqual({ status: "SKIPPED", reason: "claim-lost" });
+				const [row] = await db.select().from(geoGeneratedReports).where(eq(geoGeneratedReports.id, report.id));
+				expect(row).toMatchObject({ status: "SUCCEEDED", reviewStatus: "APPROVED", csvObjectKey: null, snapshot: null });
+			} finally {
+				spy.mockRestore();
+				vi.unstubAllEnvs();
+			}
+		});
+
+		it("does not rebuild a report still held by a live claim when its job is delivered again", async () => {
+			const report = await queueReport();
+			await db
+				.update(geoGeneratedReports)
+				.set({ status: "RUNNING", claimToken: "held-elsewhere" })
+				.where(eq(geoGeneratedReports.id, report.id));
+			expect(await generateReport(organizationId, report.id)).toEqual({ status: "SKIPPED", reason: "not-pending" });
 		});
 
 		it.runIf(localFont)("stores a snapshot, CSV and PDF built from the evaluated answers", async () => {
@@ -650,5 +690,110 @@ describe("sampling a frozen set through a model API", () => {
 				vi.unstubAllEnvs();
 			}
 		});
+	});
+});
+
+describe("batch status under concurrent completion", () => {
+	let organizationId: string;
+	let promptSetId: string;
+	let targetId: string;
+
+	beforeAll(async () => {
+		organizationId = await createOrganization();
+		const [target] = await db
+			.insert(geoSamplingTargets)
+			.values({
+				organizationId,
+				platform: "deepseek",
+				surfaceMode: "MODEL_API",
+				provider: "deepseek",
+				modelId: "fixture",
+				enabled: true,
+				verificationStatus: "PASSED",
+				createdBy: "user-admin",
+			})
+			.returning();
+		targetId = target.id;
+		const [set] = await db
+			.insert(geoPromptSets)
+			.values({ organizationId, name: "并发", status: "FROZEN", frozenAt: new Date(), createdBy: "user-op" })
+			.returning();
+		promptSetId = set.id;
+	});
+
+	async function planBatchOf(count: number): Promise<{ batch: string; runs: string[] }> {
+		const [prompt] = await db
+			.insert(geoPrompts)
+			.values({ organizationId, question: `高低压开关柜怎么选 ${randomUUID()}`, createdBy: "user-op" })
+			.returning();
+		const [batch] = await db
+			.insert(geoSamplingBatches)
+			.values({
+				organizationId,
+				promptSetId,
+				status: "RUNNING",
+				repeatCount: count,
+				plannedCount: count,
+				requestedBy: "user-op",
+				idempotencyKey: randomUUID(),
+			})
+			.returning();
+		const runs = await db
+			.insert(geoSamplingRuns)
+			.values(
+				Array.from({ length: count }, (_, repeatIndex) => ({
+					organizationId,
+					batchId: batch.id,
+					promptId: prompt.id,
+					targetId,
+					repeatIndex,
+					idempotencyKey: randomUUID(),
+				})),
+			)
+			.returning({ id: geoSamplingRuns.id });
+		return { batch: batch.id, runs: runs.map((run) => run.id) };
+	}
+
+	it("closes a batch whose last runs finish at the same moment, whichever commits first", async () => {
+		const { batch, runs } = await planBatchOf(2);
+		const [first = "", second = ""] = runs;
+		const finish = (tx: DbConnection, runId: string) =>
+			tx.update(geoSamplingRuns).set({ status: "VALID" }).where(eq(geoSamplingRuns.id, runId));
+
+		let releaseFirst: () => void = () => {};
+		const firstMayCommit = new Promise<void>((resolve) => {
+			releaseFirst = resolve;
+		});
+		let firstCounted: () => void = () => {};
+		const firstHasCounted = new Promise<void>((resolve) => {
+			firstCounted = resolve;
+		});
+		const firstTx = db.transaction(async (tx) => {
+			await finish(tx, first);
+			await recountBatch(tx, batch);
+			firstCounted();
+			await firstMayCommit;
+		});
+		await firstHasCounted;
+		const secondTx = db.transaction(async (tx) => {
+			await finish(tx, second);
+			await recountBatch(tx, batch);
+		});
+		await new Promise((resolve) => setTimeout(resolve, 100));
+		releaseFirst();
+		await Promise.all([firstTx, secondTx]);
+
+		const [row] = await db.select().from(geoSamplingBatches).where(eq(geoSamplingBatches.id, batch));
+		expect(row).toMatchObject({ status: "COMPLETED", validCount: 2 });
+		expect(row?.finishedAt).not.toBeNull();
+	});
+
+	it("settles a batch left marked running with no run still to finish", async () => {
+		const { batch, runs } = await planBatchOf(1);
+		await db.update(geoSamplingRuns).set({ status: "VALID" }).where(eq(geoSamplingRuns.id, runs[0] ?? ""));
+		const later = new Date(Date.now() + 3_600_000);
+		await sweepSampling(later);
+		const [row] = await db.select().from(geoSamplingBatches).where(eq(geoSamplingBatches.id, batch));
+		expect(row).toMatchObject({ status: "COMPLETED", validCount: 1 });
 	});
 });

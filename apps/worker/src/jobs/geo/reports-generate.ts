@@ -1,6 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { GEO_QUEUE, geoSystemPrincipal } from "@workspace/geo-domain";
 import { geoObjectKey, getObjectStore } from "@workspace/geo-evidence";
-import { previousChinaMonth, type ReportFilters, reportCsv } from "@workspace/geo-reports";
+import { previousChinaMonth, type ReportFilters, type ReportSnapshot, reportCsv } from "@workspace/geo-reports";
 import { GeoPdfFontError, renderReportPdf, resolveCjkFont } from "@workspace/geo-reports/pdf";
 import { assembleReportSnapshot, defaultPromptSet } from "@workspace/geo-reports/queries";
 import { db } from "@workspace/lib/db/db";
@@ -16,39 +17,60 @@ export interface ReportJobData {
 
 export type ReportOutcome = { status: "SUCCEEDED" | "FAILED" | "SKIPPED"; reason?: string };
 
-async function markFailed(reportId: string, summary: string) {
+/** The claim token keeps a worker that was given up on from overwriting whoever took over. */
+function heldBy(reportId: string, claimToken: string) {
+	return and(
+		eq(geoGeneratedReports.id, reportId),
+		eq(geoGeneratedReports.status, "RUNNING"),
+		eq(geoGeneratedReports.claimToken, claimToken),
+	);
+}
+
+async function markFailed(reportId: string, claimToken: string, summary: string) {
 	await db
 		.update(geoGeneratedReports)
 		.set({ status: "FAILED", errorSummary: summary.slice(0, 500) })
-		.where(eq(geoGeneratedReports.id, reportId));
+		.where(heldBy(reportId, claimToken));
+}
+
+/** A missing or unusable Chinese font costs only the PDF: an unreadable one is never produced. */
+async function renderPdf(snapshot: ReportSnapshot): Promise<{ pdf: Uint8Array } | { unavailable: string }> {
+	try {
+		return { pdf: await renderReportPdf(snapshot, resolveCjkFont(), { baseUrl: process.env.APP_URL }) };
+	} catch (error) {
+		if (error instanceof GeoPdfFontError) return { unavailable: error.message.slice(0, 500) };
+		throw error;
+	}
+}
+
+async function removeObjects(keys: readonly string[]): Promise<void> {
+	const store = getObjectStore();
+	for (const key of keys) {
+		await store.delete(key).catch((error: unknown) => {
+			console.warn(`[geo-reports] could not remove ${key}: ${error instanceof Error ? error.name : "error"}`);
+		});
+	}
 }
 
 /**
- * Builds the snapshot, then the CSV and PDF from it, and stores all three. The font is
- * checked first: a report without a usable Chinese font fails outright instead of
- * producing a PDF full of empty boxes.
+ * Builds the snapshot, then the CSV and PDF from it, and stores them. Files go under the
+ * claim, so a worker that lost its claim can neither change the stored report nor
+ * overwrite the files of the one that replaced it.
  */
 export async function generateReport(organizationId: string, reportId: string): Promise<ReportOutcome> {
+	const claimToken = randomUUID();
 	const [claimed] = await db
 		.update(geoGeneratedReports)
-		.set({ status: "RUNNING", errorSummary: null })
+		.set({ status: "RUNNING", errorSummary: null, claimToken })
 		.where(
 			and(
 				eq(geoGeneratedReports.id, reportId),
 				eq(geoGeneratedReports.organizationId, organizationId),
-				inArray(geoGeneratedReports.status, ["QUEUED", "RUNNING", "FAILED"]),
+				inArray(geoGeneratedReports.status, ["QUEUED", "FAILED"]),
 			),
 		)
 		.returning();
 	if (!claimed) return { status: "SKIPPED", reason: "not-pending" };
-
-	let font: ReturnType<typeof resolveCjkFont>;
-	try {
-		font = resolveCjkFont();
-	} catch (error) {
-		await markFailed(reportId, error instanceof Error ? error.message : "缺少中文字体");
-		return { status: "FAILED", reason: "font" };
-	}
 
 	try {
 		const filters = claimed.filters as ReportFilters;
@@ -61,15 +83,20 @@ export async function generateReport(organizationId: string, reportId: string): 
 			promptSetId: filters.promptSetId,
 			notes: filters.notes,
 			nextPlan: filters.nextPlan,
+			crossModeSummary: filters.crossModeSummary,
 		});
-		const pdf = await renderReportPdf(snapshot, font, { baseUrl: process.env.APP_URL });
+		const rendered = await renderPdf(snapshot);
 		const store = getObjectStore();
-		const pdfKey = geoObjectKey(organizationId, "reports", reportId, "report.pdf");
-		const csvKey = geoObjectKey(organizationId, "reports", reportId, "report.csv");
-		await store.put(pdfKey, pdf, { contentType: "application/pdf" });
+		const csvKey = geoObjectKey(organizationId, "reports", reportId, claimToken, "report.csv");
 		await store.put(csvKey, reportCsv(snapshot), { contentType: "text/csv; charset=utf-8" });
-		await db.transaction(async (tx) => {
-			await tx
+		let pdfKey: string | null = null;
+		if ("pdf" in rendered) {
+			pdfKey = geoObjectKey(organizationId, "reports", reportId, claimToken, "report.pdf");
+			await store.put(pdfKey, rendered.pdf, { contentType: "application/pdf" });
+		}
+		const pdfUnavailableReason = "unavailable" in rendered ? rendered.unavailable : null;
+		const stored = await db.transaction(async (tx) => {
+			const [updated] = await tx
 				.update(geoGeneratedReports)
 				.set({
 					status: "SUCCEEDED",
@@ -77,24 +104,32 @@ export async function generateReport(organizationId: string, reportId: string): 
 					metricVersion: snapshot.metricVersion,
 					pdfObjectKey: pdfKey,
 					csvObjectKey: csvKey,
+					pdfUnavailableReason,
 					errorSummary: null,
 				})
-				.where(eq(geoGeneratedReports.id, reportId));
+				.where(heldBy(reportId, claimToken))
+				.returning({ id: geoGeneratedReports.id });
+			if (!updated) return false;
 			await writeGeoAudit(tx, {
 				principal: geoSystemPrincipal(organizationId, "reports", `report:${reportId}`),
 				action: "report.generated",
 				entityType: "report",
 				entityId: reportId,
-				after: { metricVersion: snapshot.metricVersion, evaluations: snapshot.evaluationRefs.length },
+				after: {
+					metricVersion: snapshot.metricVersion,
+					evaluations: snapshot.evaluationRefs.length,
+					pdfUnavailableReason,
+				},
 			});
+			return true;
 		});
-		return { status: "SUCCEEDED" };
-	} catch (error) {
-		if (error instanceof GeoPdfFontError) {
-			await markFailed(reportId, error.message);
-			return { status: "FAILED", reason: "font" };
+		if (!stored) {
+			await removeObjects(pdfKey ? [csvKey, pdfKey] : [csvKey]);
+			return { status: "SKIPPED", reason: "claim-lost" };
 		}
-		await markFailed(reportId, "报告生成失败，请稍后重试或联系管理员");
+		return pdfUnavailableReason ? { status: "SUCCEEDED", reason: "pdf-unavailable" } : { status: "SUCCEEDED" };
+	} catch (error) {
+		await markFailed(reportId, claimToken, "报告生成失败，请稍后重试或联系管理员");
 		throw error;
 	}
 }
@@ -168,7 +203,11 @@ export async function sendReportJob(organizationId: string, reportId: string): P
 
 async function requeueStalled(now: Date): Promise<number> {
 	const stalled = await db
-		.select({ id: geoGeneratedReports.id, organizationId: geoGeneratedReports.organizationId })
+		.select({
+			id: geoGeneratedReports.id,
+			organizationId: geoGeneratedReports.organizationId,
+			updatedAt: geoGeneratedReports.updatedAt,
+		})
 		.from(geoGeneratedReports)
 		.where(
 			sql`(${geoGeneratedReports.status} = 'QUEUED' and ${geoGeneratedReports.updatedAt} < ${new Date(now.getTime() - QUEUED_STALE_MS)})
@@ -176,8 +215,18 @@ async function requeueStalled(now: Date): Promise<number> {
 		)
 		.limit(100);
 	for (const report of stalled) {
-		await db.update(geoGeneratedReports).set({ status: "QUEUED" }).where(eq(geoGeneratedReports.id, report.id));
-		await sendReportJob(report.organizationId, report.id);
+		const [requeued] = await db
+			.update(geoGeneratedReports)
+			.set({ status: "QUEUED", claimToken: null })
+			.where(
+				and(
+					eq(geoGeneratedReports.id, report.id),
+					eq(geoGeneratedReports.updatedAt, report.updatedAt),
+					inArray(geoGeneratedReports.status, ["QUEUED", "RUNNING"]),
+				),
+			)
+			.returning({ id: geoGeneratedReports.id });
+		if (requeued) await sendReportJob(report.organizationId, report.id);
 	}
 	return stalled.length;
 }

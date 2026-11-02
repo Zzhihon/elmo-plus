@@ -8,6 +8,7 @@ import {
 } from "@workspace/geo-domain";
 import { Alert, AlertDescription } from "@workspace/ui/components/alert";
 import { Button } from "@workspace/ui/components/button";
+import { Checkbox } from "@workspace/ui/components/checkbox";
 import {
 	Dialog,
 	DialogContent,
@@ -82,6 +83,7 @@ export function CreateReportDialog({ onClose }: { onClose: () => void }) {
 	const [promptSetId, setPromptSetId] = useState<string | null>(null);
 	const [notes, setNotes] = useState("");
 	const [nextPlan, setNextPlan] = useState("");
+	const [crossModeSummary, setCrossModeSummary] = useState(false);
 	const sets = useQuery({
 		queryKey: [...insightKeys.all(organization.id), "prompt-sets"],
 		queryFn: () => listSampledPromptSetsFn({ data: { organizationId: organization.id } }),
@@ -99,6 +101,7 @@ export function CreateReportDialog({ onClose }: { onClose: () => void }) {
 							.split("\n")
 							.map((line) => line.trim())
 							.filter(Boolean),
+						crossModeSummary,
 					},
 				},
 			}),
@@ -170,6 +173,14 @@ export function CreateReportDialog({ onClose }: { onClose: () => void }) {
 							onChange={(event) => setNextPlan(event.target.value)}
 						/>
 					</div>
+					<label className="flex items-start gap-2 text-sm" htmlFor="report-cross-mode">
+						<Checkbox
+							id="report-cross-mode"
+							checked={crossModeSummary}
+							onCheckedChange={(checked) => setCrossModeSummary(checked === true)}
+						/>
+						<span>附加跨采样方式汇总（默认不汇总；选中后会在报告中单独标注，它混合了不同口径）</span>
+					</label>
 					<p className="text-xs text-muted-foreground">{NARRATIVE_HINT}</p>
 					{create.error && (
 						<Alert variant="destructive">
