@@ -1,14 +1,39 @@
 import { describe, expect, it } from "vitest";
-import { backoffMs, classifyStatus, minIntervalMs } from "./crawl-policy";
+import { backoffMs, classifyStatus, decideVersion, minIntervalMs } from "./crawl-policy";
 import { accuracyByField, accuracyOf, drawSample, keyUrlCoverage, sampleSizeFor } from "./qa";
 import { isWithinWindow, lastCronFireBetween } from "./schedule";
 import { checkSourceUrls } from "./source-config";
+
+describe("deciding what a fetch means for a page's versions", () => {
+	const fetched = {
+		contentHash: "a",
+		currentHashOfPage: "b",
+		hasVersionWithContent: false,
+		otherPageHasContent: false,
+	};
+
+	it("mints a version only for content neither this page nor another has", () => {
+		expect(decideVersion(fetched)).toBe("NEW_VERSION");
+		expect(decideVersion({ ...fetched, currentHashOfPage: "a", hasVersionWithContent: true })).toBe("UNCHANGED");
+		expect(decideVersion({ ...fetched, otherPageHasContent: true })).toBe("DUPLICATE");
+	});
+
+	it("treats content changing back as a return to its own version, even if another page now has it too", () => {
+		expect(decideVersion({ ...fetched, hasVersionWithContent: true })).toBe("REVERTED");
+		expect(decideVersion({ ...fetched, hasVersionWithContent: true, otherPageHasContent: true })).toBe("REVERTED");
+	});
+});
 
 describe("crawl politeness", () => {
 	it("never goes faster than configured, nor past two requests a second, and honours crawl-delay", () => {
 		expect(minIntervalMs(1, null)).toBe(1000);
 		expect(minIntervalMs(50, null)).toBe(500);
 		expect(minIntervalMs(1, 5)).toBe(5000);
+	});
+
+	it("honours a crawl-delay only up to a bound", () => {
+		expect(minIntervalMs(1, 300)).toBe(300_000);
+		expect(minIntervalMs(1, 86_400)).toBe(300_000);
 	});
 
 	it("backs off exponentially within a cap and respects a longer Retry-After", () => {

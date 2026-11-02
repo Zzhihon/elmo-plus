@@ -27,6 +27,9 @@ describe("isPublicAddress", () => {
 		"::ffff:7f00:1",
 		"::ffff:a9fe:a9fe",
 		"64:ff9b::a9fe:a9fe",
+		"64:ff9b:1::a00:1",
+		"::ffff:0:a00:1",
+		"::ffff:0:808:808",
 		"2002:7f00:1::",
 		"not-an-ip",
 	])("refuses %s", (address) => {
@@ -89,6 +92,26 @@ describe("robots policy", () => {
 		expect(robots.sitemaps).toEqual(["http://www.example-electric.test/s.xml"]);
 	});
 
+	it("matches wildcards anywhere and a trailing $ only at the end, without regex backtracking", () => {
+		const robots = parseRobots(
+			"User-agent: *\nDisallow: /a*b*c\nDisallow: /x*.html$\nDisallow: /tmp/\nDisallow: /exact$\n",
+			"ElmoGeoSiteIngestion",
+		);
+		expect(isAllowedByRobots(robots, "/a1b2c3")).toBe(false);
+		expect(isAllowedByRobots(robots, "/acb")).toBe(true);
+		expect(isAllowedByRobots(robots, "/x/y.html")).toBe(false);
+		expect(isAllowedByRobots(robots, "/x/y.html?z")).toBe(true);
+		expect(isAllowedByRobots(robots, "/tmp/a")).toBe(false);
+		expect(isAllowedByRobots(robots, "/tmp")).toBe(true);
+		expect(isAllowedByRobots(robots, "/exact")).toBe(false);
+		expect(isAllowedByRobots(robots, "/exact/more")).toBe(true);
+
+		const hostile = parseRobots(`User-agent: *\nDisallow: /${"a*".repeat(200)}b$\n`, "ElmoGeoSiteIngestion");
+		const started = Date.now();
+		expect(isAllowedByRobots(hostile, `/${"a".repeat(5000)}c`)).toBe(true);
+		expect(Date.now() - started).toBeLessThan(200);
+	});
+
 	it("treats a missing robots.txt as no restriction and an unreachable one as full disallow", () => {
 		expect(isAllowedByRobots(robotsFromStatus(404), "/anything")).toBe(true);
 		expect(robotsFromStatus(404).source).toBe("NOT_FOUND");
@@ -132,6 +155,30 @@ describe("safeFetch", () => {
 			res.end("MZ");
 		},
 		"/slow": () => {},
+		"/news": (_req, res) => {
+			res.writeHead(301, { Location: "/news/" });
+			res.end();
+		},
+		"/news/": (_req, res) => {
+			res.writeHead(200, { "Content-Type": "text/html" });
+			res.end("<html><title>新闻</title></html>");
+		},
+		"/list?b=2&a=1": (_req, res) => {
+			res.writeHead(200, { "Content-Type": "text/html" });
+			res.end("<html><title>列表</title></html>");
+		},
+		"/list?a=1&b=2": (_req, res) => {
+			res.writeHead(302, { Location: "/list?b=2&a=1" });
+			res.end();
+		},
+		"/loop": (_req, res) => {
+			res.writeHead(301, { Location: "/loop/" });
+			res.end();
+		},
+		"/loop/": (_req, res) => {
+			res.writeHead(301, { Location: "/loop" });
+			res.end();
+		},
 	};
 
 	beforeAll(async () => {
@@ -237,6 +284,56 @@ describe("safeFetch", () => {
 	it("refuses a successful answer of a type it did not ask for", async () => {
 		const result = await safeFetch(`http://${SITE}:${port}/binary`, options(toLoopback));
 		expect(result).toMatchObject({ ok: false, code: "MIME_REJECTED", status: 200 });
+	});
+
+	it("follows a redirect to the address as served, so a trailing slash does not loop", async () => {
+		const before = hits.length;
+		const result = await safeFetch(`http://${SITE}:${port}/news`, options(toLoopback));
+		expect(result).toMatchObject({ ok: true, status: 200, finalUrl: `http://${SITE}:${port}/news/` });
+		expect(hits.slice(before).map((hit) => hit.url)).toEqual(["/news", "/news/"]);
+	});
+
+	it("keeps the parameter order a redirect names", async () => {
+		const result = await safeFetch(`http://${SITE}:${port}/list?a=1&b=2`, options(toLoopback));
+		expect(result).toMatchObject({ ok: true, status: 200 });
+	});
+
+	it("stops at the first repeated address of a real redirect loop", async () => {
+		const before = hits.length;
+		const result = await safeFetch(`http://${SITE}:${port}/loop`, options(toLoopback));
+		expect(result).toMatchObject({ ok: false, code: "TOO_MANY_REDIRECTS" });
+		expect(hits.length - before).toBe(2);
+	});
+
+	it("lets the caller pace or turn down each redirect, without the wait counting against the time limit", async () => {
+		const seen: string[] = [];
+		const paced = await safeFetch(
+			`http://${SITE}:${port}/news`,
+			options(toLoopback, {
+				timeoutMs: 200,
+				beforeRedirect: async (target) => {
+					seen.push(target);
+					await new Promise((resolve) => setTimeout(resolve, 300));
+					return { follow: true };
+				},
+			}),
+		);
+		expect(seen).toEqual([`http://${SITE}:${port}/news/`]);
+		expect(paced).toMatchObject({ ok: true, status: 200 });
+
+		const before = hits.length;
+		const refused = await safeFetch(
+			`http://${SITE}:${port}/news`,
+			options(toLoopback, { beforeRedirect: async () => ({ follow: false, detail: "robots" }) }),
+		);
+		expect(refused).toMatchObject({ ok: false, code: "REDIRECT_REFUSED", status: 301 });
+		expect(hits.length - before).toBe(1);
+	});
+
+	it("does not wait on a DNS lookup past the time limit", async () => {
+		const hanging: Resolver = () => new Promise(() => {});
+		const result = await safeFetch(`http://${SITE}:${port}/page`, options(hanging, { timeoutMs: 100 }));
+		expect(result).toMatchObject({ ok: false, code: "TIMEOUT" });
 	});
 
 	it("gives up when the whole exchange exceeds its time limit", async () => {

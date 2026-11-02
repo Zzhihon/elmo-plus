@@ -15,7 +15,7 @@ import type { SiteJobDeps } from "./deps";
 import { keyUrlCoverageOf } from "./metrics";
 import { loadProfileVersion, profileOfSource } from "./sources";
 
-export const SUCCESS_OUTCOMES: GeoCrawlItemOutcome[] = ["NEW_VERSION", "UNCHANGED", "DUPLICATE"];
+export const SUCCESS_OUTCOMES: GeoCrawlItemOutcome[] = ["NEW_VERSION", "UNCHANGED", "REVERTED", "DUPLICATE"];
 
 export interface CrawlRunSummary {
 	total: number;
@@ -28,6 +28,7 @@ export interface CrawlRunSummary {
 	succeeded: number;
 	newVersions: number;
 	unchanged: number;
+	reverted: number;
 	duplicates: number;
 	gone: number;
 	status403: number;
@@ -56,6 +57,7 @@ function emptySummary(sectionRows: Array<{ category: string | null; pages: numbe
 		succeeded: 0,
 		newVersions: 0,
 		unchanged: 0,
+		reverted: 0,
 		duplicates: 0,
 		gone: 0,
 		status403: 0,
@@ -89,9 +91,10 @@ function tally(
 	}
 	summary.newVersions = summary.outcomes.NEW_VERSION ?? 0;
 	summary.unchanged = summary.outcomes.UNCHANGED ?? 0;
+	summary.reverted = summary.outcomes.REVERTED ?? 0;
 	summary.duplicates = summary.outcomes.DUPLICATE ?? 0;
 	summary.gone = summary.outcomes.GONE ?? 0;
-	summary.succeeded = summary.newVersions + summary.unchanged + summary.duplicates;
+	summary.succeeded = summary.newVersions + summary.unchanged + summary.reverted + summary.duplicates;
 	const attempted = summary.succeeded + summary.failed + summary.gone;
 	summary.successRate = attempted === 0 ? null : summary.succeeded / attempted;
 	summary.unchangedRate = summary.succeeded === 0 ? null : summary.unchanged / summary.succeeded;

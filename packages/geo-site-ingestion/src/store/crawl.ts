@@ -1,4 +1,3 @@
-import { gunzipSync } from "node:zlib";
 import {
 	GEO_QUEUE,
 	type GeoCrawlItemOutcome,
@@ -9,7 +8,8 @@ import {
 	type GeoSitePageStatus,
 	geoSystemPrincipal,
 } from "@workspace/geo-domain";
-import { geoObjectKey } from "@workspace/geo-evidence";
+import { geoObjectKey, normalizeUrl } from "@workspace/geo-evidence";
+import type { DbConnection } from "@workspace/lib/db/db-connection";
 import {
 	geoSiteCrawlItems,
 	geoSiteCrawlRuns,
@@ -20,14 +20,14 @@ import {
 import { raiseGeoAlert } from "@workspace/lib/geo/alerts";
 import { writeGeoAudit } from "@workspace/lib/geo/audit";
 import * as cheerio from "cheerio";
-import { and, asc, count, desc, eq, inArray, isNull, lt, ne, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import {
 	backoffMs,
 	CRAWLER_PRODUCT_TOKEN,
 	classifyStatus,
 	decideVersion,
 	HTML_MIME_TYPES,
-	isRetryableFailure,
+	isRetryableResult,
 	LIMITS,
 	minIntervalMs,
 	outcomeOfFailure,
@@ -37,7 +37,7 @@ import {
 } from "../crawl-policy";
 import { categoryOf, siteDiscovery } from "../discovery";
 import { contentHashOf, sha256Hex } from "../hash";
-import { decodeHtml } from "../net/charset";
+import { decodeHtml, decodeSitemap } from "../net/charset";
 import { isAllowedByRobots, parseRobots, type RobotsPolicy, robotsFromStatus } from "../net/robots";
 import { type SafeFetchOptions, type SafeFetchResult, safeFetch } from "../net/safe-fetch";
 import { checkUrl, urlPolicyOf } from "../net/url-policy";
@@ -45,18 +45,28 @@ import { parseOpWindow, parserVersionOf, type SiteProfile } from "../profile";
 import { isWithinWindow, nextWindowStart } from "../schedule";
 import { defaultSleep, nowOf, type SiteJobDeps } from "./deps";
 import { finalizeCrawlRun } from "./finalize";
-import { type CrawlRunConfig, type CrawlRunRow, crawlJobOptions, loadCrawlRun, runConfigOf } from "./runs";
+import {
+	type CrawlRunConfig,
+	type CrawlRunRow,
+	claimCrawlRun,
+	loadCrawlRun,
+	releaseCrawlRun,
+	renewCrawlRunLease,
+	runConfigOf,
+} from "./runs";
 import { loadProfileVersion, profileOfSource, type SiteSourceRow } from "./sources";
-import { acquireHostSlot } from "./throttle";
+import { fetchInHostSlots, type HostSlotRefusal } from "./throttle";
 import { markPageUnavailable } from "./unavailable";
 
 type ItemRow = typeof geoSiteCrawlItems.$inferSelect;
 
-/** Kept on the run between chunks: what robots.txt and the sitemaps said. */
+export type RobotsSummary = Pick<RobotsPolicy, "source" | "httpStatus" | "crawlDelaySeconds"> & { ruleCount: number };
+
+/** Kept on the run between chunks and shown on it: what robots.txt and the sitemaps said. */
 export interface CrawlRunMeta {
-	robots?: Pick<RobotsPolicy, "source" | "httpStatus" | "crawlDelaySeconds" | "sitemaps"> & {
-		rules: RobotsPolicy["rules"];
-	};
+	robots?: RobotsSummary & Pick<RobotsPolicy, "sitemaps">;
+	/** Every origin the run has asked, since each answers for itself (RFC 9309). */
+	robotsByOrigin?: Record<string, RobotsSummary>;
 	sitemap?: { files: string[]; urls: number; notFound: string[] };
 	resumeAt?: string | null;
 	breakerOpenUntil?: string | null;
@@ -71,15 +81,18 @@ interface CrawlContext {
 	config: CrawlRunConfig;
 	source: SiteSourceRow;
 	profile: SiteProfile;
-	robots: RobotsPolicy;
+	/** robots.txt by origin, filled as the run first reaches each one. */
+	robots: Map<string, RobotsPolicy>;
 	meta: CrawlRunMeta;
 	system: GeoPrincipal;
-	interval: number;
+	leaseHolder: string;
 	userAgent: string;
 	fetch: (url: string, options: SafeFetchOptions) => Promise<SafeFetchResult>;
 	sleep: (ms: number) => Promise<void>;
-	stop: { reason: "PAUSED" | "BREAKER" | "BUSY" | null; breakerUntil?: Date };
+	stop: { reason: "PAUSED" | "BREAKER" | "BUSY" | "DEFERRED" | "LEASE_LOST" | null; until?: Date };
 }
+
+type FetchOptions = Pick<SafeFetchOptions, "maxBytes" | "timeoutMs" | "allowedMimeTypes" | "accept">;
 
 const PRIORITY: Record<GeoCrawlItemSource, number> = {
 	SITEMAP: 0,
@@ -105,6 +118,10 @@ async function saveMeta(ctx: CrawlContext): Promise<void> {
 function pathAndQuery(url: string): string {
 	const parsed = new URL(url);
 	return `${parsed.pathname}${parsed.search}`;
+}
+
+function identityOf(url: string): string {
+	return normalizeUrl(url) ?? url;
 }
 
 async function enqueueItems(
@@ -147,42 +164,46 @@ async function finishItem(
 	status: GeoCrawlItemStatus,
 	outcome: GeoCrawlItemOutcome | null,
 	extra: Partial<typeof geoSiteCrawlItems.$inferInsert> = {},
+	db: DbConnection = ctx.deps.db,
 ): Promise<void> {
-	await ctx.deps.db
+	await db
 		.update(geoSiteCrawlItems)
 		.set({ status, outcome, ...extra })
 		.where(eq(geoSiteCrawlItems.id, item.id));
 }
 
-/**
- * Every request for robots.txt, sitemaps, pages and attachments goes through
- * here: the shared per-host slot, then the guarded fetch, with limited
- * exponential backoff on timeouts, 5xx and 429, and the circuit breaker fed.
- */
-function isRetryable(result: SafeFetchResult): boolean {
-	return result.ok ? classifyStatus(result.status).kind === "RETRYABLE" : isRetryableFailure(result.code);
+function intervalFor(ctx: CrawlContext, url: string): number {
+	const delay = ctx.robots.get(new URL(url).origin)?.crawlDelaySeconds ?? null;
+	return minIntervalMs(ctx.source.requestsPerSecond, delay);
+}
+
+function stopOfRefusal(refusal: HostSlotRefusal): CrawlContext["stop"] {
+	if (refusal.reason === "CIRCUIT_OPEN") return { reason: "BREAKER", until: refusal.until };
+	if (refusal.reason === "DEFERRED") return { reason: "DEFERRED", until: refusal.until };
+	return { reason: "BUSY" };
 }
 
 async function fetchInSlot(
 	ctx: CrawlContext,
 	url: string,
-	options: Pick<SafeFetchOptions, "maxBytes" | "timeoutMs" | "allowedMimeTypes" | "accept">,
+	options: FetchOptions,
+	vetRedirect?: (target: string) => Promise<string | null>,
 ): Promise<SafeFetchResult | null> {
-	const host = new URL(url).hostname;
-	const slot = await acquireHostSlot(ctx.deps, host, ctx.interval);
-	if (!slot.ok) {
-		ctx.stop = slot.reason === "CIRCUIT_OPEN" ? { reason: "BREAKER", breakerUntil: slot.until } : { reason: "BUSY" };
+	const paced = await fetchInHostSlots(ctx.deps, {
+		url,
+		options: { ...options, allowedHosts: ctx.source.allowedHosts, userAgent: ctx.userAgent },
+		intervalFor: (target) => intervalFor(ctx, target),
+		fetch: ctx.fetch,
+		vetRedirect,
+	});
+	if (paced.refusal) {
+		ctx.stop = stopOfRefusal(paced.refusal);
 		return null;
 	}
-	let result: SafeFetchResult;
-	try {
-		result = await ctx.fetch(url, { ...options, allowedHosts: ctx.source.allowedHosts, userAgent: ctx.userAgent });
-	} catch (error) {
-		await slot.release(false);
-		throw error;
-	}
-	const health = await slot.release(!isRetryable(result));
-	if (health.tripped) {
+	// Stopping while asking a redirect target's robots.txt means the host is unavailable, not that the page moved.
+	if (ctx.stop.reason) return null;
+	const { result, health, host } = paced;
+	if (health?.tripped) {
 		await raiseGeoAlert(ctx.deps.db, {
 			organizationId: ctx.run.organizationId,
 			kind: "site.circuit_open",
@@ -191,8 +212,8 @@ async function fetchInSlot(
 			context: { host, siteSourceId: ctx.source.id, until: health.breakerOpenUntil, runId: ctx.run.id },
 		});
 	}
-	if (health.breakerOpenUntil && health.breakerOpenUntil.getTime() > Date.now()) {
-		ctx.stop = { reason: "BREAKER", breakerUntil: health.breakerOpenUntil };
+	if (health?.breakerOpenUntil && health.breakerOpenUntil.getTime() > Date.now()) {
+		ctx.stop = { reason: "BREAKER", until: health.breakerOpenUntil };
 	}
 	return result;
 }
@@ -205,19 +226,23 @@ async function fetchInSlot(
 async function politeFetch(
 	ctx: CrawlContext,
 	url: string,
-	options: Pick<SafeFetchOptions, "maxBytes" | "timeoutMs" | "allowedMimeTypes" | "accept">,
+	options: FetchOptions,
+	vetRedirect?: (target: string) => Promise<string | null>,
 ): Promise<{ result: SafeFetchResult | null; attempts: number }> {
 	for (let attempts = 1; ; attempts++) {
-		const result = await fetchInSlot(ctx, url, options);
-		const retry = result !== null && !ctx.stop.reason && isRetryable(result) && attempts < LIMITS.maxAttempts;
+		if (!(await renewCrawlRunLease(ctx.deps.db, ctx.run.id, ctx.leaseHolder))) {
+			ctx.stop = { reason: "LEASE_LOST" };
+			return { result: null, attempts };
+		}
+		const result = await fetchInSlot(ctx, url, options, vetRedirect);
+		const retry = result !== null && !ctx.stop.reason && isRetryableResult(result) && attempts < LIMITS.maxAttempts;
 		if (!retry) return { result, attempts };
 		await ctx.sleep(backoffMs(attempts, result.ok ? result.headers["retry-after"] : null));
 	}
 }
 
-async function loadRobots(ctx: CrawlContext): Promise<RobotsPolicy> {
-	const robotsUrl = new URL("/robots.txt", ctx.source.baseUrl).toString();
-	const { result } = await politeFetch(ctx, robotsUrl, {
+async function loadRobots(ctx: CrawlContext, origin: string): Promise<RobotsPolicy> {
+	const { result } = await politeFetch(ctx, new URL("/robots.txt", origin).toString(), {
 		maxBytes: LIMITS.robotsBytes,
 		timeoutMs: LIMITS.fetchTimeoutMs,
 		allowedMimeTypes: [...ROBOTS_MIME_TYPES],
@@ -231,11 +256,36 @@ async function loadRobots(ctx: CrawlContext): Promise<RobotsPolicy> {
 	return robotsFromStatus(result.status);
 }
 
-function sitemapBody(result: Extract<SafeFetchResult, { ok: true }>): string {
-	if (result.mimeType === "application/gzip" || result.mimeType === "application/x-gzip") {
-		return gunzipSync(result.body, { maxOutputLength: LIMITS.sitemapBytes }).toString("utf8");
-	}
-	return decodeHtml(result.body, result.charset).text;
+function robotsSummaryOf(policy: RobotsPolicy): RobotsSummary {
+	return {
+		source: policy.source,
+		httpStatus: policy.httpStatus,
+		crawlDelaySeconds: policy.crawlDelaySeconds,
+		ruleCount: policy.rules.length,
+	};
+}
+
+/** The policy of the URL's own origin, read once a run; null when the run was stopped before it could be read. */
+async function robotsFor(ctx: CrawlContext, url: string): Promise<RobotsPolicy | null> {
+	const { origin } = new URL(url);
+	const known = ctx.robots.get(origin);
+	if (known) return known;
+	const policy = await loadRobots(ctx, origin);
+	if (ctx.stop.reason) return null;
+	ctx.robots.set(origin, policy);
+	ctx.meta.robotsByOrigin = { ...ctx.meta.robotsByOrigin, [origin]: robotsSummaryOf(policy) };
+	await ctx.deps.db
+		.update(geoSiteCrawlRuns)
+		.set({ robots: sql`${geoSiteCrawlRuns.robots} || ${JSON.stringify({ [origin]: policy })}::jsonb` })
+		.where(eq(geoSiteCrawlRuns.id, ctx.run.id));
+	return policy;
+}
+
+/** A redirect may land somewhere the target origin's robots.txt forbids; even `/news` to `/news/` can. */
+async function robotsVeto(ctx: CrawlContext, target: string): Promise<string | null> {
+	const policy = await robotsFor(ctx, target);
+	if (!policy) return "robots.txt 未能读取";
+	return isAllowedByRobots(policy, pathAndQuery(target)) ? null : "robots.txt 禁止访问重定向目标";
 }
 
 async function readSitemap(
@@ -250,14 +300,14 @@ async function readSitemap(
 	});
 	if (!result?.ok || result.status < 200 || result.status >= 300) return null;
 	try {
-		return siteDiscovery.sitemapUrls(sitemapBody(result), sitemapUrl);
+		return siteDiscovery.sitemapUrls(decodeSitemap(result, LIMITS.sitemapBytes), sitemapUrl);
 	} catch {
 		return null;
 	}
 }
 
-async function loadSitemaps(ctx: CrawlContext): Promise<string[]> {
-	const queue = [...new Set([...ctx.robots.sitemaps, new URL("/sitemap.xml", ctx.source.baseUrl).toString()])];
+async function loadSitemaps(ctx: CrawlContext, declared: string[]): Promise<string[]> {
+	const queue = [...new Set([...declared, new URL("/sitemap.xml", ctx.source.baseUrl).toString()])];
 	const files: string[] = [];
 	const notFound: string[] = [];
 	const pages = new Set<string>();
@@ -278,7 +328,7 @@ async function loadSitemaps(ctx: CrawlContext): Promise<string[]> {
 }
 
 /** First chunk of a run: robots.txt, then sitemap URLs first, then seeds, then pages already known. */
-async function initializeFrontier(ctx: CrawlContext): Promise<void> {
+async function initializeFrontier(ctx: CrawlContext, declaredSitemaps: string[]): Promise<void> {
 	const policy = urlPolicyOf(ctx.source.allowedHosts, ctx.profile);
 	const accepted = (urls: string[]) =>
 		urls.map((url) => checkUrl(url, policy)).flatMap((decision) => (decision.ok ? [decision.url] : []));
@@ -290,7 +340,7 @@ async function initializeFrontier(ctx: CrawlContext): Promise<void> {
 		);
 		return;
 	}
-	const sitemapPages = accepted(await loadSitemaps(ctx));
+	const sitemapPages = accepted(await loadSitemaps(ctx, declaredSitemaps));
 	await enqueueItems(
 		ctx,
 		sitemapPages.map((url) => ({ url, source: "SITEMAP" as const, depth: 0 })),
@@ -317,13 +367,14 @@ async function upsertPage(
 	ctx: CrawlContext,
 	url: string,
 	values: Partial<typeof geoSitePages.$inferInsert>,
+	db: DbConnection = ctx.deps.db,
 ): Promise<{ page: typeof geoSitePages.$inferSelect; previousStatus: GeoSitePageStatus | null }> {
-	const [before] = await ctx.deps.db
+	const [before] = await db
 		.select({ status: geoSitePages.status })
 		.from(geoSitePages)
 		.where(and(eq(geoSitePages.siteSourceId, ctx.source.id), eq(geoSitePages.normalizedUrl, url)))
 		.limit(1);
-	const [page] = await ctx.deps.db
+	const [page] = await db
 		.insert(geoSitePages)
 		.values({
 			organizationId: ctx.run.organizationId,
@@ -379,50 +430,48 @@ async function auditBlocked(ctx: CrawlContext, action: string, metadata: Record<
 	});
 }
 
-async function latestHashOf(ctx: CrawlContext, pageId: string): Promise<string | null> {
-	const [version] = await ctx.deps.db
-		.select({ contentHash: geoSitePageVersions.contentHash })
-		.from(geoSitePageVersions)
-		.where(eq(geoSitePageVersions.pageId, pageId))
-		.orderBy(desc(geoSitePageVersions.fetchedAt), desc(geoSitePageVersions.createdAt))
-		.limit(1);
-	if (version) return version.contentHash;
-	const [pending] = await ctx.deps.db
-		.select({ contentHash: geoSiteCrawlItems.contentHash })
-		.from(geoSiteCrawlItems)
-		.where(
-			and(
-				eq(geoSiteCrawlItems.pageId, pageId),
-				eq(geoSiteCrawlItems.outcome, "NEW_VERSION"),
-				isNull(geoSiteCrawlItems.versionId),
-			),
-		)
-		.orderBy(desc(geoSiteCrawlItems.fetchedAt))
-		.limit(1);
-	return pending?.contentHash ?? null;
-}
+type PageRow = typeof geoSitePages.$inferSelect;
 
 /**
  * Content unchanged but the rules moved on: the stored HTML is parsed again
  * with the current profile, which adds a version without downloading anything.
  */
-async function reparseIfRulesChanged(ctx: CrawlContext, pageId: string): Promise<void> {
-	const [latest] = await ctx.deps.db
-		.select({ id: geoSitePageVersions.id, parserVersion: geoSitePageVersions.parserVersion })
+async function reparseIfRulesChanged(ctx: CrawlContext, pageId: string, versionId: string | null): Promise<void> {
+	if (!versionId) return;
+	const [current] = await ctx.deps.db
+		.select({ parserVersion: geoSitePageVersions.parserVersion, parseStatus: geoSitePageVersions.parseStatus })
 		.from(geoSitePageVersions)
-		.where(and(eq(geoSitePageVersions.pageId, pageId), ne(geoSitePageVersions.parseStatus, "SKIPPED")))
-		.orderBy(desc(geoSitePageVersions.fetchedAt), desc(geoSitePageVersions.createdAt))
+		.where(eq(geoSitePageVersions.id, versionId))
 		.limit(1);
-	if (!latest || latest.parserVersion === parserVersionOf(ctx.profile)) return;
-	const reparse = { pageId, versionId: latest.id, profileVersion: ctx.profile.version };
+	if (!current || current.parseStatus === "SKIPPED" || current.parserVersion === parserVersionOf(ctx.profile)) return;
+	const reparse = { pageId, versionId, profileVersion: ctx.profile.version };
 	await ctx.deps.send(
 		GEO_QUEUE.siteParse,
 		{ organizationId: ctx.run.organizationId, reparse },
-		{ singletonKey: `reparse:${pageId}:${latest.id}:${ctx.profile.version}` },
+		{ singletonKey: `reparse:${pageId}:${versionId}:${ctx.profile.version}` },
 	);
 }
 
-async function pageWithSameContent(ctx: CrawlContext, contentHash: string): Promise<string | null> {
+/** The page's own version of this content, preferring one parsed with the rules in force. */
+async function ownVersionWithContent(
+	ctx: CrawlContext,
+	pageId: string,
+	contentHash: string,
+): Promise<{ id: string; parseStatus: string } | null> {
+	const [row] = await ctx.deps.db
+		.select({ id: geoSitePageVersions.id, parseStatus: geoSitePageVersions.parseStatus })
+		.from(geoSitePageVersions)
+		.where(and(eq(geoSitePageVersions.pageId, pageId), eq(geoSitePageVersions.contentHash, contentHash)))
+		.orderBy(
+			sql`${geoSitePageVersions.parserVersion} = ${parserVersionOf(ctx.profile)} desc`,
+			desc(geoSitePageVersions.fetchedAt),
+			desc(geoSitePageVersions.createdAt),
+		)
+		.limit(1);
+	return row ?? null;
+}
+
+async function otherPageHasContent(ctx: CrawlContext, pageId: string, contentHash: string): Promise<boolean> {
 	const [row] = await ctx.deps.db
 		.select({ pageId: geoSitePageVersions.pageId })
 		.from(geoSitePageVersions)
@@ -432,10 +481,57 @@ async function pageWithSameContent(ctx: CrawlContext, contentHash: string): Prom
 				eq(geoSitePages.siteSourceId, ctx.source.id),
 				eq(geoSitePageVersions.contentHash, contentHash),
 				eq(geoSitePages.status, "ACTIVE"),
+				ne(geoSitePages.id, pageId),
 			),
 		)
 		.limit(1);
-	return row?.pageId ?? null;
+	return Boolean(row);
+}
+
+/**
+ * The content changed back to something this page already has. No bytes are
+ * stored and no version is minted: the old version simply becomes current, and
+ * its facts are put through normalization again since the site asserts them anew.
+ */
+async function returnToVersion(
+	ctx: CrawlContext,
+	item: ItemRow,
+	page: PageRow,
+	version: { id: string; parseStatus: string },
+	contentHash: string,
+	common: Partial<typeof geoSiteCrawlItems.$inferInsert>,
+): Promise<void> {
+	await ctx.deps.db.transaction(async (tx) => {
+		await tx
+			.update(geoSitePages)
+			.set({ currentContentHash: contentHash, currentVersionId: version.id })
+			.where(eq(geoSitePages.id, page.id));
+		await finishItem(
+			ctx,
+			item,
+			"DONE",
+			"REVERTED",
+			{ ...common, contentHash, versionId: version.id, fetchedAt: nowOf(ctx.deps) },
+			tx,
+		);
+		await writeGeoAudit(tx, {
+			principal: ctx.system,
+			action: "site.page.content_reverted",
+			entityType: "site_page",
+			entityId: page.id,
+			before: { contentHash: page.currentContentHash, versionId: page.currentVersionId },
+			after: { contentHash, versionId: version.id },
+			metadata: { runId: ctx.run.id },
+		});
+	});
+	await reparseIfRulesChanged(ctx, page.id, version.id);
+	if (version.parseStatus === "PARSED") {
+		await ctx.deps.send(
+			GEO_QUEUE.siteNormalize,
+			{ organizationId: ctx.run.organizationId, versionId: version.id },
+			{ singletonKey: `normalize:${version.id}` },
+		);
+	}
 }
 
 function canFollowLinks(ctx: CrawlContext, item: ItemRow, metaNofollow: boolean): boolean {
@@ -453,8 +549,8 @@ function noteOutOfScope(ctx: CrawlContext, url: string): void {
 	ctx.meta.outOfScopeSamples = samples;
 }
 
-async function followLinks(ctx: CrawlContext, item: ItemRow, html: string, pageUrl: string) {
-	const discovery = siteDiscovery.discover(html, pageUrl, ctx.profile);
+async function followLinks(ctx: CrawlContext, item: ItemRow, html: string, pageUrl: string, servedFrom: string) {
+	const discovery = siteDiscovery.discover(html, servedFrom, ctx.profile);
 	if (!canFollowLinks(ctx, item, discovery.metaNofollow)) return discovery;
 	const policy = urlPolicyOf(ctx.source.allowedHosts, ctx.profile);
 	const entries: Parameters<typeof enqueueItems>[1] = [];
@@ -490,9 +586,9 @@ async function handleHtml(
 	result: Extract<SafeFetchResult, { ok: true }>,
 	attempts: number,
 ): Promise<void> {
-	const url = result.finalUrl;
-	const { text: html } = decodeHtml(result.body, result.charset);
-	const discovery = await followLinks(ctx, item, html, url);
+	const url = identityOf(result.finalUrl);
+	const { text: html, charset } = decodeHtml(result.body, result.charset);
+	const discovery = await followLinks(ctx, item, html, url, result.finalUrl);
 	const category = categoryOf(url, ctx.profile, cheerio.load(html));
 	const now = nowOf(ctx.deps);
 	const canonical =
@@ -520,22 +616,34 @@ async function handleHtml(
 			metadata: { runId: ctx.run.id },
 		});
 	}
-	const common = { attempts, durationMs: result.durationMs, httpStatus: result.status, pageId: page.id, finalUrl: url };
+	const common = {
+		attempts,
+		durationMs: result.durationMs,
+		httpStatus: result.status,
+		pageId: page.id,
+		finalUrl: result.finalUrl,
+	};
 
 	if (canonical) {
 		await finishItem(ctx, item, "DONE", "DUPLICATE", { ...common, detail: `canonical → ${canonical}` });
 		return;
 	}
 	const contentHash = contentHashOf(html, ctx.profile);
+	const unchanged = page.currentContentHash === contentHash;
+	const ownVersion = unchanged ? null : await ownVersionWithContent(ctx, page.id, contentHash);
 	const decision = decideVersion({
 		contentHash,
-		latestHashOfPage: await latestHashOf(ctx, page.id),
-		pageWithSameContent: await pageWithSameContent(ctx, contentHash),
-		pageId: page.id,
+		currentHashOfPage: page.currentContentHash,
+		hasVersionWithContent: ownVersion !== null,
+		otherPageHasContent: !unchanged && !ownVersion && (await otherPageHasContent(ctx, page.id, contentHash)),
 	});
 	if (decision === "UNCHANGED") {
 		await finishItem(ctx, item, "DONE", "UNCHANGED", { ...common, contentHash });
-		await reparseIfRulesChanged(ctx, page.id);
+		await reparseIfRulesChanged(ctx, page.id, page.currentVersionId);
+		return;
+	}
+	if (decision === "REVERTED" && ownVersion) {
+		await returnToVersion(ctx, item, page, ownVersion, contentHash, common);
 		return;
 	}
 	if (decision === "DUPLICATE") {
@@ -544,14 +652,17 @@ async function handleHtml(
 	}
 	const rawHash = sha256Hex(result.body);
 	const key = geoObjectKey(ctx.run.organizationId, "site", ctx.source.id, "raw", `${rawHash}.html`);
-	await ctx.deps.objectStore.put(key, result.body, {
-		contentType: `text/html; charset=${result.charset ?? "utf-8"}`,
-	});
-	await finishItem(ctx, item, "DONE", "NEW_VERSION", {
-		...common,
-		contentHash,
-		rawObjectKey: key,
-		fetchedAt: now,
+	await ctx.deps.objectStore.put(key, result.body, { contentType: `text/html; charset=${charset}` });
+	await ctx.deps.db.transaction(async (tx) => {
+		await tx.update(geoSitePages).set({ currentContentHash: contentHash }).where(eq(geoSitePages.id, page.id));
+		await finishItem(
+			ctx,
+			item,
+			"DONE",
+			"NEW_VERSION",
+			{ ...common, contentHash, rawObjectKey: key, fetchedAt: now },
+			tx,
+		);
 	});
 	await ctx.deps.send(
 		GEO_QUEUE.siteParse,
@@ -575,6 +686,15 @@ async function assetQuotaReached(ctx: CrawlContext): Promise<boolean> {
 	return stored >= ctx.profile.assets.maxCount;
 }
 
+function assetTitle(url: string): string {
+	const name = new URL(url).pathname.split("/").pop() ?? "";
+	try {
+		return decodeURIComponent(name);
+	} catch {
+		return name;
+	}
+}
+
 async function storeAsset(
 	ctx: CrawlContext,
 	item: ItemRow,
@@ -582,41 +702,67 @@ async function storeAsset(
 	attempts: number,
 ): Promise<void> {
 	const hash = sha256Hex(result.body);
-	const extension = new URL(result.finalUrl).pathname.match(/\.[a-z0-9]{1,8}$/i)?.[0]?.toLowerCase() ?? ".bin";
+	const url = identityOf(result.finalUrl);
+	const extension = new URL(url).pathname.match(/\.[a-z0-9]{1,8}$/i)?.[0]?.toLowerCase() ?? ".bin";
 	const key = geoObjectKey(ctx.run.organizationId, "site", ctx.source.id, "asset", `${hash}${extension}`);
-	await ctx.deps.objectStore.put(key, result.body, { contentType: result.mimeType ?? "application/octet-stream" });
 	const now = nowOf(ctx.deps);
-	const { page } = await upsertPage(ctx, result.finalUrl, {
+	const { page } = await upsertPage(ctx, url, {
 		status: "ACTIVE",
 		httpStatus: result.status,
 		lastSeenAt: now,
 		consecutiveFailures: 0,
 		category: "attachment",
 	});
-	const [version] = await ctx.deps.db
-		.insert(geoSitePageVersions)
-		.values({
-			organizationId: ctx.run.organizationId,
-			pageId: page.id,
-			contentHash: hash,
-			parserVersion: "asset",
-			htmlObjectKey: key,
-			title: decodeURIComponent(new URL(result.finalUrl).pathname.split("/").pop() ?? ""),
-			parsed: { mimeType: result.mimeType, size: result.body.length },
-			fetchedAt: now,
-			parseStatus: "SKIPPED",
-		})
-		.onConflictDoNothing()
-		.returning({ id: geoSitePageVersions.id });
-	await finishItem(ctx, item, "DONE", version ? "ASSET_STORED" : "UNCHANGED", {
-		attempts,
-		httpStatus: result.status,
-		durationMs: result.durationMs,
-		pageId: page.id,
-		contentHash: hash,
-		rawObjectKey: key,
-		fetchedAt: now,
-		versionId: version?.id ?? null,
+	const existing = await ownVersionWithContent(ctx, page.id, hash);
+	if (!existing)
+		await ctx.deps.objectStore.put(key, result.body, { contentType: result.mimeType ?? "application/octet-stream" });
+	const [inserted] = existing
+		? []
+		: await ctx.deps.db
+				.insert(geoSitePageVersions)
+				.values({
+					organizationId: ctx.run.organizationId,
+					pageId: page.id,
+					contentHash: hash,
+					parserVersion: "asset",
+					htmlObjectKey: key,
+					fetchedUrl: result.finalUrl,
+					title: assetTitle(url),
+					parsed: { mimeType: result.mimeType, size: result.body.length },
+					fetchedAt: now,
+					parseStatus: "SKIPPED",
+				})
+				.onConflictDoNothing()
+				.returning({ id: geoSitePageVersions.id });
+	const versionId = inserted?.id ?? existing?.id ?? null;
+	await ctx.deps.db.transaction(async (tx) => {
+		await tx
+			.update(geoSitePages)
+			.set({ currentContentHash: hash, currentVersionId: versionId })
+			.where(eq(geoSitePages.id, page.id));
+		const outcome: GeoCrawlItemOutcome = inserted
+			? "ASSET_STORED"
+			: page.currentContentHash === hash
+				? "UNCHANGED"
+				: "REVERTED";
+		await finishItem(
+			ctx,
+			item,
+			"DONE",
+			outcome,
+			{
+				attempts,
+				httpStatus: result.status,
+				durationMs: result.durationMs,
+				pageId: page.id,
+				finalUrl: result.finalUrl,
+				contentHash: hash,
+				rawObjectKey: key,
+				fetchedAt: now,
+				versionId,
+			},
+			tx,
+		);
 	});
 }
 
@@ -631,12 +777,17 @@ async function handleAsset(ctx: CrawlContext, item: ItemRow): Promise<void> {
 		});
 		return;
 	}
-	const { result, attempts } = await politeFetch(ctx, item.url, {
-		maxBytes: ctx.source.maxAssetBytes ?? LIMITS.defaultAssetBytes,
-		timeoutMs: LIMITS.assetTimeoutMs,
-		allowedMimeTypes: ctx.profile.assets.mimeTypes,
-		accept: "*/*",
-	});
+	const { result, attempts } = await politeFetch(
+		ctx,
+		item.url,
+		{
+			maxBytes: ctx.source.maxAssetBytes ?? LIMITS.defaultAssetBytes,
+			timeoutMs: LIMITS.assetTimeoutMs,
+			allowedMimeTypes: ctx.profile.assets.mimeTypes,
+			accept: "*/*",
+		},
+		(target) => robotsVeto(ctx, target),
+	);
 	if (!result) {
 		await requeue(ctx, item);
 		return;
@@ -655,16 +806,58 @@ async function handleAsset(ctx: CrawlContext, item: ItemRow): Promise<void> {
 type FetchSuccess = Extract<SafeFetchResult, { ok: true }>;
 type FetchFailure = Extract<SafeFetchResult, { ok: false }>;
 
-async function handleFetchFailure(ctx: CrawlContext, item: ItemRow, result: FetchFailure, attempts: number) {
-	const blocked = result.code === "REDIRECT_BLOCKED" || result.code === "ADDRESS_BLOCKED";
-	if (blocked) {
-		await auditBlocked(ctx, result.code === "REDIRECT_BLOCKED" ? "site.redirect_blocked" : "site.address_blocked", {
-			url: item.url,
-			target: result.blockedTarget?.slice(0, 500) ?? null,
-			reason: result.blockedReason ?? null,
-			redirects: result.redirects.slice(0, 10),
-		});
+/**
+ * The page's new status and whatever follows from it commit together: a failure
+ * partway leaves the page as it was, so the retry still sees a page that just
+ * went away and raises its review item. A page already known to be gone or moved
+ * raises nothing new, and one never seen before has nothing to review.
+ */
+async function markPageGoneOrMoved(
+	ctx: CrawlContext,
+	url: string,
+	kind: "GONE" | "REDIRECTED",
+	values: Partial<typeof geoSitePages.$inferInsert>,
+): Promise<PageRow> {
+	return ctx.deps.db.transaction(async (tx) => {
+		const { page, previousStatus } = await upsertPage(ctx, url, { status: kind, ...values }, tx);
+		if (previousStatus && previousStatus !== "GONE" && previousStatus !== "REDIRECTED") {
+			await markPageUnavailable(tx, ctx.system, page, kind);
+		}
+		return page;
+	});
+}
+
+/** Where a refused redirect pointed, fit to show a person: it may name anything, credentials included. */
+function displayableTarget(target: string | undefined): string | null {
+	if (!target) return null;
+	try {
+		const url = new URL(target);
+		url.username = "";
+		url.password = "";
+		return url.toString().slice(0, 2000);
+	} catch {
+		return null;
 	}
+}
+
+/** The page answers with a redirect the crawl will not follow; for the page, that is having moved away (UAT-19). */
+async function recordMovedAway(ctx: CrawlContext, item: ItemRow, result: FetchFailure): Promise<string> {
+	const page = await markPageGoneOrMoved(ctx, item.url, "REDIRECTED", {
+		httpStatus: result.status ?? null,
+		canonicalUrl: displayableTarget(result.blockedTarget),
+		lastSeenAt: nowOf(ctx.deps),
+	});
+	return page.id;
+}
+
+async function reportBlocked(ctx: CrawlContext, item: ItemRow, result: FetchFailure): Promise<void> {
+	if (result.code !== "REDIRECT_BLOCKED" && result.code !== "ADDRESS_BLOCKED") return;
+	await auditBlocked(ctx, result.code === "REDIRECT_BLOCKED" ? "site.redirect_blocked" : "site.address_blocked", {
+		url: item.url,
+		target: result.blockedTarget?.slice(0, 500) ?? null,
+		reason: result.blockedReason ?? null,
+		redirects: result.redirects.slice(0, 10),
+	});
 	if (result.code === "ADDRESS_BLOCKED") {
 		await raiseGeoAlert(ctx.deps.db, {
 			organizationId: ctx.run.organizationId,
@@ -674,14 +867,28 @@ async function handleFetchFailure(ctx: CrawlContext, item: ItemRow, result: Fetc
 			context: { url: item.url, detail: result.detail, runId: ctx.run.id },
 		});
 	}
-	const pageId = await recordFailure(ctx, item.url, blocked ? "BLOCKED" : null, result.status ?? null);
-	await finishItem(ctx, item, "FAILED", outcomeOfFailure(result.code), {
+}
+
+async function handleFetchFailure(ctx: CrawlContext, item: ItemRow, result: FetchFailure, attempts: number) {
+	await reportBlocked(ctx, item, result);
+	const common = {
 		attempts,
 		durationMs: result.durationMs,
 		httpStatus: result.status ?? null,
 		detail: result.detail.slice(0, 500),
-		pageId,
-	});
+	};
+	if (result.code === "REDIRECT_REFUSED") {
+		// `/a` redirecting to a forbidden `/a/` is the same page: robots keeps it out, it has not moved.
+		const samePage = identityOf(result.blockedTarget ?? "") === item.url;
+		const pageId = samePage ? null : await recordMovedAway(ctx, item, result);
+		await finishItem(ctx, item, "SKIPPED", "ROBOTS_DISALLOWED", { ...common, pageId });
+		return;
+	}
+	const pageId =
+		result.code === "REDIRECT_BLOCKED"
+			? await recordMovedAway(ctx, item, result)
+			: await recordFailure(ctx, item.url, result.code === "ADDRESS_BLOCKED" ? "BLOCKED" : null, result.status ?? null);
+	await finishItem(ctx, item, "FAILED", outcomeOfFailure(result.code), { ...common, pageId });
 }
 
 /**
@@ -695,13 +902,12 @@ async function followRedirect(
 	result: FetchSuccess,
 	attempts: number,
 ): Promise<ItemRow | null> {
-	const { page, previousStatus } = await upsertPage(ctx, item.url, {
-		status: "REDIRECTED",
+	const targetUrl = identityOf(result.finalUrl);
+	const page = await markPageGoneOrMoved(ctx, item.url, "REDIRECTED", {
 		httpStatus: result.redirects[0].status,
-		canonicalUrl: result.finalUrl,
+		canonicalUrl: targetUrl,
 		lastSeenAt: nowOf(ctx.deps),
 	});
-	if (previousStatus === "ACTIVE") await markPageUnavailable(ctx.deps.db, ctx.system, page, "REDIRECTED");
 	await finishItem(ctx, item, "DONE", "REDIRECTED", {
 		attempts,
 		httpStatus: result.redirects[0].status,
@@ -713,7 +919,7 @@ async function followRedirect(
 		.values({
 			organizationId: ctx.run.organizationId,
 			runId: ctx.run.id,
-			url: result.finalUrl,
+			url: targetUrl,
 			source: "REDIRECT",
 			depth: item.depth,
 			priority: PRIORITY.REDIRECT,
@@ -738,10 +944,7 @@ async function handleStatus(ctx: CrawlContext, item: ItemRow, result: FetchSucce
 		return;
 	}
 	if (kind.kind === "GONE") {
-		const { page, previousStatus } = await upsertPage(ctx, item.url, { status: "GONE", httpStatus: result.status });
-		if (previousStatus === "ACTIVE" || previousStatus === "ERROR") {
-			await markPageUnavailable(ctx.deps.db, ctx.system, page, "GONE");
-		}
+		const page = await markPageGoneOrMoved(ctx, item.url, "GONE", { httpStatus: result.status });
 		await finishItem(ctx, item, "DONE", "GONE", { ...common, pageId: page.id });
 		return;
 	}
@@ -756,19 +959,31 @@ async function handleStatus(ctx: CrawlContext, item: ItemRow, result: FetchSucce
 }
 
 async function processItem(ctx: CrawlContext, item: ItemRow): Promise<void> {
-	if (!isAllowedByRobots(ctx.robots, pathAndQuery(item.url))) {
-		await finishItem(ctx, item, "SKIPPED", "ROBOTS_DISALLOWED");
+	const robots = await robotsFor(ctx, item.url);
+	if (!robots) {
+		await requeue(ctx, item);
+		return;
+	}
+	if (!isAllowedByRobots(robots, pathAndQuery(item.url))) {
+		await finishItem(ctx, item, "SKIPPED", "ROBOTS_DISALLOWED", {
+			detail: robots.source === "UNAVAILABLE" ? "该主机的 robots.txt 无法获取，按 RFC 9309 不采集" : null,
+		});
 		return;
 	}
 	if (item.isAsset) {
 		await handleAsset(ctx, item);
 		return;
 	}
-	const { result, attempts } = await politeFetch(ctx, item.url, {
-		maxBytes: LIMITS.htmlBytes,
-		timeoutMs: LIMITS.fetchTimeoutMs,
-		allowedMimeTypes: [...HTML_MIME_TYPES],
-	});
+	const { result, attempts } = await politeFetch(
+		ctx,
+		item.url,
+		{
+			maxBytes: LIMITS.htmlBytes,
+			timeoutMs: LIMITS.fetchTimeoutMs,
+			allowedMimeTypes: [...HTML_MIME_TYPES],
+		},
+		(target) => robotsVeto(ctx, target),
+	);
 	if (!result) {
 		await requeue(ctx, item);
 		return;
@@ -778,7 +993,7 @@ async function processItem(ctx: CrawlContext, item: ItemRow): Promise<void> {
 		return;
 	}
 	let current: ItemRow | null = item;
-	if (result.redirects.length > 0 && result.finalUrl !== item.url) {
+	if (result.redirects.length > 0 && identityOf(result.finalUrl) !== item.url) {
 		current = await followRedirect(ctx, item, result, attempts);
 	}
 	if (current) await handleStatus(ctx, current, result, attempts);
@@ -826,23 +1041,32 @@ async function currentStatus(ctx: CrawlContext): Promise<GeoCrawlStatus | null> 
 	return row?.status ?? null;
 }
 
-/** A pause ends the chunk; a tripped breaker ends the run; a host busy with another run tries again shortly. */
+function sendCrawlJob(deps: SiteJobDeps, run: CrawlRunRow, startAfter?: Date) {
+	return deps.send(
+		GEO_QUEUE.siteCrawl,
+		{ organizationId: run.organizationId, runId: run.id },
+		startAfter ? { startAfter } : {},
+	);
+}
+
+/**
+ * A pause ends the chunk; a tripped breaker ends the run; a busy host, or one
+ * that may not be asked again yet, is tried again later from a fresh job; a lost
+ * lease means another chunk has taken over and has nothing to hear from this one.
+ */
 async function stopEarly(ctx: CrawlContext, processed: number): Promise<CrawlChunkResult> {
 	const { deps, run } = ctx;
 	if (ctx.stop.reason === "PAUSED") return { status: "PAUSED", continued: false, processed };
+	if (ctx.stop.reason === "LEASE_LOST") return { status: "RUNNING", continued: false, processed };
 	if (ctx.stop.reason === "BREAKER") {
-		ctx.meta.breakerOpenUntil = ctx.stop.breakerUntil?.toISOString() ?? null;
+		ctx.meta.breakerOpenUntil = ctx.stop.until?.toISOString() ?? null;
 		await saveMeta(ctx);
 		return finalizeCrawlRun(deps, run.id, {
 			forcedStatus: "PARTIAL",
-			errorSummary: `源站连续失败触发熔断，${ctx.stop.breakerUntil?.toISOString() ?? ""} 前不再请求`,
+			errorSummary: `源站连续失败触发熔断，${ctx.stop.until?.toISOString() ?? ""} 前不再请求`,
 		});
 	}
-	await deps.send(
-		GEO_QUEUE.siteCrawl,
-		{ organizationId: run.organizationId, runId: run.id },
-		{ ...crawlJobOptions(run.id), startAfter: new Date(Date.now() + 30_000) },
-	);
+	await sendCrawlJob(deps, run, ctx.stop.reason === "DEFERRED" ? ctx.stop.until : new Date(Date.now() + 30_000));
 	return { status: "RUNNING", continued: true, processed };
 }
 
@@ -861,23 +1085,16 @@ async function deferUntilWindow(deps: SiteJobDeps, run: CrawlRunRow, meta: Crawl
 			counts: sql`jsonb_set(${geoSiteCrawlRuns.counts}, '{meta}', ${JSON.stringify(meta)}::jsonb, true)`,
 		})
 		.where(eq(geoSiteCrawlRuns.id, run.id));
-	await deps.send(
-		GEO_QUEUE.siteCrawl,
-		{ organizationId: run.organizationId, runId: run.id },
-		{ ...crawlJobOptions(run.id), startAfter: resumeAt },
-	);
+	await sendCrawlJob(deps, run, resumeAt);
 	return { status: "QUEUED" as const, continued: true, processed: 0 };
 }
 
-/** Loads the run and its source and marks it running, or says why this chunk should not run. */
+/** Prepares a run this chunk holds the lease of and marks it running, or says why this chunk should not run. */
 async function openRun(
 	deps: SiteJobDeps,
-	input: { organizationId: string; runId: string },
+	run: CrawlRunRow,
+	leaseHolder: string,
 ): Promise<{ ctx: CrawlContext } | { done: CrawlChunkResult }> {
-	const run = await loadCrawlRun(deps.db, input.organizationId, input.runId);
-	if (run.status !== "QUEUED" && run.status !== "RUNNING") {
-		return { done: { status: run.status, continued: false, processed: 0 } };
-	}
 	const [source] = await deps.db.select().from(geoSiteSources).where(eq(geoSiteSources.id, run.siteSourceId)).limit(1);
 	if (!source?.enabled) {
 		await deps.db
@@ -902,16 +1119,11 @@ async function openRun(
 		profileOfSource(source),
 	);
 	meta.resumeAt = null;
+	// Holding the lease means nobody else is working this run: anything still fetching was abandoned.
 	await deps.db
 		.update(geoSiteCrawlItems)
 		.set({ status: "QUEUED" })
-		.where(
-			and(
-				eq(geoSiteCrawlItems.runId, run.id),
-				eq(geoSiteCrawlItems.status, "FETCHING"),
-				lt(geoSiteCrawlItems.updatedAt, sql`now() - interval '10 minutes'`),
-			),
-		);
+		.where(and(eq(geoSiteCrawlItems.runId, run.id), eq(geoSiteCrawlItems.status, "FETCHING")));
 	return {
 		ctx: {
 			deps,
@@ -919,10 +1131,10 @@ async function openRun(
 			config,
 			source,
 			profile,
-			robots: meta.robots ? { ...meta.robots } : robotsFromStatus(404),
+			robots: new Map(Object.entries((started.robots ?? {}) as Record<string, RobotsPolicy>)),
 			meta,
 			system: geoSystemPrincipal(run.organizationId, "site-crawl", `crawl-${run.id}`),
-			interval: minIntervalMs(source.requestsPerSecond, meta.robots?.crawlDelaySeconds ?? null),
+			leaseHolder,
 			userAgent: userAgentOf(source.userAgentContact),
 			fetch: deps.fetch ?? safeFetch,
 			sleep: deps.sleep ?? defaultSleep,
@@ -931,30 +1143,23 @@ async function openRun(
 	};
 }
 
-/** First chunk only: robots.txt decides whether the run may proceed, then the frontier is seeded. */
+/** First chunk only: the site's own robots.txt decides whether the run may proceed, then the frontier is seeded. */
 async function ensureFrontier(ctx: CrawlContext): Promise<CrawlChunkResult | null> {
 	if (ctx.meta.robots) return null;
-	const robots = await loadRobots(ctx);
-	if (ctx.stop.reason) return stopEarly(ctx, 0);
+	const robots = await robotsFor(ctx, ctx.source.baseUrl);
+	if (!robots) return stopEarly(ctx, 0);
+	const summary = { ...robotsSummaryOf(robots), sitemaps: robots.sitemaps.slice(0, 20) };
 	if (robots.source === "UNAVAILABLE") {
-		ctx.meta.robots = { ...robots, sitemaps: [] };
+		ctx.meta.robots = summary;
 		await saveMeta(ctx);
 		return finalizeCrawlRun(ctx.deps, ctx.run.id, {
 			forcedStatus: "FAILED",
 			errorSummary: "robots.txt 无法获取（5xx 或网络错误），按 RFC 9309 暂不采集全站",
 		});
 	}
-	ctx.robots = robots;
-	ctx.interval = minIntervalMs(ctx.source.requestsPerSecond, robots.crawlDelaySeconds);
-	await initializeFrontier(ctx);
+	await initializeFrontier(ctx, robots.sitemaps);
 	if (ctx.stop.reason) return stopEarly(ctx, 0);
-	ctx.meta.robots = {
-		source: robots.source,
-		httpStatus: robots.httpStatus,
-		crawlDelaySeconds: robots.crawlDelaySeconds,
-		sitemaps: robots.sitemaps.slice(0, 20),
-		rules: robots.rules.slice(0, 500),
-	};
+	ctx.meta.robots = summary;
 	await saveMeta(ctx);
 	return null;
 }
@@ -966,13 +1171,26 @@ async function skipRemaining(ctx: CrawlContext): Promise<void> {
 		.where(and(eq(geoSiteCrawlItems.runId, ctx.run.id), eq(geoSiteCrawlItems.status, "QUEUED")));
 }
 
+/** A resume that arrives during a chunk leaves the run queued, and its job finds this chunk's lease and gives way. */
+async function stillRunning(ctx: CrawlContext): Promise<boolean> {
+	const status = await currentStatus(ctx);
+	if (status === "RUNNING") return true;
+	if (status !== "QUEUED") return false;
+	const [resumed] = await ctx.deps.db
+		.update(geoSiteCrawlRuns)
+		.set({ status: "RUNNING" })
+		.where(and(eq(geoSiteCrawlRuns.id, ctx.run.id), eq(geoSiteCrawlRuns.status, "QUEUED")))
+		.returning({ id: geoSiteCrawlRuns.id });
+	return Boolean(resumed);
+}
+
 /** Works the frontier until the slice ends, the budget is spent, the window closes or something stops it. */
 async function crawlSlice(ctx: CrawlContext): Promise<number> {
 	const deadline = Date.now() + LIMITS.chunkMs;
 	const window = parseOpWindow(ctx.source.opWindow);
 	let processed = 0;
 	while (!ctx.stop.reason && Date.now() < deadline) {
-		if ((await currentStatus(ctx)) !== "RUNNING") {
+		if (!(await stillRunning(ctx))) {
 			ctx.stop = { reason: "PAUSED" };
 			break;
 		}
@@ -989,17 +1207,8 @@ async function crawlSlice(ctx: CrawlContext): Promise<number> {
 	return processed;
 }
 
-/**
- * One slice of a crawl run. It works through the frontier until the time slice
- * is used up, then sends itself again; pausing, the operating window, the page
- * budget and the circuit breaker are all checked between pages, and everything
- * needed to resume lives in the database rather than in this process.
- */
-export async function processCrawlRun(
-	deps: SiteJobDeps,
-	input: { organizationId: string; runId: string },
-): Promise<CrawlChunkResult> {
-	const opened = await openRun(deps, input);
+async function runChunk(deps: SiteJobDeps, run: CrawlRunRow, leaseHolder: string): Promise<CrawlChunkResult> {
+	const opened = await openRun(deps, run, leaseHolder);
 	if ("done" in opened) return opened.done;
 	const { ctx } = opened;
 	const early = await ensureFrontier(ctx);
@@ -1009,17 +1218,50 @@ export async function processCrawlRun(
 	await saveMeta(ctx);
 	if (ctx.stop.reason) return stopEarly(ctx, processed);
 
-	const [{ value: queued }] = await deps.db
+	const [{ value: unfinished }] = await deps.db
 		.select({ value: count() })
 		.from(geoSiteCrawlItems)
-		.where(and(eq(geoSiteCrawlItems.runId, ctx.run.id), eq(geoSiteCrawlItems.status, "QUEUED")));
-	if (queued > 0) {
-		await deps.send(
-			GEO_QUEUE.siteCrawl,
-			{ organizationId: ctx.run.organizationId, runId: ctx.run.id },
-			crawlJobOptions(ctx.run.id),
-		);
+		.where(and(eq(geoSiteCrawlItems.runId, ctx.run.id), inArray(geoSiteCrawlItems.status, ["QUEUED", "FETCHING"])));
+	if (unfinished > 0) {
+		await sendCrawlJob(deps, ctx.run);
 		return { status: "RUNNING", continued: true, processed };
 	}
 	return finalizeCrawlRun(deps, ctx.run.id, {});
+}
+
+/**
+ * One slice of a crawl run. It works through the frontier until the time slice
+ * is used up, then sends itself again; pausing, the operating window, the page
+ * budget and the circuit breaker are all checked between pages, and everything
+ * needed to resume lives in the database rather than in this process.
+ *
+ * The queue may deliver a run's job more than once (a repeated start, a recovery
+ * sweep, a retry), so the lease on the run row is what makes it safe: a job that
+ * cannot take it returns without touching anything, and the holder finishes.
+ */
+export async function processCrawlRun(
+	deps: SiteJobDeps,
+	input: { organizationId: string; runId: string },
+): Promise<CrawlChunkResult> {
+	const claim = await claimCrawlRun(deps, input.organizationId, input.runId);
+	if (!claim) {
+		const run = await loadCrawlRun(deps.db, input.organizationId, input.runId);
+		return { status: run.status, continued: false, processed: 0 };
+	}
+	let outcome: CrawlChunkResult;
+	try {
+		outcome = await runChunk(deps, claim.run, claim.holder);
+	} finally {
+		await releaseCrawlRun(deps.db, claim.run.id, claim.holder);
+	}
+	if (outcome.status === "PAUSED") {
+		const [run] = await deps.db
+			.select({ status: geoSiteCrawlRuns.status })
+			.from(geoSiteCrawlRuns)
+			.where(eq(geoSiteCrawlRuns.id, claim.run.id))
+			.limit(1);
+		// Resumed in the moment between this chunk's last look and its release: that job already gave way.
+		if (run?.status === "QUEUED") await sendCrawlJob(deps, claim.run);
+	}
+	return outcome;
 }

@@ -33,7 +33,9 @@ function robotsSummary(meta: RunMeta): string {
 	if (!robots) return "尚未读取";
 	if (robots.source === "NOT_FOUND") return `未提供（HTTP ${robots.httpStatus ?? "-"}），按规范视为无限制`;
 	if (robots.source === "UNAVAILABLE") return "无法获取，暂停全站采集";
-	return `已读取，${robots.rules.length} 条规则`;
+	const others = Object.keys(meta?.robotsByOrigin ?? {}).length - 1;
+	const extra = others > 0 ? `；另有 ${others} 个站点来源按各自的 robots.txt 执行` : "";
+	return `已读取，${robots.ruleCount} 条规则${extra}`;
 }
 
 function sitemapSummary(meta: RunMeta, hasSeedOverride: boolean): string {

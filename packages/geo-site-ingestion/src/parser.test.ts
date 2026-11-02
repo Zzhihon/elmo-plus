@@ -152,15 +152,10 @@ describe("version identity", () => {
 
 	it("records no new version for unchanged content and none for a duplicate URL", () => {
 		const hash = contentHashOf(productPage(10), profile);
-		expect(decideVersion({ contentHash: hash, latestHashOfPage: hash, pageWithSameContent: "p1", pageId: "p1" })).toBe(
-			"UNCHANGED",
-		);
-		expect(decideVersion({ contentHash: hash, latestHashOfPage: null, pageWithSameContent: "p1", pageId: "p2" })).toBe(
-			"DUPLICATE",
-		);
-		expect(decideVersion({ contentHash: hash, latestHashOfPage: "old", pageWithSameContent: null, pageId: "p1" })).toBe(
-			"NEW_VERSION",
-		);
+		const fetched = { contentHash: hash, hasVersionWithContent: false, otherPageHasContent: false };
+		expect(decideVersion({ ...fetched, currentHashOfPage: hash })).toBe("UNCHANGED");
+		expect(decideVersion({ ...fetched, currentHashOfPage: null, otherPageHasContent: true })).toBe("DUPLICATE");
+		expect(decideVersion({ ...fetched, currentHashOfPage: "old" })).toBe("NEW_VERSION");
 	});
 
 	it("gives a profile upgrade a new parser version for the same content", () => {

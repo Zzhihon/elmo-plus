@@ -150,8 +150,8 @@ async function evaluateStandingAlerts(deps: SiteJobDeps, now: Date): Promise<voi
 
 /**
  * Jobs are sent after their rows commit, so a crash in between leaves a row
- * with no job. This finds such rows and sends their job again; the singleton
- * keys and the unique version key make a duplicate send harmless.
+ * with no job. This finds such rows and sends their job again; the run lease
+ * and the unique version key make a duplicate send harmless.
  */
 async function recoverStranded(deps: SiteJobDeps): Promise<Omit<SiteTickResult, "scheduled">> {
 	const strandedRuns = await deps.db
@@ -162,6 +162,7 @@ async function recoverStranded(deps: SiteJobDeps): Promise<Omit<SiteTickResult, 
 				and ${geoSiteCrawlRuns.createdAt} < now() - interval '10 minutes'
 				and coalesce((${geoSiteCrawlRuns.counts}->'meta'->>'resumeAt')::timestamptz, '-infinity') < now())
 			or (${geoSiteCrawlRuns.status} = 'RUNNING'
+				and coalesce(${geoSiteCrawlRuns.leaseUntil}, '-infinity') < now()
 				and coalesce(${geoSiteCrawlRuns.startedAt}, ${geoSiteCrawlRuns.createdAt}) < now() - interval '15 minutes'
 				and not exists (
 					select 1 from ${geoSiteCrawlItems} i

@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { gunzipSync } from "node:zlib";
 import {
 	GEO_QUEUE,
 	GeoError,
@@ -24,26 +23,18 @@ import { raiseGeoAlert } from "@workspace/lib/geo/alerts";
 import { writeGeoAudit } from "@workspace/lib/geo/audit";
 import * as cheerio from "cheerio";
 import { and, desc, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
-import {
-	CRAWLER_PRODUCT_TOKEN,
-	classifyStatus,
-	isRetryableFailure,
-	LIMITS,
-	minIntervalMs,
-	SITEMAP_MIME_TYPES,
-	userAgentOf,
-} from "../crawl-policy";
+import { CRAWLER_PRODUCT_TOKEN, LIMITS, minIntervalMs, SITEMAP_MIME_TYPES, userAgentOf } from "../crawl-policy";
 import { siteDiscovery } from "../discovery";
-import { decodeHtml } from "../net/charset";
+import { decodeHtml, decodeSitemap, decodeStoredHtml } from "../net/charset";
 import { isAllowedByRobots, parseRobots } from "../net/robots";
-import { parseContentType, type SafeFetchOptions, type SafeFetchResult, safeFetch } from "../net/safe-fetch";
+import { type SafeFetchOptions, type SafeFetchResult, safeFetch } from "../net/safe-fetch";
 import { isAllowedHost } from "../net/url-policy";
 import { parseOpWindow, type SiteProfile } from "../profile";
 import { isWithinWindow } from "../schedule";
-import { nowOf, type SendJob, type SiteJobDeps } from "../store/deps";
+import { defaultSleep, nowOf, type SendJob, type SiteJobDeps } from "../store/deps";
 import { loadParsedPage } from "../store/parse";
 import { loadSiteSource, profileOfSource, type SiteSourceRow } from "../store/sources";
-import { acquireHostSlot } from "../store/throttle";
+import { fetchInHostSlots, type HostSlotRefusal } from "../store/throttle";
 import { findingPriorityOf, SITE_AUDIT_ENGINE_VERSION, siteAuditRule } from "./catalog";
 import { resolveAuditConfig } from "./config";
 import { type AuditPageFacts, extractAuditFacts } from "./facts";
@@ -247,12 +238,21 @@ interface ProbeContext {
 	fetch: (url: string, options: SafeFetchOptions) => Promise<SafeFetchResult>;
 	/** Set once the host refuses us a slot; every later probe is skipped rather than queued behind it. */
 	stopped: string | null;
+	waitBudgetMs: number;
 }
+
+const PROBE_WAIT_BUDGET_MS = 10 * 60_000;
+const STOP_REASON: Record<HostSlotRefusal["reason"], string> = {
+	CIRCUIT_OPEN: "该域名已熔断，暂停请求",
+	BUSY: "该域名正被其他任务占用",
+	DEFERRED: "站点要求的抓取间隔过长，本次不再等待",
+};
 
 /**
  * The crawler's own discipline for every request the audit makes: the shared
- * per-host slot and interval, the guarded fetch, and the circuit breaker fed.
- * No retries: a probe that fails is a finding, not something to hammer.
+ * per-host slot and interval on every hop, the guarded fetch, and the circuit
+ * breaker fed. No retries: a probe that fails is a finding, not something to
+ * hammer. A long Crawl-delay is waited out, up to what the run can afford.
  */
 async function probeFetch(
 	ctx: ProbeContext,
@@ -260,22 +260,28 @@ async function probeFetch(
 	options: Pick<SafeFetchOptions, "maxBytes" | "timeoutMs" | "allowedMimeTypes" | "accept">,
 ): Promise<SafeFetchResult | null> {
 	if (ctx.stopped) return null;
-	const host = new URL(url).hostname;
-	const slot = await acquireHostSlot(ctx.deps, host, ctx.interval);
-	if (!slot.ok) {
-		ctx.stopped = slot.reason === "CIRCUIT_OPEN" ? "该域名已熔断，暂停请求" : "该域名正被其他任务占用";
+	const paced = await fetchInHostSlots(ctx.deps, {
+		url,
+		options: { ...options, allowedHosts: ctx.source.allowedHosts, userAgent: ctx.userAgent },
+		intervalFor: () => ctx.interval,
+		fetch: ctx.fetch,
+	});
+	if (paced.refusal) {
+		const { refusal } = paced;
+		if (refusal.reason === "DEFERRED") {
+			// A floor, since the two clocks can disagree: every round must spend some of the budget.
+			const wait = Math.max(refusal.until.getTime() - Date.now(), 1000);
+			if (wait <= ctx.waitBudgetMs) {
+				ctx.waitBudgetMs -= wait;
+				await (ctx.deps.sleep ?? defaultSleep)(wait);
+				return probeFetch(ctx, url, options);
+			}
+		}
+		ctx.stopped = STOP_REASON[refusal.reason];
 		return null;
 	}
-	let result: SafeFetchResult;
-	try {
-		result = await ctx.fetch(url, { ...options, allowedHosts: ctx.source.allowedHosts, userAgent: ctx.userAgent });
-	} catch (error) {
-		await slot.release(false);
-		throw error;
-	}
-	const retryable = result.ok ? classifyStatus(result.status).kind === "RETRYABLE" : isRetryableFailure(result.code);
-	const health = await slot.release(!retryable);
-	if (health.tripped) {
+	const { result, health, host } = paced;
+	if (health?.tripped) {
 		await raiseGeoAlert(ctx.deps.db, {
 			organizationId: ctx.organizationId,
 			kind: "site.circuit_open",
@@ -300,13 +306,6 @@ async function probeRobots(ctx: ProbeContext): Promise<RobotsProbe> {
 	return classifyRobotsProbe(url, result, text);
 }
 
-function sitemapText(result: Extract<SafeFetchResult, { ok: true }>): string {
-	if (result.mimeType === "application/gzip" || result.mimeType === "application/x-gzip") {
-		return gunzipSync(result.body, { maxOutputLength: LIMITS.sitemapBytes }).toString("utf8");
-	}
-	return decodeHtml(result.body, result.charset).text;
-}
-
 async function probeSitemapFile(ctx: ProbeContext, url: string, declared: boolean): Promise<SitemapFileProbe | null> {
 	const result = await probeFetch(ctx, url, {
 		maxBytes: LIMITS.sitemapBytes,
@@ -324,7 +323,7 @@ async function probeSitemapFile(ctx: ProbeContext, url: string, declared: boolea
 		return { ...base, status: result.status, error: `HTTP ${result.status}`, valid: false };
 	}
 	try {
-		const xml = sitemapText(result);
+		const xml = decodeSitemap(result, LIMITS.sitemapBytes);
 		const $ = cheerio.load(xml, { xml: true });
 		if ($("urlset").length === 0 && $("sitemapindex").length === 0) {
 			return { ...base, status: result.status, error: "根元素不是 urlset 或 sitemapindex", valid: false };
@@ -385,6 +384,7 @@ async function runSiteProbes(deps: SiteJobDeps, source: SiteSourceRow, organizat
 		userAgent: userAgentOf(source.userAgentContact),
 		fetch: deps.fetch ?? safeFetch,
 		stopped: null,
+		waitBudgetMs: PROBE_WAIT_BUDGET_MS,
 	};
 	const robots = await probeRobots(ctx);
 	if (robots.kind === "UNAVAILABLE") {
@@ -467,20 +467,20 @@ async function loadPages(db: DbConnection, organizationId: string, sourceId: str
 		.where(and(eq(geoSitePages.organizationId, organizationId), eq(geoSitePages.siteSourceId, sourceId)));
 }
 
-async function latestVersions(db: DbConnection, organizationId: string, pageIds: string[]) {
+async function currentVersions(db: DbConnection, organizationId: string, pageIds: string[]) {
 	if (pageIds.length === 0) return new Map<string, typeof geoSitePageVersions.$inferSelect>();
 	const rows = await db
-		.selectDistinctOn([geoSitePageVersions.pageId])
-		.from(geoSitePageVersions)
+		.select({ version: geoSitePageVersions })
+		.from(geoSitePages)
+		.innerJoin(geoSitePageVersions, eq(geoSitePageVersions.id, geoSitePages.currentVersionId))
 		.where(
 			and(
-				eq(geoSitePageVersions.organizationId, organizationId),
-				inArray(geoSitePageVersions.pageId, pageIds),
+				eq(geoSitePages.organizationId, organizationId),
+				inArray(geoSitePages.id, pageIds),
 				ne(geoSitePageVersions.parseStatus, "SKIPPED"),
 			),
-		)
-		.orderBy(geoSitePageVersions.pageId, desc(geoSitePageVersions.fetchedAt), desc(geoSitePageVersions.createdAt));
-	return new Map(rows.map((row) => [row.pageId, row]));
+		);
+	return new Map(rows.map(({ version }) => [version.pageId, version]));
 }
 
 function isHomeUrl(url: string, baseUrl: string): boolean {
@@ -499,7 +499,7 @@ async function collectFacts(
 	pages: PageRow[],
 ): Promise<{ facts: AuditPageFacts[]; skipped: number }> {
 	const active = pages.filter((page) => page.status === "ACTIVE");
-	const versions = await latestVersions(
+	const versions = await currentVersions(
 		deps.db,
 		source.organizationId,
 		active.map((page) => page.id),
@@ -516,7 +516,7 @@ async function collectFacts(
 			skipped += version ? 1 : 0;
 			continue;
 		}
-		const html = decodeHtml(raw.body, parseContentType(raw.contentType ?? undefined).charset).text;
+		const html = decodeStoredHtml(raw.body, raw.contentType);
 		const parsed = await loadParsedPage(deps, version);
 		const pageFacts = extractAuditFacts({
 			pageId: page.id,
@@ -813,7 +813,7 @@ async function auditSite(deps: SiteJobDeps, run: SiteAuditRunRow, pendingParse: 
 }
 
 /**
- * audit.site: reads the latest stored version of every active page (no page is
+ * audit.site: reads the current stored version of every active page (no page is
  * downloaded again), runs the rules, probes robots.txt, the sitemap and HTTPS
  * through the crawler's guarded and throttled fetch, then reconciles findings.
  */

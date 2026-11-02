@@ -215,12 +215,12 @@ function emptyPage(url: string, profile: SiteProfile): ParsedPage {
 	};
 }
 
-function readMeta($: cheerio.CheerioAPI, page: ParsedPage, url: string, profile: SiteProfile): void {
+function readMeta($: cheerio.CheerioAPI, page: ParsedPage, baseUrl: string, profile: SiteProfile): void {
 	page.metaDescription = inline($('meta[name="description" i]').attr("content") ?? "") || null;
 	page.h1 = inline($("h1").first().text()) || null;
 	page.lang = $("html").attr("lang")?.trim() || null;
 	const canonical = $('link[rel~="canonical" i]').attr("href");
-	page.canonical = canonical ? normalizeUrl(canonical, url) : null;
+	page.canonical = canonical ? normalizeUrl(canonical, baseUrl) : null;
 	if (profile.defaults.publishedAt) {
 		const match = firstMatch($, profile.defaults.publishedAt.selector);
 		const raw = match
@@ -235,7 +235,7 @@ function readMeta($: cheerio.CheerioAPI, page: ParsedPage, url: string, profile:
 function readContent(
 	$: cheerio.CheerioAPI,
 	page: ParsedPage,
-	url: string,
+	baseUrl: string,
 	profile: SiteProfile,
 	category: SiteCategory | null,
 ): boolean {
@@ -262,7 +262,7 @@ function readContent(
 		.filter((table) => table.rows.length > 0);
 	const images = new Map<string, ParsedImage>();
 	for (const image of root.find("img").toArray()) {
-		const src = absolute(imageSource($(image)), url);
+		const src = absolute(imageSource($(image)), baseUrl);
 		if (src && !images.has(src)) images.set(src, { src, alt: inline($(image).attr("alt") ?? "") || null });
 	}
 	page.images = [...images.values()];
@@ -288,7 +288,7 @@ function addFieldImages(page: ParsedPage): void {
 	}
 }
 
-function parsePage(html: string, url: string, profile: SiteProfile): ParseOutcome {
+function parsePage(html: string, url: string, profile: SiteProfile, baseUrl: string): ParseOutcome {
 	const $ = cheerio.load(html);
 	const page = emptyPage(url, profile);
 	const category = categoryOf(url, profile, $);
@@ -296,12 +296,12 @@ function parsePage(html: string, url: string, profile: SiteProfile): ParseOutcom
 	page.categoryLabel = category?.label ?? null;
 	page.entityKind = category?.entityKind ?? null;
 	page.role = category?.role ?? null;
-	page.fields = (category?.fields ?? []).map((rule) => extractField($, rule, url));
-	readMeta($, page, url, profile);
+	page.fields = (category?.fields ?? []).map((rule) => extractField($, rule, baseUrl));
+	readMeta($, page, baseUrl, profile);
 
 	const titleMatch = firstMatch($, category?.title ?? profile.defaults.title);
 	page.title = cleanTitle(titleMatch ? inline(titleMatch.elements.first().text()) : "", profile);
-	const contentFound = readContent($, page, url, profile, category);
+	const contentFound = readContent($, page, baseUrl, profile, category);
 	addFieldImages(page);
 
 	if (!page.title) page.warnings.push("TITLE_MISSING");
@@ -324,9 +324,9 @@ function parsePage(html: string, url: string, profile: SiteProfile): ParseOutcom
 export function createSitePageParser(profile: SiteProfile): SitePageParser {
 	return {
 		version: parserVersionOf(profile),
-		parse(html, url, activeProfile = profile) {
+		parse(html, url, activeProfile = profile, baseUrl = url) {
 			try {
-				return parsePage(html, url, activeProfile);
+				return parsePage(html, url, activeProfile, baseUrl);
 			} catch (error) {
 				return { status: "FAILED", page: null, errorCode: "PARSER_ERROR", message: (error as Error).message };
 			}
@@ -334,6 +334,7 @@ export function createSitePageParser(profile: SiteProfile): SitePageParser {
 	};
 }
 
-export function parseSitePage(html: string, url: string, profile: SiteProfile): ParseOutcome {
-	return createSitePageParser(profile).parse(html, url, profile);
+/** `url` is the page's identity; `baseUrl` is the address that served it, which relative links resolve against. */
+export function parseSitePage(html: string, url: string, profile: SiteProfile, baseUrl = url): ParseOutcome {
+	return createSitePageParser(profile).parse(html, url, profile, baseUrl);
 }

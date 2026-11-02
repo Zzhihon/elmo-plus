@@ -1,5 +1,5 @@
 import type { GeoCrawlItemOutcome } from "@workspace/geo-domain";
-import type { SafeFetchFailure } from "./net/safe-fetch";
+import type { SafeFetchFailure, SafeFetchResult } from "./net/safe-fetch";
 
 export const CRAWLER_PRODUCT_TOKEN = "ElmoGeoSiteIngestion";
 export const CRAWLER_VERSION = "1.0";
@@ -23,6 +23,10 @@ export const LIMITS = {
 	sitemapMaxUrls: 50_000,
 	sitemapMaxFiles: 10,
 	chunkMs: 4 * 60_000,
+	/** A Crawl-delay above this is honoured only this far: a site cannot park a run indefinitely. */
+	maxCrawlDelaySeconds: 300,
+	/** Waits up to this long are slept through; longer ones reschedule the job instead of occupying a worker. */
+	maxInlineWaitMs: 30_000,
 } as const;
 
 export const HTML_MIME_TYPES = ["text/html", "application/xhtml+xml"] as const;
@@ -57,11 +61,17 @@ export function isRetryableFailure(code: SafeFetchFailure): boolean {
 	return code === "TIMEOUT" || code === "NETWORK" || code === "DNS_FAILED";
 }
 
+export function isRetryableResult(result: SafeFetchResult): boolean {
+	return result.ok ? classifyStatus(result.status).kind === "RETRYABLE" : isRetryableFailure(result.code);
+}
+
 export function outcomeOfFailure(code: SafeFetchFailure): GeoCrawlItemOutcome {
 	switch (code) {
 		case "REDIRECT_BLOCKED":
 		case "TOO_MANY_REDIRECTS":
 			return "REDIRECT_BLOCKED";
+		case "REDIRECT_REFUSED":
+			return "ROBOTS_DISALLOWED";
 		case "ADDRESS_BLOCKED":
 			return "ADDRESS_BLOCKED";
 		case "MIME_REJECTED":
@@ -85,21 +95,23 @@ export function backoffMs(attempt: number, retryAfterHeader?: string | null, now
 	return Math.min(Math.max(exponential, requested), LIMITS.retryAfterMaxMs);
 }
 
-export type VersionDecision = "NEW_VERSION" | "UNCHANGED" | "DUPLICATE";
+export type VersionDecision = "NEW_VERSION" | "UNCHANGED" | "REVERTED" | "DUPLICATE";
 
 /**
  * Whether a fetched page earns a new immutable version. Same content as the
- * page's latest version: unchanged. Same content as a different page of the
- * site: a duplicate URL, recorded but not versioned twice.
+ * page shows now: unchanged. Same content as one of its own older versions: it
+ * changed back, and that version becomes current again. Same content as a
+ * different page of the site: a duplicate URL, recorded but not versioned twice.
  */
 export function decideVersion(input: {
 	contentHash: string;
-	latestHashOfPage: string | null;
-	pageWithSameContent: string | null;
-	pageId: string;
+	currentHashOfPage: string | null;
+	hasVersionWithContent: boolean;
+	otherPageHasContent: boolean;
 }): VersionDecision {
-	if (input.latestHashOfPage === input.contentHash) return "UNCHANGED";
-	if (input.pageWithSameContent && input.pageWithSameContent !== input.pageId) return "DUPLICATE";
+	if (input.currentHashOfPage === input.contentHash) return "UNCHANGED";
+	if (input.hasVersionWithContent) return "REVERTED";
+	if (input.otherPageHasContent) return "DUPLICATE";
 	return "NEW_VERSION";
 }
 
@@ -108,5 +120,5 @@ export const MAX_REQUESTS_PER_SECOND = 2;
 
 export function minIntervalMs(requestsPerSecond: number, crawlDelaySeconds: number | null): number {
 	const rate = Math.min(requestsPerSecond > 0 ? requestsPerSecond : 1, MAX_REQUESTS_PER_SECOND);
-	return Math.max(1000 / rate, (crawlDelaySeconds ?? 0) * 1000);
+	return Math.max(1000 / rate, Math.min(crawlDelaySeconds ?? 0, LIMITS.maxCrawlDelaySeconds) * 1000);
 }

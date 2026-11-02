@@ -94,10 +94,12 @@ function ReparseControls({
 
 function VersionList({
 	versions,
+	currentId,
 	selectedId,
 	onSelect,
 }: {
 	versions: PageDetail["versions"];
+	currentId: string | null;
 	selectedId: string | null;
 	onSelect: (versionId: string) => void;
 }) {
@@ -117,6 +119,7 @@ function VersionList({
 					>
 						<span className="tabular-nums">{formatDateTime(version.fetchedAt)}</span>
 						<span className="flex flex-wrap items-center gap-1">
+							{version.id === currentId && <GeoStatusBadge label="当前版本" tone="info" />}
 							<ParseStatusBadge status={version.parseStatus} />
 							<span className="font-mono text-xs text-muted-foreground">{version.parserVersion}</span>
 						</span>
@@ -206,7 +209,10 @@ function GeoSitePageDetailPage() {
 		queryFn: () => getSitePageFn({ data: { organizationId, pageId: id } }),
 		refetchInterval: 15_000,
 	});
-	const versionId = selectedVersion ?? detail.data?.versions[0]?.id ?? null;
+	const currentVersion =
+		detail.data?.versions.find((version) => version.id === detail.data?.page.currentVersionId) ??
+		detail.data?.versions[0];
+	const versionId = selectedVersion ?? currentVersion?.id ?? null;
 	const onError = (error: unknown) => setNotice({ tone: "error", text: errorMessage(error) });
 	const reparse = useMutation({
 		mutationFn: () =>
@@ -251,7 +257,7 @@ function GeoSitePageDetailPage() {
 
 	return (
 		<GeoPageFrame
-			title={versions[0]?.title ?? "页面详情"}
+			title={currentVersion?.title ?? "页面详情"}
 			description={page.url}
 			actions={
 				<>
@@ -282,7 +288,12 @@ function GeoSitePageDetailPage() {
 				<GeoEmptyState title="还没有内容版本" description="页面已发现但尚未成功抓取或解析。" />
 			) : (
 				<div className="grid gap-4 lg:grid-cols-[18rem_1fr]">
-					<VersionList versions={versions} selectedId={versionId} onSelect={setSelectedVersion} />
+					<VersionList
+						versions={versions}
+						currentId={page.currentVersionId}
+						selectedId={versionId}
+						onSelect={setSelectedVersion}
+					/>
 					<div className="flex min-w-0 flex-col gap-4">
 						{versionId && (
 							<PageVersionView key={versionId} organizationId={organizationId} pageId={id} versionId={versionId} />

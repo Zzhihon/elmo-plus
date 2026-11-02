@@ -21,6 +21,8 @@ const BLOCKED_V4: Array<[string, number]> = [
 const BLOCKED_V6: Array<[string, number]> = [
 	["::", 128],
 	["::1", 128],
+	["::ffff:0:0:0", 96],
+	["64:ff9b:1::", 48],
 	["100::", 64],
 	["2001::", 23],
 	["2001:db8::", 32],

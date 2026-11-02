@@ -39,6 +39,11 @@ export interface SafeFetchOptions {
 	request?: { method: "GET" | "POST"; headers?: Record<string, string>; body?: string };
 	/** API endpoints legitimately sit under paths such as /api that a crawler has no business visiting. */
 	allowSensitivePaths?: boolean;
+	/**
+	 * Asked before each redirect is followed, with the time limit paused: pacing
+	 * between hops belongs to the caller, and so does turning a hop down.
+	 */
+	beforeRedirect?: (target: string) => Promise<{ follow: true } | { follow: false; detail: string }>;
 }
 
 export interface RedirectHop {
@@ -52,6 +57,7 @@ export type SafeFetchFailure =
 	| "DNS_FAILED"
 	| "ADDRESS_BLOCKED"
 	| "REDIRECT_BLOCKED"
+	| "REDIRECT_REFUSED"
 	| "TOO_MANY_REDIRECTS"
 	| "TIMEOUT"
 	| "TOO_LARGE"
@@ -61,6 +67,7 @@ export type SafeFetchFailure =
 export interface SafeFetchSuccess {
 	ok: true;
 	url: string;
+	/** The address that answered, exactly as served. `normalizeUrl` of it is the page's identity. */
 	finalUrl: string;
 	status: number;
 	headers: Record<string, string>;
@@ -111,9 +118,8 @@ export function parseContentType(header: string | undefined): { mimeType: string
 	if (!header) return { mimeType: null, charset: null };
 	const [type, ...params] = header.split(";");
 	const mimeType = type.trim().toLowerCase() || null;
-	const charsetParam = params.map((param) => param.trim()).find((param) => param.toLowerCase().startsWith("charset="));
-	const charset = charsetParam ? charsetParam.slice(8).trim().replace(/^"|"$/g, "").toLowerCase() : null;
-	return { mimeType, charset };
+	const charset = /^\s*charset\s*=\s*"?([^";\s]+)/i.exec(params.find((param) => /^\s*charset\s*=/i.test(param)) ?? "");
+	return { mimeType, charset: charset ? charset[1].toLowerCase() : null };
 }
 
 /** The resolved addresses, all of which must be public; one private answer fails the whole host. */
@@ -121,11 +127,13 @@ async function resolvePinned(
 	hostname: string,
 	resolve: Resolver,
 	addressAllowed: (address: string) => boolean,
+	deadline: Deadline,
 ): Promise<ResolvedAddress> {
 	let addresses: ResolvedAddress[];
 	try {
-		addresses = await resolve(hostname);
+		addresses = await deadline.bound(resolve(hostname));
 	} catch (error) {
+		if (error instanceof FetchAbort) throw error;
 		throw new FetchAbort("DNS_FAILED", `无法解析 ${hostname}：${(error as Error).message}`);
 	}
 	if (addresses.length === 0) throw new FetchAbort("DNS_FAILED", `${hostname} 没有解析结果`);
@@ -230,8 +238,12 @@ function readBody(response: IncomingMessage, maxBytes: number, register: (destro
 
 interface Deadline {
 	register: (destroy: (error: Error) => void) => void;
+	/** Settles with the promise unless time runs out first; for work with nothing to destroy, such as a DNS lookup. */
+	bound: <T>(work: Promise<T>) => Promise<T>;
 	expired: () => boolean;
 	error: FetchAbort;
+	pause: () => void;
+	resume: () => void;
 	clear: () => void;
 }
 
@@ -239,19 +251,36 @@ interface Deadline {
 function startDeadline(options: SafeFetchOptions): Deadline {
 	let destroyActive: ((error: Error) => void) | null = null;
 	let expired = false;
+	let remaining = options.timeoutMs;
+	let armedAt = 0;
+	let timer: ReturnType<typeof setTimeout> | undefined;
 	const error = new FetchAbort("TIMEOUT", `超过 ${options.timeoutMs} 毫秒未完成`);
-	const timer = setTimeout(() => {
-		expired = true;
-		destroyActive?.(error);
-	}, options.timeoutMs);
+	const arm = () => {
+		armedAt = Date.now();
+		timer = setTimeout(() => {
+			expired = true;
+			destroyActive?.(error);
+		}, remaining);
+	};
+	arm();
 	const onAbort = () => destroyActive?.(new FetchAbort("NETWORK", "已取消"));
 	options.signal?.addEventListener("abort", onAbort, { once: true });
 	return {
 		register: (destroy) => {
 			destroyActive = destroy;
 		},
+		bound: (work) =>
+			new Promise((resolve, reject) => {
+				destroyActive = reject;
+				work.then(resolve, reject);
+			}),
 		expired: () => expired,
 		error,
+		pause: () => {
+			clearTimeout(timer);
+			remaining = Math.max(remaining - (Date.now() - armedAt), 0);
+		},
+		resume: arm,
 		clear: () => {
 			clearTimeout(timer);
 			options.signal?.removeEventListener("abort", onAbort);
@@ -275,7 +304,7 @@ type HopOutcome =
 
 async function hop(
 	current: string,
-	hopIndex: number,
+	visited: Set<string>,
 	options: SafeFetchOptions,
 	deadline: Deadline,
 	redirects: RedirectHop[],
@@ -285,6 +314,7 @@ async function hop(
 		url.hostname,
 		options.resolve ?? systemResolver,
 		options.addressAllowed ?? isPublicAddress,
+		deadline,
 	);
 	if (deadline.expired()) throw deadline.error;
 	const { response, address } = await request(url, pinned, options, deadline.register);
@@ -292,10 +322,10 @@ async function hop(
 	if (!REDIRECT_STATUSES.has(status) || !response.headers.location)
 		return { kind: "response", response, address, status };
 
-	response.resume();
+	response.destroy();
 	const target = new URL(response.headers.location, url).toString();
 	const decision = checkUrl(target, policyOf(options));
-	redirects.push({ from: current, to: decision.ok ? decision.url : target, status });
+	redirects.push({ from: current, to: target, status });
 	if (!decision.ok) {
 		return {
 			kind: "refused",
@@ -305,10 +335,21 @@ async function hop(
 		};
 	}
 	const maxRedirects = options.maxRedirects ?? 5;
-	if (hopIndex + 1 > maxRedirects) {
+	if (redirects.length > maxRedirects || visited.has(target)) {
 		return { kind: "refused", code: "TOO_MANY_REDIRECTS", detail: `重定向超过 ${maxRedirects} 次`, extra: { status } };
 	}
-	return { kind: "redirect", next: decision.url };
+	// The address as served, not its normalized identity: `/news` answering with `/news/`
+	// would otherwise be sent straight back to `/news`.
+	return { kind: "redirect", next: target };
+}
+
+/** The caller's say on a hop; its wait, a turn on the rate limit, does not count against the time limit. */
+async function redirectRefusal(target: string, options: SafeFetchOptions, deadline: Deadline): Promise<string | null> {
+	if (!options.beforeRedirect) return null;
+	deadline.pause();
+	const gate = await options.beforeRedirect(target);
+	deadline.resume();
+	return gate.follow ? null : gate.detail;
 }
 
 async function finishResponse(
@@ -341,6 +382,20 @@ async function finishResponse(
 	};
 }
 
+function failureOf(
+	error: unknown,
+	deadline: Deadline,
+	fail: (code: SafeFetchFailure, detail: string, extra?: Partial<SafeFetchError>) => SafeFetchError,
+): SafeFetchError {
+	if (error instanceof FetchAbort) {
+		const extra: Partial<SafeFetchError> = { status: error.status };
+		if (error.code === "ADDRESS_BLOCKED") extra.blockedReason = "PRIVATE_ADDRESS";
+		return fail(error.code, error.message, extra);
+	}
+	if (deadline.expired()) return fail("TIMEOUT", deadline.error.message);
+	return fail("NETWORK", (error as Error).message);
+}
+
 /**
  * The only way the crawler talks to the network. Every hop is checked against the
  * host allowlist, resolved once, refused if any answer is not a public address,
@@ -367,28 +422,27 @@ export async function safeFetch(input: string, options: SafeFetchOptions): Promi
 		const first = checkUrl(current, policyOf(options));
 		if (!first.ok) return fail("URL_REFUSED", `网址被拒绝：${first.reason}`, { blockedReason: first.reason });
 
-		for (let index = 0; ; index++) {
-			const outcome = await hop(current, index, options, deadline, redirects);
+		const visited = new Set([current]);
+		for (;;) {
+			const outcome = await hop(current, visited, options, deadline, redirects);
 			if (outcome.kind === "refused") return fail(outcome.code, outcome.detail, outcome.extra);
-			if (outcome.kind === "redirect") {
-				current = outcome.next;
-				continue;
+			if (outcome.kind === "response") {
+				return await finishResponse(outcome, options, deadline, fail, {
+					url: input,
+					finalUrl: current,
+					redirects,
+					started,
+				});
 			}
-			return await finishResponse(outcome, options, deadline, fail, {
-				url: input,
-				finalUrl: current,
-				redirects,
-				started,
-			});
+			const refusal = await redirectRefusal(outcome.next, options, deadline);
+			if (refusal) {
+				return fail("REDIRECT_REFUSED", refusal, { status: redirects.at(-1)?.status, blockedTarget: outcome.next });
+			}
+			current = outcome.next;
+			visited.add(current);
 		}
 	} catch (error) {
-		if (error instanceof FetchAbort) {
-			const extra: Partial<SafeFetchError> = { status: error.status };
-			if (error.code === "ADDRESS_BLOCKED") extra.blockedReason = "PRIVATE_ADDRESS";
-			return fail(error.code, error.message, extra);
-		}
-		if (deadline.expired()) return fail("TIMEOUT", deadline.error.message);
-		return fail("NETWORK", (error as Error).message);
+		return failureOf(error, deadline, fail);
 	} finally {
 		deadline.clear();
 	}

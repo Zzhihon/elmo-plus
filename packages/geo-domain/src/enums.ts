@@ -135,6 +135,7 @@ export type GeoCrawlItemStatus = (typeof GEO_CRAWL_ITEM_STATUSES)[number];
 export const GEO_CRAWL_ITEM_OUTCOMES = [
 	"NEW_VERSION",
 	"UNCHANGED",
+	"REVERTED",
 	"DUPLICATE",
 	"REDIRECTED",
 	"GONE",

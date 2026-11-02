@@ -381,19 +381,10 @@ describe("retention purge", () => {
 		const reverted = await version("eee", 110, revertedPage.id);
 		ids.revertedVersion = reverted.id;
 		ids.intermediateVersion = (await version("fff", 100, revertedPage.id)).id;
-		await db.insert(geoSiteCrawlItems).values({
-			organizationId,
-			runId: run.id,
-			url: `${revertedPage.normalizedUrl}?again`,
-			source: "KNOWN",
-			status: "DONE",
-			outcome: "NEW_VERSION",
-			pageId: revertedPage.id,
-			contentHash: "eee",
-			rawObjectKey: reverted.htmlObjectKey,
-			fetchedAt: daysAgo(40),
-			versionId: reverted.id,
-		});
+		await db
+			.update(geoSitePages)
+			.set({ currentContentHash: "eee", currentVersionId: reverted.id })
+			.where(eq(geoSitePages.id, revertedPage.id));
 
 		const [sample] = await db
 			.insert(geoSiteQaSamples)
