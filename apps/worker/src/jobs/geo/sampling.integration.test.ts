@@ -222,6 +222,44 @@ describe("bootstrap file", () => {
 		expect(target?.verificationStatus).toBe("UNVERIFIED");
 	});
 
+	it("does not keep resending answers that cannot be evaluated until a dictionary exists", async () => {
+		const organizationId = await createOrganization();
+		const [prompt] = await db
+			.insert(geoPrompts)
+			.values({ organizationId, question: "开关柜哪家好", createdBy: "user-op" })
+			.returning();
+		const [target] = await db
+			.insert(geoSamplingTargets)
+			.values({
+				organizationId,
+				platform: "doubao",
+				surfaceMode: "MANUAL_EVIDENCE",
+				provider: "manual",
+				createdBy: "u",
+			})
+			.returning();
+		const [observation] = await db
+			.insert(geoObservations)
+			.values({
+				organizationId,
+				promptId: prompt.id,
+				promptRevision: 1,
+				questionText: prompt.question,
+				targetId: target.id,
+				platform: "doubao",
+				surfaceMode: "MANUAL_EVIDENCE",
+				status: "VALID",
+				responseText: "示例电气",
+				sampledAt: new Date(Date.now() - 3_600_000),
+				createdAt: new Date(Date.now() - 3_600_000),
+			})
+			.returning();
+		sent.splice(0);
+		await sweepUnevaluated();
+		expect(sent.some((job) => job.data.observationId === observation.id)).toBe(false);
+		sent.splice(0);
+	});
+
 	it("refuses a targets section that is wrong instead of reporting it imported", async () => {
 		const organizationId = await createOrganization();
 		await expect(
