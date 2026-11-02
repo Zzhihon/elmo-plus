@@ -255,7 +255,10 @@ function contradicts(fact: IndexedFact, token: Token): boolean {
 		case "STANDARD":
 			return fact.tokens.some(
 				(other) =>
-					other.kind === "STANDARD" && other.family === token.family && Boolean(token.year) && other.year !== token.year,
+					other.kind === "STANDARD" &&
+					other.family === token.family &&
+					Boolean(token.year) &&
+					other.year !== token.year,
 			);
 		case "CERTIFICATE":
 			return false;
@@ -266,6 +269,43 @@ function excerptOf(text: string): string {
 	return text.length > 80 ? `${text.slice(0, 79)}…` : text;
 }
 
+function checkToken(
+	token: Token,
+	cited: readonly IndexedFact[],
+	all: readonly IndexedFact[],
+): { status: GeoDraftCheckStatus; supportingRefs: string[] } {
+	const direct = cited.filter((fact) => supports(fact, token)).map((fact) => fact.ref);
+	if (direct.length > 0) return { status: "SUPPORTED", supportingRefs: direct };
+	const anywhere = all.filter((fact) => supports(fact, token)).map((fact) => fact.ref);
+	if (cited.some((fact) => contradicts(fact, token))) return { status: "MISMATCH", supportingRefs: anywhere };
+	return { status: anywhere.length > 0 ? "UNCITED" : "UNSUPPORTED", supportingRefs: anywhere };
+}
+
+function checkSegment(
+	segment: { text: string; refs: string[] },
+	index: number,
+	cited: readonly IndexedFact[],
+	all: readonly IndexedFact[],
+): GeoDraftCheck[] {
+	const seen = new Set<string>();
+	const checks: GeoDraftCheck[] = [];
+	for (const token of tokenize(segment.text)) {
+		const key = `${token.kind}:${token.norm}`;
+		if (seen.has(key)) continue;
+		seen.add(key);
+		checks.push({
+			token: token.raw,
+			kind: token.kind,
+			risk: token.risk,
+			...checkToken(token, cited, all),
+			segment: index,
+			excerpt: excerptOf(segment.text),
+			citedRefs: segment.refs,
+		});
+	}
+	return checks;
+}
+
 export function validateDraft(body: string, facts: readonly GeoDraftFact[]): GeoDraftValidation {
 	const indexed = new Map(facts.map((fact) => [fact.ref, indexFact(fact)]));
 	const all = [...indexed.values()];
@@ -274,39 +314,12 @@ export function validateDraft(body: string, facts: readonly GeoDraftFact[]): Geo
 	const cited = new Set<string>();
 
 	segmentsOf(body).forEach((segment, index) => {
-		const citedFacts: IndexedFact[] = [];
-		for (const ref of segment.refs) {
+		const citedFacts = segment.refs.flatMap((ref) => {
 			const fact = indexed.get(ref);
-			if (fact) {
-				cited.add(ref);
-				citedFacts.push(fact);
-			} else {
-				unknown.add(ref);
-			}
-		}
-		const seen = new Set<string>();
-		for (const token of tokenize(segment.text)) {
-			const key = `${token.kind}:${token.norm}`;
-			if (seen.has(key)) continue;
-			seen.add(key);
-			const direct = citedFacts.filter((fact) => supports(fact, token)).map((fact) => fact.ref);
-			const anywhere = all.filter((fact) => supports(fact, token)).map((fact) => fact.ref);
-			let status: GeoDraftCheckStatus;
-			if (direct.length > 0) status = "SUPPORTED";
-			else if (citedFacts.some((fact) => contradicts(fact, token))) status = "MISMATCH";
-			else if (anywhere.length > 0) status = "UNCITED";
-			else status = "UNSUPPORTED";
-			checks.push({
-				token: token.raw,
-				kind: token.kind,
-				risk: token.risk,
-				status,
-				segment: index,
-				excerpt: excerptOf(segment.text),
-				citedRefs: segment.refs,
-				supportingRefs: direct.length > 0 ? direct : anywhere,
-			});
-		}
+			(fact ? cited : unknown).add(ref);
+			return fact ? [fact] : [];
+		});
+		checks.push(...checkSegment(segment, index, citedFacts, all));
 	});
 
 	const blockingCount =

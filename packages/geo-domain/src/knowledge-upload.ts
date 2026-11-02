@@ -54,7 +54,11 @@ export function sniffKnowledgeFile(bytes: Uint8Array, fileName: string): GeoKnow
 	if (startsWith(bytes, [0xff, 0xd8, 0xff])) return JPEG;
 	if (ascii(bytes, 0, 4) === "RIFF" && ascii(bytes, 8, 12) === "WEBP") return WEBP;
 	const extension = extensionOf(fileName);
-	if (startsWith(bytes, [0x50, 0x4b, 0x03, 0x04]) && extension === "docx" && containsAscii(bytes, "word/document.xml")) {
+	if (
+		startsWith(bytes, [0x50, 0x4b, 0x03, 0x04]) &&
+		extension === "docx" &&
+		containsAscii(bytes, "word/document.xml")
+	) {
 		return DOCX;
 	}
 	if (startsWith(bytes, [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]) && extension === "doc") return DOC;

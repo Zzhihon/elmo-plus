@@ -8,6 +8,7 @@ import {
 	type GeoFactState,
 	type GeoKnowledgeSourceFacts,
 	type GeoPrincipal,
+	type GeoRiskLevel,
 	geoSystemPrincipal,
 	hasValidOriginalDocument,
 	isLiveSource,
@@ -163,11 +164,7 @@ export async function detectAssertionConflicts(
 		})
 		.from(geoKnowledgeAssertions)
 		.where(
-			and(
-				keyed,
-				inArray(geoKnowledgeAssertions.status, ["APPROVED", ...GEO_CONFLICT_CANDIDATE_STATUSES]),
-				scopedKeys,
-			),
+			and(keyed, inArray(geoKnowledgeAssertions.status, ["APPROVED", ...GEO_CONFLICT_CANDIDATE_STATUSES]), scopedKeys),
 		);
 	const pairs = detectConflictPairs(rows);
 	if (pairs.length === 0) return [];
@@ -245,6 +242,19 @@ export async function closeAssertionConflicts(
 
 type ValidityReason = "EXPIRED" | "SOURCE_UNAVAILABLE" | "ORIGINAL_UNAVAILABLE";
 
+function validityProblem(
+	assertion: { riskLevel: GeoRiskLevel; claimType: string; validUntil: Date | null },
+	sources: readonly GeoKnowledgeSourceFacts[],
+	now: Date,
+): ValidityReason | null {
+	if (assertion.validUntil && assertion.validUntil.getTime() <= now.getTime()) return "EXPIRED";
+	if (!sources.some((source) => isLiveSource(source, now))) return "SOURCE_UNAVAILABLE";
+	if (effectiveRiskLevel(assertion) === "HIGH" && !hasValidOriginalDocument(sources, now)) {
+		return "ORIGINAL_UNAVAILABLE";
+	}
+	return null;
+}
+
 /**
  * Approved facts that lapsed, lost every live source, or (high risk) lost the
  * customer original behind them stop being publishable and go back for review.
@@ -266,7 +276,9 @@ export async function sweepKnowledgeValidity(
 			validUntil: geoKnowledgeAssertions.validUntil,
 		})
 		.from(geoKnowledgeAssertions)
-		.where(and(eq(geoKnowledgeAssertions.organizationId, organizationId), eq(geoKnowledgeAssertions.status, "APPROVED")));
+		.where(
+			and(eq(geoKnowledgeAssertions.organizationId, organizationId), eq(geoKnowledgeAssertions.status, "APPROVED")),
+		);
 	if (approved.length === 0) return counts;
 	const sources = await loadAssertionSources(
 		db,
@@ -275,13 +287,7 @@ export async function sweepKnowledgeValidity(
 	);
 
 	for (const assertion of approved) {
-		const own = sources.get(assertion.id) ?? [];
-		let reason: ValidityReason | null = null;
-		if (assertion.validUntil && assertion.validUntil.getTime() <= now.getTime()) reason = "EXPIRED";
-		else if (!own.some((source) => isLiveSource(source, now))) reason = "SOURCE_UNAVAILABLE";
-		else if (effectiveRiskLevel(assertion) === "HIGH" && !hasValidOriginalDocument(own, now)) {
-			reason = "ORIGINAL_UNAVAILABLE";
-		}
+		const reason = validityProblem(assertion, sources.get(assertion.id) ?? [], now);
 		if (!reason) continue;
 		const result = assertionTransition({
 			assertion: { status: assertion.status, riskLevel: assertion.riskLevel, authorId: null },

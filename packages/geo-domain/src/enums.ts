@@ -278,7 +278,14 @@ export const GEO_CONTENT_APPROVAL_STATES = [
 ] as const;
 export type GeoContentApprovalState = (typeof GEO_CONTENT_APPROVAL_STATES)[number];
 
-export const GEO_CONTENT_ACTIONS = ["SUBMIT", "APPROVE_TECH", "APPROVE_MARKETING", "REJECT", "REVISE", "PUBLISH"] as const;
+export const GEO_CONTENT_ACTIONS = [
+	"SUBMIT",
+	"APPROVE_TECH",
+	"APPROVE_MARKETING",
+	"REJECT",
+	"REVISE",
+	"PUBLISH",
+] as const;
 export type GeoContentAction = (typeof GEO_CONTENT_ACTIONS)[number];
 
 export const GEO_CONTENT_GENERATORS = ["LLM", "MANUAL"] as const;
