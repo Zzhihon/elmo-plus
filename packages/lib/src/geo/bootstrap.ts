@@ -62,7 +62,7 @@ const fileSchema = z.looseObject({
 	prompts: z.array(z.unknown()).optional(),
 });
 
-export type GeoBootstrapResult = { created: number; skipped: number };
+export type GeoBootstrapResult = { created: number; skipped?: number };
 export type GeoBootstrapApplier = (
 	db: DbConnection,
 	organizationId: string,
