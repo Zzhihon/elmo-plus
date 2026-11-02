@@ -20,7 +20,14 @@ import {
 	transitionPrompt,
 } from "@/server/geo/prompts-core";
 import { createSamplingTarget } from "@/server/geo/sampling-targets-core";
-import { createTask, getTaskDetail, transitionTask } from "@/server/geo/tasks-core";
+import {
+	createTask,
+	getTaskDetail,
+	listBoardTasks,
+	listTaskBatches,
+	listTasks,
+	transitionTask,
+} from "@/server/geo/tasks-core";
 import { createGeoOrganization, expectGeoError } from "@/test/integration/geo-fixtures";
 
 let operator: GeoPrincipal;
@@ -236,5 +243,15 @@ describe("optimization tasks", () => {
 			"VERIFIED",
 		]);
 		await expectGeoError(step(owner, { action: "CANCEL", comment: "已完成" }), "CONFLICT");
+	});
+
+	it("lists tasks for the table and the board, and the batches a task can point at", async () => {
+		const verified = await listTasks(operator, { state: ["VERIFIED"] }, { limit: 20, offset: 0 });
+		expect(verified.total).toBe(1);
+		const open = await listTasks(operator, { q: "FAQ" }, { limit: 20, offset: 0 });
+		expect(open.rows.map((row) => row.title)).toEqual(["补充开关柜选型 FAQ"]);
+		const board = await listBoardTasks(operator);
+		expect(board.rows.length).toBe(2);
+		expect((await listTaskBatches(operator)).length).toBe(2);
 	});
 });
