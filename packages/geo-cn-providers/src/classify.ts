@@ -27,7 +27,9 @@ export interface CaptureFailure {
 	message: string;
 }
 
-const RUN_STATUS_BY_KIND: Record<CaptureFailureKind, GeoRunStatus> = {
+export type TerminalRunStatus = Exclude<GeoRunStatus, "PLANNED" | "RUNNING">;
+
+const RUN_STATUS_BY_KIND: Record<CaptureFailureKind, TerminalRunStatus> = {
 	TIMEOUT: "TIMEOUT",
 	CAPTCHA: "CAPTCHA",
 	RATE_LIMITED: "RATE_LIMITED",
@@ -42,7 +44,7 @@ const RUN_STATUS_BY_KIND: Record<CaptureFailureKind, GeoRunStatus> = {
 	MANUAL_ONLY: "NEEDS_MANUAL",
 };
 
-export function failureRunStatus(failure: Pick<CaptureFailure, "kind">): GeoRunStatus {
+export function failureRunStatus(failure: Pick<CaptureFailure, "kind">): TerminalRunStatus {
 	return RUN_STATUS_BY_KIND[failure.kind];
 }
 

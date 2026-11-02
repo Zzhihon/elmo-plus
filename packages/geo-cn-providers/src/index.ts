@@ -10,6 +10,7 @@ export {
 	failureRunStatus,
 	failureTripsBreaker,
 	parseRetryAfter,
+	type TerminalRunStatus,
 } from "./classify";
 export {
 	type ConfigResult,

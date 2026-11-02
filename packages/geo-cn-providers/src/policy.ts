@@ -1,5 +1,5 @@
-import type { GeoBreakerState, GeoRunStatus } from "@workspace/geo-domain";
-import { type CaptureFailure, failureRunStatus, failureTripsBreaker } from "./classify";
+import type { GeoBreakerState } from "@workspace/geo-domain";
+import { type CaptureFailure, failureRunStatus, failureTripsBreaker, type TerminalRunStatus } from "./classify";
 
 export interface RetryPolicy {
 	maxAttempts: number;
@@ -54,7 +54,7 @@ export function backoffDelayMs(
 	return Math.max(Math.min(jittered, policy.maxDelayMs), failure?.retryAfterMs ?? 0);
 }
 
-export type RetryDecision = { retry: true; delayMs: number } | { retry: false; status: GeoRunStatus };
+export type RetryDecision = { retry: true; delayMs: number } | { retry: false; status: TerminalRunStatus };
 
 /**
  * Only transient failures are retried. A captcha, a refusal or a missing permission
