@@ -37,7 +37,7 @@ describe("redaction", () => {
 	});
 
 	it("keeps error details free of credentials and of the question asked", () => {
-		const question = "示例电气的 KYN28 柜型参数是多少";
+		const question = "示例电气的 中置柜参数是多少";
 		const error = new Error(`upstream echoed "${question}" with token ${KEY}`);
 		const detail = safeErrorDetail(error, { secrets: [KEY], sensitiveTexts: [question] });
 		expect(detail).not.toContain(KEY);
