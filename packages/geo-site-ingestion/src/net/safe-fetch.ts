@@ -325,6 +325,15 @@ async function hop(
 	return { kind: "redirect", next: target };
 }
 
+/** The caller's say on a hop; its wait, a turn on the rate limit, does not count against the time limit. */
+async function redirectRefusal(target: string, options: SafeFetchOptions, deadline: Deadline): Promise<string | null> {
+	if (!options.beforeRedirect) return null;
+	deadline.pause();
+	const gate = await options.beforeRedirect(target);
+	deadline.resume();
+	return gate.follow ? null : gate.detail;
+}
+
 async function finishResponse(
 	outcome: Extract<HopOutcome, { kind: "response" }>,
 	options: SafeFetchOptions,
@@ -353,6 +362,20 @@ async function finishResponse(
 		durationMs: Date.now() - context.started,
 		address,
 	};
+}
+
+function failureOf(
+	error: unknown,
+	deadline: Deadline,
+	fail: (code: SafeFetchFailure, detail: string, extra?: Partial<SafeFetchError>) => SafeFetchError,
+): SafeFetchError {
+	if (error instanceof FetchAbort) {
+		const extra: Partial<SafeFetchError> = { status: error.status };
+		if (error.code === "ADDRESS_BLOCKED") extra.blockedReason = "PRIVATE_ADDRESS";
+		return fail(error.code, error.message, extra);
+	}
+	if (deadline.expired()) return fail("TIMEOUT", deadline.error.message);
+	return fail("NETWORK", (error as Error).message);
 }
 
 /**
@@ -385,35 +408,23 @@ export async function safeFetch(input: string, options: SafeFetchOptions): Promi
 		for (;;) {
 			const outcome = await hop(current, visited, options, deadline, redirects);
 			if (outcome.kind === "refused") return fail(outcome.code, outcome.detail, outcome.extra);
-			if (outcome.kind === "redirect") {
-				deadline.pause();
-				const gate = await options.beforeRedirect?.(outcome.next);
-				deadline.resume();
-				if (gate && !gate.follow) {
-					return fail("REDIRECT_REFUSED", gate.detail, {
-						status: redirects.at(-1)?.status,
-						blockedTarget: outcome.next,
-					});
-				}
-				current = outcome.next;
-				visited.add(current);
-				continue;
+			if (outcome.kind === "response") {
+				return await finishResponse(outcome, options, deadline, fail, {
+					url: input,
+					finalUrl: current,
+					redirects,
+					started,
+				});
 			}
-			return await finishResponse(outcome, options, deadline, fail, {
-				url: input,
-				finalUrl: current,
-				redirects,
-				started,
-			});
+			const refusal = await redirectRefusal(outcome.next, options, deadline);
+			if (refusal) {
+				return fail("REDIRECT_REFUSED", refusal, { status: redirects.at(-1)?.status, blockedTarget: outcome.next });
+			}
+			current = outcome.next;
+			visited.add(current);
 		}
 	} catch (error) {
-		if (error instanceof FetchAbort) {
-			const extra: Partial<SafeFetchError> = { status: error.status };
-			if (error.code === "ADDRESS_BLOCKED") extra.blockedReason = "PRIVATE_ADDRESS";
-			return fail(error.code, error.message, extra);
-		}
-		if (deadline.expired()) return fail("TIMEOUT", deadline.error.message);
-		return fail("NETWORK", (error as Error).message);
+		return failureOf(error, deadline, fail);
 	} finally {
 		deadline.clear();
 	}

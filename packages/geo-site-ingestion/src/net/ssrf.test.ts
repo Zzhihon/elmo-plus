@@ -92,6 +92,26 @@ describe("robots policy", () => {
 		expect(robots.sitemaps).toEqual(["http://www.example-electric.test/s.xml"]);
 	});
 
+	it("matches wildcards anywhere and a trailing $ only at the end, without regex backtracking", () => {
+		const robots = parseRobots(
+			"User-agent: *\nDisallow: /a*b*c\nDisallow: /x*.html$\nDisallow: /tmp/\nDisallow: /exact$\n",
+			"ElmoGeoSiteIngestion",
+		);
+		expect(isAllowedByRobots(robots, "/a1b2c3")).toBe(false);
+		expect(isAllowedByRobots(robots, "/acb")).toBe(true);
+		expect(isAllowedByRobots(robots, "/x/y.html")).toBe(false);
+		expect(isAllowedByRobots(robots, "/x/y.html?z")).toBe(true);
+		expect(isAllowedByRobots(robots, "/tmp/a")).toBe(false);
+		expect(isAllowedByRobots(robots, "/tmp")).toBe(true);
+		expect(isAllowedByRobots(robots, "/exact")).toBe(false);
+		expect(isAllowedByRobots(robots, "/exact/more")).toBe(true);
+
+		const hostile = parseRobots(`User-agent: *\nDisallow: /${"a*".repeat(200)}b$\n`, "ElmoGeoSiteIngestion");
+		const started = Date.now();
+		expect(isAllowedByRobots(hostile, `/${"a".repeat(5000)}c`)).toBe(true);
+		expect(Date.now() - started).toBeLessThan(200);
+	});
+
 	it("treats a missing robots.txt as no restriction and an unreachable one as full disallow", () => {
 		expect(isAllowedByRobots(robotsFromStatus(404), "/anything")).toBe(true);
 		expect(robotsFromStatus(404).source).toBe("NOT_FOUND");
