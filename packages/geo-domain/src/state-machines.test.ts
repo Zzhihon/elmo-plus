@@ -29,7 +29,13 @@ describe("taskTransition", () => {
 			["IN_PROGRESS", "SUBMIT_FOR_REVIEW", operator, "PENDING_TECH_REVIEW"],
 			["PENDING_TECH_REVIEW", "APPROVE_TECH", tech, "PENDING_MARKETING_REVIEW"],
 			["PENDING_MARKETING_REVIEW", "APPROVE_MARKETING", marketing, "PENDING_PUBLISH"],
-			["PENDING_PUBLISH", "PUBLISH", operator, "PUBLISHED", { publishedUrl: "https://www.example-electric.test/a", proof: { note: "截图" } }],
+			[
+				"PENDING_PUBLISH",
+				"PUBLISH",
+				operator,
+				"PUBLISHED",
+				{ publishedUrl: "https://www.example-electric.test/a", proof: { note: "截图" } },
+			],
 			["PUBLISHED", "REQUEST_RETEST", operator, "PENDING_RETEST"],
 			["PENDING_RETEST", "VERIFY", operator, "VERIFIED", { beforeBatchId: "b1", afterBatchId: "b2" }],
 		];
@@ -135,7 +141,11 @@ describe("taskTransition", () => {
 			}),
 		).toEqual({ ok: true, to: "PAUSED" });
 		expect(
-			taskTransition({ task: task("PAUSED", { pausedFrom: "PENDING_TECH_REVIEW" }), action: "RESUME", actor: operator }),
+			taskTransition({
+				task: task("PAUSED", { pausedFrom: "PENDING_TECH_REVIEW" }),
+				action: "RESUME",
+				actor: operator,
+			}),
 		).toEqual({ ok: true, to: "PENDING_TECH_REVIEW" });
 		expect(taskTransition({ task: task("PAUSED"), action: "RESUME", actor: operator })).toMatchObject({
 			ok: false,
@@ -156,9 +166,9 @@ describe("taskTransition", () => {
 	});
 
 	it("refuses a worker driving a task", () => {
-		expect(taskTransition({ task: task("PENDING_ANALYSIS"), action: "TRIAGE", actor: { kind: "system" } })).toMatchObject(
-			{ ok: false, code: "FORBIDDEN" },
-		);
+		expect(
+			taskTransition({ task: task("PENDING_ANALYSIS"), action: "TRIAGE", actor: { kind: "system" } }),
+		).toMatchObject({ ok: false, code: "FORBIDDEN" });
 	});
 });
 
@@ -174,20 +184,23 @@ describe("assertionTransition", () => {
 
 	it("moves a crawled claim to review only through the worker's steps", () => {
 		const system = { kind: "system" } as const;
-		expect(assertionTransition({ assertion: assertion({ status: "DISCOVERED" }), action: "PARSE", actor: system })).toEqual({
+		expect(
+			assertionTransition({ assertion: assertion({ status: "DISCOVERED" }), action: "PARSE", actor: system }),
+		).toEqual({
 			ok: true,
 			to: "PARSED",
 		});
 		expect(
 			assertionTransition({ assertion: assertion({ status: "PARSED" }), action: "SUBMIT_FOR_REVIEW", actor: system }),
 		).toEqual({ ok: true, to: "PENDING_REVIEW" });
-		expect(assertionTransition({ assertion: assertion(), action: "APPROVE", actor: system, payload: approval })).toMatchObject(
-			{ ok: false, code: "FORBIDDEN" },
-		);
+		expect(
+			assertionTransition({ assertion: assertion(), action: "APPROVE", actor: system, payload: approval }),
+		).toMatchObject({ ok: false, code: "FORBIDDEN" });
 	});
 
 	it("binds an approval to a basis, a scope and a source", () => {
-		const approve = (payload: object) => assertionTransition({ assertion: assertion(), action: "APPROVE", actor: reviewer, payload });
+		const approve = (payload: object) =>
+			assertionTransition({ assertion: assertion(), action: "APPROVE", actor: reviewer, payload });
 		expect(approve(approval)).toEqual({ ok: true, to: "APPROVED" });
 		expect(approve({ ...approval, basis: " " })).toMatchObject({ ok: false, code: "VALIDATION_ERROR" });
 		expect(approve({ ...approval, publicationScope: null })).toMatchObject({ ok: false, code: "VALIDATION_ERROR" });
@@ -196,7 +209,9 @@ describe("assertionTransition", () => {
 
 	it("does not settle a high-risk fact on a web page alone", () => {
 		const highRisk = assertion({ riskLevel: "HIGH" });
-		expect(assertionTransition({ assertion: highRisk, action: "APPROVE", actor: reviewer, payload: approval })).toMatchObject({
+		expect(
+			assertionTransition({ assertion: highRisk, action: "APPROVE", actor: reviewer, payload: approval }),
+		).toMatchObject({
 			ok: false,
 			code: "EVIDENCE_REQUIRED",
 		});
@@ -249,7 +264,11 @@ describe("assertionTransition", () => {
 			}),
 		).toEqual({ ok: true, to: "SOURCE_UNAVAILABLE" });
 		expect(
-			assertionTransition({ assertion: assertion({ status: "SOURCE_UNAVAILABLE" }), action: "RESUBMIT", actor: reviewer }),
+			assertionTransition({
+				assertion: assertion({ status: "SOURCE_UNAVAILABLE" }),
+				action: "RESUBMIT",
+				actor: reviewer,
+			}),
 		).toEqual({ ok: true, to: "PENDING_REVIEW" });
 	});
 
@@ -270,7 +289,9 @@ describe("assertionTransition", () => {
 	});
 
 	it("keeps operators from approving", () => {
-		expect(assertionTransition({ assertion: assertion(), action: "APPROVE", actor: operator, payload: approval })).toMatchObject({
+		expect(
+			assertionTransition({ assertion: assertion(), action: "APPROVE", actor: operator, payload: approval }),
+		).toMatchObject({
 			ok: false,
 			code: "FORBIDDEN",
 		});
@@ -279,14 +300,29 @@ describe("assertionTransition", () => {
 
 describe("promptTransition", () => {
 	it("walks draft, business review, baseline and frozen", () => {
-		expect(promptTransition({ status: "DRAFT", action: "SUBMIT", actor: operator })).toEqual({ ok: true, to: "IN_REVIEW" });
-		expect(promptTransition({ status: "IN_REVIEW", action: "APPROVE", actor: marketing })).toEqual({ ok: true, to: "BASELINE" });
-		expect(promptTransition({ status: "BASELINE", action: "FREEZE", actor: operator })).toEqual({ ok: true, to: "FROZEN" });
+		expect(promptTransition({ status: "DRAFT", action: "SUBMIT", actor: operator })).toEqual({
+			ok: true,
+			to: "IN_REVIEW",
+		});
+		expect(promptTransition({ status: "IN_REVIEW", action: "APPROVE", actor: marketing })).toEqual({
+			ok: true,
+			to: "BASELINE",
+		});
+		expect(promptTransition({ status: "BASELINE", action: "FREEZE", actor: operator })).toEqual({
+			ok: true,
+			to: "FROZEN",
+		});
 	});
 
 	it("skips no stage", () => {
-		expect(promptTransition({ status: "DRAFT", action: "FREEZE", actor: operator })).toMatchObject({ ok: false, code: "CONFLICT" });
-		expect(promptTransition({ status: "DRAFT", action: "APPROVE", actor: marketing })).toMatchObject({ ok: false, code: "CONFLICT" });
+		expect(promptTransition({ status: "DRAFT", action: "FREEZE", actor: operator })).toMatchObject({
+			ok: false,
+			code: "CONFLICT",
+		});
+		expect(promptTransition({ status: "DRAFT", action: "APPROVE", actor: marketing })).toMatchObject({
+			ok: false,
+			code: "CONFLICT",
+		});
 	});
 
 	it("reserves the review for a reviewer and needs a reason to reject", () => {
@@ -302,7 +338,10 @@ describe("promptTransition", () => {
 
 	it("edits a frozen question only by starting a new draft revision", () => {
 		expect(isPromptEditable("FROZEN")).toBe(false);
-		expect(promptTransition({ status: "FROZEN", action: "REVISE", actor: operator })).toEqual({ ok: true, to: "DRAFT" });
+		expect(promptTransition({ status: "FROZEN", action: "REVISE", actor: operator })).toEqual({
+			ok: true,
+			to: "DRAFT",
+		});
 		expect(isPromptEditable("DRAFT")).toBe(true);
 	});
 });

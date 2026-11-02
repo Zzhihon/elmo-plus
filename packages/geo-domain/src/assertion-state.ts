@@ -26,7 +26,12 @@ const EDGES: Record<GeoAssertionAction, Partial<Record<GeoAssertionStatus, GeoAs
 	MARK_SOURCE_UNAVAILABLE: { APPROVED: "SOURCE_UNAVAILABLE", PENDING_REVIEW: "SOURCE_UNAVAILABLE" },
 };
 
-const SYSTEM_ACTIONS: readonly GeoAssertionAction[] = ["PARSE", "SUBMIT_FOR_REVIEW", "SUPERSEDE", "MARK_SOURCE_UNAVAILABLE"];
+const SYSTEM_ACTIONS: readonly GeoAssertionAction[] = [
+	"PARSE",
+	"SUBMIT_FOR_REVIEW",
+	"SUPERSEDE",
+	"MARK_SOURCE_UNAVAILABLE",
+];
 const REVIEW_ACTIONS: readonly GeoAssertionAction[] = ["APPROVE", "REJECT", "REQUEST_EVIDENCE", "INVALIDATE"];
 
 export interface GeoAssertionFacts {

@@ -27,6 +27,7 @@ import { organization } from "./schema-auth";
 // Better-auth tables & relations — re-exported so `import * as schema` sees everything.
 // Source file is auto-generated; run `pnpm run generate:auth-schema` to refresh.
 export * from "./schema-auth";
+export * from "./schema-geo";
 
 // ============================================================================
 // Application tables

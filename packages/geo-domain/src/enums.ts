@@ -37,7 +37,15 @@ export type GeoBreakerState = (typeof GEO_BREAKER_STATES)[number];
 export const GEO_VERIFICATION_STATUSES = ["UNVERIFIED", "LIMITED", "PASSED", "FAILED"] as const;
 export type GeoVerificationStatus = (typeof GEO_VERIFICATION_STATUSES)[number];
 
-export const GEO_BATCH_STATUSES = ["PLANNED", "RUNNING", "PAUSED", "COMPLETED", "PARTIAL", "FAILED", "CANCELLED"] as const;
+export const GEO_BATCH_STATUSES = [
+	"PLANNED",
+	"RUNNING",
+	"PAUSED",
+	"COMPLETED",
+	"PARTIAL",
+	"FAILED",
+	"CANCELLED",
+] as const;
 export type GeoBatchStatus = (typeof GEO_BATCH_STATUSES)[number];
 
 export const GEO_RUN_STATUSES = [
@@ -94,7 +102,15 @@ export type GeoClaimVerdict = (typeof GEO_CLAIM_VERDICTS)[number];
 export const GEO_CRAWL_MODES = ["FULL", "INCREMENTAL"] as const;
 export type GeoCrawlMode = (typeof GEO_CRAWL_MODES)[number];
 
-export const GEO_CRAWL_STATUSES = ["QUEUED", "RUNNING", "PAUSED", "SUCCEEDED", "PARTIAL", "FAILED", "CANCELLED"] as const;
+export const GEO_CRAWL_STATUSES = [
+	"QUEUED",
+	"RUNNING",
+	"PAUSED",
+	"SUCCEEDED",
+	"PARTIAL",
+	"FAILED",
+	"CANCELLED",
+] as const;
 export type GeoCrawlStatus = (typeof GEO_CRAWL_STATUSES)[number];
 
 export const GEO_SITE_PAGE_STATUSES = ["ACTIVE", "REDIRECTED", "GONE", "BLOCKED", "ERROR"] as const;
@@ -118,7 +134,14 @@ export type GeoFindingSeverity = (typeof GEO_FINDING_SEVERITIES)[number];
 export const GEO_FINDING_STATUSES = ["OPEN", "TASKED", "RESOLVED", "DISMISSED"] as const;
 export type GeoFindingStatus = (typeof GEO_FINDING_STATUSES)[number];
 
-export const GEO_ASSET_TYPES = ["BRAND_CLAIM", "CERTIFICATE", "PRODUCT_SPEC", "CASE", "SERVICE_COMMITMENT", "FAQ"] as const;
+export const GEO_ASSET_TYPES = [
+	"BRAND_CLAIM",
+	"CERTIFICATE",
+	"PRODUCT_SPEC",
+	"CASE",
+	"SERVICE_COMMITMENT",
+	"FAQ",
+] as const;
 export type GeoAssetType = (typeof GEO_ASSET_TYPES)[number];
 
 export const GEO_SCAN_STATUSES = ["PENDING", "CLEAN", "INFECTED", "UNSCANNED"] as const;
