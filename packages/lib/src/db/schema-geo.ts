@@ -58,10 +58,6 @@ import {
 	type GeoAssetType,
 	type GeoAttemptStatus,
 	type GeoBatchStatus,
-	type GeoDictionaryEntityChange,
-	type GeoDictionarySnapshot,
-	type GeoPromptLabels,
-	type GeoPromptRevisionSnapshot,
 	type GeoBrandKind,
 	type GeoBreakerState,
 	type GeoClaimVerdict,
@@ -70,6 +66,8 @@ import {
 	type GeoContentKind,
 	type GeoCrawlMode,
 	type GeoCrawlStatus,
+	type GeoDictionaryEntityChange,
+	type GeoDictionarySnapshot,
 	type GeoEvaluationReviewStatus,
 	type GeoFactStatus,
 	type GeoFindingSeverity,
@@ -78,6 +76,8 @@ import {
 	type GeoParseStatus,
 	type GeoPlatform,
 	type GeoPriority,
+	type GeoPromptLabels,
+	type GeoPromptRevisionSnapshot,
 	type GeoPromptSetStatus,
 	type GeoPromptStatus,
 	type GeoPromptTier,
@@ -371,7 +371,10 @@ export const geoPromptSetItems = pgTable(
 			.references(() => geoPrompts.id),
 		promptRevision: integer("prompt_revision").notNull(),
 		questionText: text("question_text").notNull(),
-		labels: jsonb("labels").$type<GeoPromptLabels>().notNull().default({} as GeoPromptLabels),
+		labels: jsonb("labels")
+			.$type<GeoPromptLabels>()
+			.notNull()
+			.default({} as GeoPromptLabels),
 		createdAt: createdAt(),
 	},
 	(table) => [

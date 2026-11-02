@@ -9,10 +9,10 @@ import {
 	GEO_PROMPT_TIERS,
 	GeoError,
 	type GeoPrincipal,
+	type GeoPromptLabels,
 	geoSystemPrincipal,
 	normalizeBrandDomain,
 	normalizePromptQuestion,
-	type GeoPromptLabels,
 } from "@workspace/geo-domain";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
@@ -69,6 +69,24 @@ export type GeoBootstrapApplier = (
 	section: unknown,
 ) => Promise<GeoBootstrapResult>;
 
+function bootstrapBrandTerms(brand: z.output<typeof brandSchema>) {
+	const legalName = brand.legalName ?? null;
+	const shortName = brand.shortName ?? null;
+	const ownNames = [brand.displayName, legalName, shortName];
+	return {
+		displayName: brand.displayName,
+		legalName,
+		shortName,
+		aliases: dedupeBrandTerms(brand.aliases, ownNames),
+		historicalNames: dedupeBrandTerms(brand.historicalNames, ownNames),
+		domains: brand.domains.map((domain) => {
+			const normalized = normalizeBrandDomain(domain);
+			if (!normalized) throw new GeoError("VALIDATION_ERROR", `引导配置中的域名无效：${domain}`);
+			return normalized;
+		}),
+	};
+}
+
 function bootstrapPrincipal(organizationId: string): GeoPrincipal {
 	return geoSystemPrincipal(organizationId, "bootstrap", randomUUID());
 }
@@ -109,20 +127,7 @@ export async function applyGeoBootstrapBrands(
 				skipped += 1;
 				continue;
 			}
-			const legalName = brand.legalName ?? null;
-			const shortName = brand.shortName ?? null;
-			const candidate = {
-				displayName: brand.displayName,
-				legalName,
-				shortName,
-				aliases: dedupeBrandTerms(brand.aliases, [brand.displayName, legalName, shortName]),
-				historicalNames: dedupeBrandTerms(brand.historicalNames, [brand.displayName, legalName, shortName]),
-				domains: brand.domains.map((domain) => {
-					const normalized = normalizeBrandDomain(domain);
-					if (!normalized) throw new GeoError("VALIDATION_ERROR", `引导配置中的域名无效：${domain}`);
-					return normalized;
-				}),
-			};
+			const candidate = bootstrapBrandTerms(brand);
 			const conflicts = findBrandConflicts(candidate, existing);
 			if (conflicts.length > 0) {
 				throw new GeoError("CONFLICT", `引导配置“${brand.displayName}”冲突：${describeBrandConflicts(conflicts)}`);

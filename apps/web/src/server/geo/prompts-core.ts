@@ -7,11 +7,11 @@ import {
 	GEO_PROMPT_QUESTION_MAX_LENGTH,
 	GEO_PROMPT_STATUSES,
 	GEO_PROMPT_TIERS,
-	type GeoPromptCsvColumn,
-	type GeoPromptCsvError,
 	GeoError,
 	type GeoPrincipal,
 	type GeoPromptAction,
+	type GeoPromptCsvColumn,
+	type GeoPromptCsvError,
 	type GeoPromptLabels,
 	type GeoPromptRevisionSnapshot,
 	type GeoPromptStatus,
@@ -57,7 +57,10 @@ const optionalText = (max: number) =>
 		.transform((value) => value || null);
 
 const labelFields = {
-	buyerRoleId: z.uuid().nullish().transform((value) => value ?? null),
+	buyerRoleId: z
+		.uuid()
+		.nullish()
+		.transform((value) => value ?? null),
 	intent: optionalText(200),
 	productLine: optionalText(200),
 	geoRegion: optionalText(100),
@@ -68,7 +71,13 @@ const labelFields = {
 		.regex(/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/, "语言代码格式无效，例如 zh-CN")
 		.default("zh-CN"),
 	tier: z.enum(GEO_PROMPT_TIERS).default("CORE"),
-	ownerId: z.string().trim().min(1).max(200).nullish().transform((value) => value ?? null),
+	ownerId: z
+		.string()
+		.trim()
+		.min(1)
+		.max(200)
+		.nullish()
+		.transform((value) => value ?? null),
 };
 
 export const promptInputSchema = z.object({
@@ -441,8 +450,8 @@ async function authorsOf(tx: DbConnection, prompt: GeoPrompt): Promise<string[]>
 		.selectDistinct({ editorId: geoPromptRevisions.editorId })
 		.from(geoPromptRevisions)
 		.where(eq(geoPromptRevisions.promptId, prompt.id));
-	return [prompt.createdBy, prompt.ownerId, ...editors.map((row) => row.editorId)].filter(
-		(id): id is string => Boolean(id),
+	return [prompt.createdBy, prompt.ownerId, ...editors.map((row) => row.editorId)].filter((id): id is string =>
+		Boolean(id),
 	);
 }
 
@@ -923,7 +932,61 @@ export async function promptStatusCounts(principal: GeoPrincipal): Promise<Recor
 		.from(geoPrompts)
 		.where(eq(geoPrompts.organizationId, principal.organizationId))
 		.groupBy(geoPrompts.status);
-	const counts = Object.fromEntries(GEO_PROMPT_STATUSES.map((status) => [status, 0])) as Record<GeoPromptStatus, number>;
+	const counts = Object.fromEntries(GEO_PROMPT_STATUSES.map((status) => [status, 0])) as Record<
+		GeoPromptStatus,
+		number
+	>;
 	for (const row of rows) counts[row.status] = row.total;
 	return counts;
+}
+
+export interface GeoRoleCoverage {
+	buyerRoleId: string | null;
+	core: number;
+	coreReviewed: number;
+	extended: number;
+}
+
+/** Shows which buyer roles the reviewed core questions actually reach. */
+export async function promptRoleCoverage(principal: GeoPrincipal): Promise<GeoRoleCoverage[]> {
+	assertGeoPermission(principal, "prompt.read");
+	return db
+		.select({
+			buyerRoleId: geoPrompts.buyerRoleId,
+			core: sql<number>`count(*) filter (where ${geoPrompts.tier} = 'CORE')`.mapWith(Number),
+			coreReviewed:
+				sql<number>`count(*) filter (where ${geoPrompts.tier} = 'CORE' and ${geoPrompts.status} in ('BASELINE', 'FROZEN'))`.mapWith(
+					Number,
+				),
+			extended: sql<number>`count(*) filter (where ${geoPrompts.tier} = 'EXTENDED')`.mapWith(Number),
+		})
+		.from(geoPrompts)
+		.where(eq(geoPrompts.organizationId, principal.organizationId))
+		.groupBy(geoPrompts.buyerRoleId);
+}
+
+export interface GeoPromptOption {
+	id: string;
+	question: string;
+	status: GeoPromptStatus;
+	tier: GeoPrompt["tier"];
+	priority: GeoPrompt["priority"];
+	buyerRoleId: string | null;
+}
+
+export async function listPromptOptions(principal: GeoPrincipal): Promise<GeoPromptOption[]> {
+	assertGeoPermission(principal, "prompt.read");
+	return db
+		.select({
+			id: geoPrompts.id,
+			question: geoPrompts.question,
+			status: geoPrompts.status,
+			tier: geoPrompts.tier,
+			priority: geoPrompts.priority,
+			buyerRoleId: geoPrompts.buyerRoleId,
+		})
+		.from(geoPrompts)
+		.where(eq(geoPrompts.organizationId, principal.organizationId))
+		.orderBy(asc(geoPrompts.priority), asc(geoPrompts.createdAt))
+		.limit(2000);
 }

@@ -12,11 +12,13 @@ import {
 	importPromptsCsv,
 	listBuyerRoles,
 	listGeoMembers,
+	listPromptOptions,
 	listPromptSets,
 	listPrompts,
 	promptInputSchema,
 	promptListQuerySchema,
 	promptPatchSchema,
+	promptRoleCoverage,
 	promptSetInputSchema,
 	promptSetItemsSchema,
 	promptStatusCounts,
@@ -33,12 +35,13 @@ export const getGeoQuestionsContextFn = createServerFn({ method: "GET" })
 	.validator(z.object(org))
 	.handler(async ({ data }) => {
 		const principal = await requireGeoServerFnPrincipal(data.organizationId, "prompt.read");
-		const [roles, members, counts] = await Promise.all([
+		const [roles, members, counts, coverage] = await Promise.all([
 			listBuyerRoles(principal),
 			listGeoMembers(principal),
 			promptStatusCounts(principal),
+			promptRoleCoverage(principal),
 		]);
-		return { roles, members, counts };
+		return { roles, members, counts, coverage };
 	});
 
 export const listGeoPromptsFn = createServerFn({ method: "GET" })
@@ -153,4 +156,11 @@ export const listGeoMembersFn = createServerFn({ method: "GET" })
 	.handler(async ({ data }) => {
 		const principal = await requireGeoServerFnPrincipal(data.organizationId, "prompt.read");
 		return listGeoMembers(principal);
+	});
+
+export const listGeoPromptOptionsFn = createServerFn({ method: "GET" })
+	.validator(z.object(org))
+	.handler(async ({ data }) => {
+		const principal = await requireGeoServerFnPrincipal(data.organizationId, "prompt.read");
+		return listPromptOptions(principal);
 	});

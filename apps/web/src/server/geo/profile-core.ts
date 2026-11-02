@@ -71,7 +71,9 @@ export const productInputSchema = z.object({
 });
 export type GeoProductInput = z.input<typeof productInputSchema>;
 
-export const productPatchSchema = productInputSchema.partial().extend({ status: z.enum(GEO_ACTIVE_STATUSES).optional() });
+export const productPatchSchema = productInputSchema
+	.partial()
+	.extend({ status: z.enum(GEO_ACTIVE_STATUSES).optional() });
 export type GeoProductPatch = z.input<typeof productPatchSchema>;
 
 export interface GeoBrandWithProducts extends GeoBrandEntity {
@@ -132,6 +134,53 @@ async function loadBrand(tx: DbConnection, organizationId: string, id: string, l
 	const [row] = lock ? await query.for("update") : await query;
 	if (!row) throw new GeoError("NOT_FOUND", "品牌或竞品不存在");
 	return row;
+}
+
+type StatusChange = "update" | "disable" | "enable";
+const CHANGE_VERBS: Record<StatusChange, string> = { update: "修改", disable: "停用", enable: "启用" };
+
+function statusChange(before: GeoActiveStatus, after: GeoActiveStatus): StatusChange {
+	if (before === after) return "update";
+	return after === "DISABLED" ? "disable" : "enable";
+}
+
+function sameValues<T extends object>(next: T, before: T): boolean {
+	return (Object.keys(next) as (keyof T)[]).every((key) => JSON.stringify(next[key]) === JSON.stringify(before[key]));
+}
+
+/** An omitted field keeps its value; an explicit null clears it. */
+function keep<T>(value: T | undefined, current: T): T {
+	return value === undefined ? current : value;
+}
+
+function mergeBrandPatch(before: GeoBrandEntity, patch: z.output<typeof brandPatchSchema>) {
+	const terms = cleanTerms({
+		displayName: keep(patch.displayName, before.displayName),
+		legalName: keep(patch.legalName, before.legalName),
+		shortName: keep(patch.shortName, before.shortName),
+		aliases: keep(patch.aliases, before.aliases),
+		historicalNames: keep(patch.historicalNames, before.historicalNames),
+		domains: keep(patch.domains, before.domains),
+	});
+	return {
+		...terms,
+		officialUrl: keep(patch.officialUrl, before.officialUrl),
+		regions: patch.regions ? dedupeBrandTerms(patch.regions) : before.regions,
+		status: keep(patch.status, before.status),
+		factStatus: keep(patch.factStatus, before.factStatus),
+		factNotes: keep(patch.factNotes, before.factNotes),
+	};
+}
+
+function mergeProductPatch(before: GeoProduct, patch: z.output<typeof productPatchSchema>) {
+	return {
+		name: keep(patch.name, before.name),
+		model: keep(patch.model, before.model),
+		category: keep(patch.category, before.category),
+		termKind: keep(patch.termKind, before.termKind),
+		factStatus: keep(patch.factStatus, before.factStatus),
+		status: keep(patch.status, before.status),
+	};
 }
 
 export async function listBrands(
@@ -257,28 +306,10 @@ export async function updateBrand(principal: GeoPrincipal, id: string, raw: GeoB
 	return db.transaction(async (tx) => {
 		await lockGeoDictionary(tx, principal.organizationId);
 		const before = await loadBrand(tx, principal.organizationId, id, true);
-		const terms = cleanTerms({
-			displayName: patch.displayName ?? before.displayName,
-			legalName: patch.legalName === undefined ? before.legalName : patch.legalName,
-			shortName: patch.shortName === undefined ? before.shortName : patch.shortName,
-			aliases: patch.aliases ?? before.aliases,
-			historicalNames: patch.historicalNames ?? before.historicalNames,
-			domains: patch.domains ?? before.domains,
-		});
-		const next = {
-			...terms,
-			officialUrl: patch.officialUrl === undefined ? before.officialUrl : patch.officialUrl,
-			regions: patch.regions ? dedupeBrandTerms(patch.regions) : before.regions,
-			status: patch.status ?? before.status,
-			factStatus: patch.factStatus ?? before.factStatus,
-			factNotes: patch.factNotes ?? before.factNotes,
-		};
-		const unchanged = (Object.keys(next) as (keyof typeof next)[]).every(
-			(key) => JSON.stringify(next[key]) === JSON.stringify(before[key]),
-		);
-		if (unchanged) return before;
+		const next = mergeBrandPatch(before, patch);
+		if (sameValues(next, before)) return before;
 
-		if (next.status === "ACTIVE") await assertNoConflicts(tx, principal.organizationId, { ...terms, id });
+		if (next.status === "ACTIVE") await assertNoConflicts(tx, principal.organizationId, { ...next, id });
 		const [row] = await tx
 			.update(geoBrandEntities)
 			.set({ ...next, updatedAt: new Date() })
@@ -286,16 +317,15 @@ export async function updateBrand(principal: GeoPrincipal, id: string, raw: GeoB
 			.returning();
 		if (!row) throw new Error("Brand update returned no row");
 
-		const action =
-			before.status !== row.status ? (row.status === "DISABLED" ? "brand.disable" : "brand.enable") : "brand.update";
+		const change = statusChange(before.status, row.status);
 		const version = await appendDictionaryVersion(
 			tx,
 			principal,
-			patch.changeNote ?? `${action === "brand.update" ? "修改" : action === "brand.disable" ? "停用" : "启用"}“${row.displayName}”`,
+			patch.changeNote ?? `${CHANGE_VERBS[change]}“${row.displayName}”`,
 		);
 		await writeGeoAudit(tx, {
 			principal,
-			action,
+			action: `brand.${change}`,
 			entityType: "brand",
 			entityId: row.id,
 			before,
@@ -396,15 +426,8 @@ export async function updateProduct(
 			.limit(1);
 		if (!before) throw new GeoError("NOT_FOUND", "产品不存在");
 
-		const next = {
-			name: patch.name ?? before.name,
-			model: patch.model === undefined ? before.model : patch.model,
-			category: patch.category === undefined ? before.category : patch.category,
-			termKind: patch.termKind ?? before.termKind,
-			factStatus: patch.factStatus ?? before.factStatus,
-			status: patch.status ?? before.status,
-		};
-		if ((Object.keys(next) as (keyof typeof next)[]).every((key) => next[key] === before[key])) return before;
+		const next = mergeProductPatch(before, patch);
+		if (sameValues(next, before)) return before;
 		assertProductTerm(next);
 		await assertProductUnique(tx, principal.organizationId, { id: productId, brandEntityId: brandId, ...next });
 
@@ -414,11 +437,15 @@ export async function updateProduct(
 			.where(eq(geoProducts.id, productId))
 			.returning();
 		if (!row) throw new Error("Product update returned no row");
-		const action = before.status !== row.status ? (row.status === "DISABLED" ? "product.disable" : "product.enable") : "product.update";
-		const version = await appendDictionaryVersion(tx, principal, patch.changeNote ?? `修改产品“${row.model ?? row.name}”`);
+		const change = statusChange(before.status, row.status);
+		const version = await appendDictionaryVersion(
+			tx,
+			principal,
+			patch.changeNote ?? `${CHANGE_VERBS[change]}产品“${row.model ?? row.name}”`,
+		);
 		await writeGeoAudit(tx, {
 			principal,
-			action,
+			action: `product.${change}`,
 			entityType: "product",
 			entityId: row.id,
 			before,
