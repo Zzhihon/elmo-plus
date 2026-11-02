@@ -69,11 +69,17 @@ function bodyText(page: AuditPageFacts): string {
 		.join("\n");
 }
 
-function sameCopy(a: string, b: string): boolean {
-	const left = comparable(a);
-	const right = comparable(b);
+/** The title without its trailing site-name segment, e.g. "开关柜 - 品牌名" gives "开关柜". */
+function titleCore(title: string): string {
+	const segments = title.split(/\s*[-_|–—｜]\s*/).filter(Boolean);
+	return segments.length > 1 ? segments.slice(0, -1).join(" ") : title;
+}
+
+function sameCopy(description: string, title: string): boolean {
+	const left = comparable(description);
+	const right = comparable(title);
 	if (!left || !right) return false;
-	if (left === right) return true;
+	if (left === right || left === comparable(titleCore(title))) return true;
 	const [short, long] = left.length <= right.length ? [left, right] : [right, left];
 	return long.includes(short) && short.length / long.length >= 0.8;
 }

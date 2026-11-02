@@ -139,9 +139,11 @@ describe("page metadata rules", () => {
 			title: "开关柜",
 			description: "适用于配电工程的开关柜，介绍用途与选型要点。",
 		});
-		const { detections } = run([missing, same, distinct]);
+		const withoutSuffix = facts({ path: "/d.html", title: "公司概况-示例电气有限公司", description: "公司概况" });
+		const { detections } = run([missing, same, distinct, withoutSuffix]);
 		expect(rulesOn(detections, "/a.html")).toContain("description.missing");
 		expect(rulesOn(detections, "/b.html")).toContain("description.same_as_title");
+		expect(rulesOn(detections, "/d.html")).toContain("description.same_as_title");
 		expect(rulesOn(detections, "/c.html")).not.toContain("description.same_as_title");
 	});
 
