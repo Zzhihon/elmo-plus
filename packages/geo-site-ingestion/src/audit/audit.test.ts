@@ -8,6 +8,7 @@ import { recommendTargetPrompts } from "./recommend";
 import { type ExistingFinding, reconcileFindings } from "./reconcile";
 import { type AuditDetection, evaluatePageRules, type KnownPage } from "./rules";
 import { classifyHttpsProbe, evaluateSiteChecks, type SiteProbes } from "./site-checks";
+import { triageFinding } from "./triage";
 
 const ORIGIN = "https://www.example-electric.test";
 const HOSTS = ["www.example-electric.test"];
@@ -538,5 +539,15 @@ describe("target question suggestions", () => {
 		const ids = recommendTargetPrompts({ title: "X-1 高压开关柜", categoryLabel: "产品中心", terms: ["X-1"] }, prompts);
 		expect(ids.sort()).toEqual(["line", "model"]);
 		expect(recommendTargetPrompts(null, prompts)).toEqual([]);
+	});
+});
+
+describe("manual triage", () => {
+	it("dismisses only open findings, and only with a reason", () => {
+		expect(triageFinding("OPEN", "DISMISSED", "模板统一处理")).toEqual({ ok: true, to: "DISMISSED" });
+		expect(triageFinding("OPEN", "DISMISSED", " ")).toMatchObject({ ok: false, code: "VALIDATION_ERROR" });
+		expect(triageFinding("TASKED", "DISMISSED", "原因")).toMatchObject({ ok: false, code: "CONFLICT" });
+		expect(triageFinding("DISMISSED", "OPEN")).toEqual({ ok: true, to: "OPEN" });
+		expect(triageFinding("RESOLVED", "OPEN")).toMatchObject({ ok: false, code: "CONFLICT" });
 	});
 });
