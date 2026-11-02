@@ -507,8 +507,7 @@ export async function listCredentials(principal: GeoPrincipal) {
 			),
 	]);
 	const configured = new Set(credentials.map((credential) => credential.ref));
-	// A target's own credential, set on the target itself, is not one of these organization references.
-	const referencing = targets.filter((target) => isGeoCredentialRef(target.credentialRef as string));
+	const referencing = targets;
 	return {
 		credentials: credentials.map((credential) => ({
 			ref: credential.ref,
@@ -548,6 +547,11 @@ export async function putCredential(principal: GeoPrincipal, input: z.infer<type
 export async function removeCredential(principal: GeoPrincipal, ref: string) {
 	assertGeoPermission(principal, "secret.manage");
 	return db.transaction(async (tx) => {
+		// Removing the secret must not leave a target believing it still has one to send.
+		await tx
+			.update(geoSamplingTargets)
+			.set({ credentialRef: null })
+			.where(and(eq(geoSamplingTargets.organizationId, principal.organizationId), eq(geoSamplingTargets.credentialRef, ref)));
 		const removed = await deleteGeoCredential(tx, principal.organizationId, ref);
 		if (!removed) throw new GeoError("NOT_FOUND", "密钥不存在");
 		await writeGeoAudit(tx, {

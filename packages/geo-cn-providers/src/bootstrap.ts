@@ -1,6 +1,11 @@
-import { GEO_PLATFORMS, GEO_SURFACE_MODES, type GeoPlatform, type GeoSurfaceMode } from "@workspace/geo-domain";
+import {
+	GEO_PLATFORMS,
+	GEO_SURFACE_MODES,
+	type GeoPlatform,
+	type GeoSurfaceMode,
+	isGeoCredentialRef,
+} from "@workspace/geo-domain";
 import { findSecretKeys } from "./config";
-import { secretNameFromRef } from "./credentials";
 import { parseAvailableWindow } from "./policy";
 
 export interface BootstrapTarget {
@@ -58,7 +63,9 @@ function settingErrors(at: string, item: Record<string, unknown>): string[] {
 	const window = parseAvailableWindow(item.availableWindow);
 	return [
 		...findSecretKeys(plainObject(item.config) ?? {}, `${at}.config`).map((path) => `${path} 不能在配置文件中出现密钥`),
-		...(credentialRef && !secretNameFromRef(credentialRef) ? [`${at}.credentialRef 必须形如 secret:<name>`] : []),
+		...(credentialRef && !isGeoCredentialRef(credentialRef)
+			? [`${at}.credentialRef 必须是工作台设置中管理的密钥引用名（大写字母、数字和下划线）`]
+			: []),
 		...(window.ok ? [] : [`${at}.availableWindow：${window.error}`]),
 	];
 }

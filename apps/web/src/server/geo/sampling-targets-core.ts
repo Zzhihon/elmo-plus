@@ -1,12 +1,9 @@
 import {
 	createCaptureAdapter,
-	credentialRefFor,
 	enabledSamplingPlatforms,
 	findSecretKeys,
 	parseAvailableWindow,
 	redactSecrets,
-	secretNameFromRef,
-	targetSecretName,
 	validateTargetConfig,
 } from "@workspace/geo-cn-providers";
 import {
@@ -16,13 +13,15 @@ import {
 	GEO_VERIFICATION_STATUSES,
 	GeoError,
 	type GeoPrincipal,
+	targetCredentialRef,
 } from "@workspace/geo-domain";
 import { db } from "@workspace/lib/db/db";
-import { geoSamplingAttempts, geoSamplingTargets, secrets } from "@workspace/lib/db/schema";
+import { geoSamplingAttempts, geoSamplingTargets } from "@workspace/lib/db/schema";
 import { writeGeoAudit } from "@workspace/lib/geo/audit";
+import { deleteGeoCredential, putGeoCredential } from "@workspace/lib/geo/credentials";
 import { and, asc, eq, gt, sql } from "drizzle-orm";
 import { z } from "zod";
-import { readTargetCredential, storedCredentialNames, writeTargetCredential } from "./sampling-credentials";
+import { readTargetCredential, storedCredentialRefs } from "./sampling-credentials";
 import { asJson, type JsonValue } from "./sampling-json";
 
 export type SamplingTargetRow = typeof geoSamplingTargets.$inferSelect;
@@ -94,10 +93,9 @@ export interface SamplingTargetView {
 function toView(
 	row: SamplingTargetRow,
 	stats: SamplingTargetStats | undefined,
-	storedNames: ReadonlySet<string>,
+	storedRefs: ReadonlySet<string>,
 	platforms: ReadonlySet<string>,
 ): SamplingTargetView {
-	const secretName = secretNameFromRef(row.credentialRef);
 	const config = validateTargetConfig(row.surfaceMode, row.config, row.modelId);
 	const platformEnabled = row.surfaceMode === "MANUAL_EVIDENCE" || platforms.has(row.platform);
 	const configErrors = config.ok ? [] : config.errors;
@@ -123,7 +121,7 @@ function toView(
 		verifiedBy: row.verifiedBy,
 		verifiedAt: row.verifiedAt?.toISOString() ?? null,
 		enabled: row.enabled,
-		credentialConfigured: secretName !== null && storedNames.has(secretName),
+		credentialConfigured: row.credentialRef !== null && storedRefs.has(row.credentialRef),
 		platformEnabled,
 		configErrors,
 		runnable:
@@ -181,7 +179,7 @@ export async function listSamplingTargets(principal: GeoPrincipal): Promise<Samp
 		.orderBy(asc(geoSamplingTargets.platform), asc(geoSamplingTargets.surfaceMode), asc(geoSamplingTargets.createdAt));
 	const [stats, stored] = await Promise.all([
 		targetStats(principal.organizationId),
-		storedCredentialNames(rows.map((row) => row.credentialRef)),
+		storedCredentialRefs(principal.organizationId),
 	]);
 	const platforms = enabledSamplingPlatforms();
 	return rows.map((row) => toView(row, stats.get(row.id), stored, platforms));
@@ -350,20 +348,21 @@ export async function setSamplingTargetCredential(
 	}
 	const target = await loadTarget(principal, targetId);
 	if (target.surfaceMode === "MANUAL_EVIDENCE") throw new GeoError("VALIDATION_ERROR", "人工证据目标不需要凭据");
-	const secretName = targetSecretName(target.id);
+	const ref = targetCredentialRef(target.id);
 	await db.transaction(async (tx) => {
-		if (trimmed === null) await tx.delete(secrets).where(eq(secrets.name, secretName));
-		else await writeTargetCredential(tx, secretName, trimmed);
+		// A reference to a credential shared through the settings page is only let go of, never deleted.
+		if (trimmed === null) await deleteGeoCredential(tx, principal.organizationId, ref);
+		else await putGeoCredential(tx, principal.organizationId, ref, trimmed);
 		await tx
 			.update(geoSamplingTargets)
-			.set({ credentialRef: trimmed === null ? null : credentialRefFor(secretName) })
+			.set({ credentialRef: trimmed === null ? null : ref })
 			.where(eq(geoSamplingTargets.id, target.id));
 		await writeGeoAudit(tx, {
 			principal,
 			action: trimmed === null ? "target.credential.clear" : "target.credential.set",
 			entityType: "sampling_target",
 			entityId: target.id,
-			metadata: { secretName },
+			metadata: { ref },
 		});
 	});
 	return { credentialConfigured: trimmed !== null };
@@ -386,7 +385,7 @@ export async function checkSamplingTargetConnectivity(
 ): Promise<ConnectivityResult> {
 	assertGeoPermission(principal, "target.manage");
 	const target = await loadTarget(principal, targetId);
-	const credential = await readTargetCredential(target.credentialRef);
+	const credential = await readTargetCredential(principal.organizationId, target.credentialRef);
 	const adapter = createCaptureAdapter(target, { credential, timeoutMs: 15_000 });
 	let result: { available: boolean; detail: string };
 	try {

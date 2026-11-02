@@ -207,7 +207,7 @@ async function storeRawEvidence(ctx: RunContext, attemptNo: number, result: Capt
 }
 
 async function runCapture(ctx: RunContext, policy: RetryPolicy, fetchImpl?: FetchLike): Promise<CaptureResult> {
-	const credential = await loadTargetCredential(ctx.target.credentialRef);
+	const credential = await loadTargetCredential(ctx.target.organizationId, ctx.target.credentialRef);
 	const adapter = createCaptureAdapter(ctx.target, { credential, timeoutMs: policy.timeoutMs, fetch: fetchImpl });
 	try {
 		return await adapter.capture({

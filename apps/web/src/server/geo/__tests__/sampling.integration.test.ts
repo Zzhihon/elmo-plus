@@ -161,11 +161,17 @@ describe("planning a sampling batch", () => {
 		}
 	});
 
-	it("keeps a target's own credential out of the settings page's missing references", async () => {
+	it("keeps a credential set on a target in the store the settings page manages", async () => {
 		const target = await modelApiTarget(true);
 		await setSamplingTargetCredential(admin, target.id, "sk-test-0123456789");
-		const { missingRefs } = await listCredentials(admin);
+		const { credentials, missingRefs } = await listCredentials(admin);
 		expect(missingRefs).toEqual([]);
+		expect(credentials.find((credential) => credential.usedBy.length > 0)?.ref).toMatch(/^TARGET_[0-9A-F]{32}$/);
+
+		const targets = await listSamplingTargets(admin);
+		expect(targets.find((row) => row.id === target.id)?.credentialConfigured).toBe(true);
+		await setSamplingTargetCredential(admin, target.id, null);
+		expect((await listSamplingTargets(admin)).find((row) => row.id === target.id)?.credentialConfigured).toBe(false);
 	});
 });
 

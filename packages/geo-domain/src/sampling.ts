@@ -136,3 +136,15 @@ export function deriveBatchStatus(current: GeoBatchStatus, counts: GeoBatchCount
 	if (counts.valid + counts.partial > 0) return "PARTIAL";
 	return "FAILED";
 }
+
+const CREDENTIAL_REF_SHAPE = /^[A-Z][A-Z0-9_]{1,63}$/;
+
+/** The name of a secret in the organization's credential store, which is all a sampling target may point at. */
+export function isGeoCredentialRef(ref: string): boolean {
+	return CREDENTIAL_REF_SHAPE.test(ref);
+}
+
+/** Where a credential set directly on a target is kept. */
+export function targetCredentialRef(targetId: string): string {
+	return `TARGET_${targetId.replace(/-/g, "").toUpperCase()}`;
+}
