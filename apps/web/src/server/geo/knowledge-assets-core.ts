@@ -27,7 +27,7 @@ import {
 } from "@workspace/lib/db/schema";
 import { writeGeoAudit } from "@workspace/lib/geo/audit";
 import { detectAssertionConflicts, sweepKnowledgeValidity } from "@workspace/lib/geo/knowledge";
-import { and, count, desc, eq, ilike, inArray, ne, notInArray, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, getTableName, ilike, inArray, ne, notInArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
 	canReadConfidential,
@@ -282,9 +282,10 @@ export async function listKnowledgeAssets(principal: GeoPrincipal, filters: Asse
 		if (match) conditions.push(match);
 	}
 	const where = and(...conditions);
+	// The outer id is spelled out: drizzle drops table names from columns in a single-table selection.
 	const claimCount = sql<number>`(
 		select count(distinct ${geoAssertionSources.assertionId})::int from ${geoAssertionSources}
-		where ${geoAssertionSources.assetId} = ${geoKnowledgeAssets.id}
+		where ${geoAssertionSources.assetId} = ${sql.identifier(getTableName(geoKnowledgeAssets))}.${sql.identifier(geoKnowledgeAssets.id.name)}
 	)`;
 	const [rows, [{ total }]] = await Promise.all([
 		db
