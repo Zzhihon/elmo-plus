@@ -8,7 +8,7 @@ import {
 	geoSitePageVersions,
 	type geoSiteSources,
 } from "@workspace/lib/db/schema";
-import { and, count, countDistinct, desc, eq, gte, inArray, ne, sql } from "drizzle-orm";
+import { and, count, countDistinct, desc, eq, getTableName, gte, inArray, ne, sql } from "drizzle-orm";
 import { keyUrlCoverage } from "../qa";
 import type { CrawlRunSummary } from "./finalize";
 
@@ -34,7 +34,8 @@ export async function keyUrlStatuses(
 			pageId: geoSitePages.id,
 			status: geoSitePages.status,
 			lastSeenAt: geoSitePages.lastSeenAt,
-			parsed: sql<boolean>`exists (select 1 from ${geoSitePageVersions} v where v.page_id = ${geoSitePages.id} and v.parse_status = 'PARSED')`,
+			// Spelled out: drizzle drops table names from columns in a single-table selection.
+			parsed: sql<boolean>`exists (select 1 from ${geoSitePageVersions} v where v.page_id = ${sql.identifier(getTableName(geoSitePages))}.${sql.identifier(geoSitePages.id.name)} and v.parse_status = 'PARSED')`,
 		})
 		.from(geoSitePages)
 		.where(
