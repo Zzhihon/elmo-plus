@@ -6,5 +6,6 @@ export * from "./permissions";
 export * from "./principal";
 export * from "./prompt-state";
 export * from "./queues";
+export * from "./sampling";
 export * from "./task-state";
 export { assertGeoTransition, type GeoTransitionActor, type GeoTransitionResult } from "./transition";

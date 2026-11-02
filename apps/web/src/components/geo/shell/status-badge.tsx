@@ -114,6 +114,7 @@ const RUN_TONES: Record<GeoRunStatus, GeoBadgeTone> = {
 	RATE_LIMITED: "warning",
 	TIMEOUT: "danger",
 	CAPTCHA: "warning",
+	NETWORK_ERROR: "danger",
 };
 
 export function GeoRunStatusBadge({ status }: { status: GeoRunStatus }) {

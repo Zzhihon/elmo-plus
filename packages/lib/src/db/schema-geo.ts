@@ -395,15 +395,22 @@ export const geoSamplingTargets = pgTable(
 		retryPolicy: jsonb("retry_policy"),
 		costBudget: numeric("cost_budget", { precision: 12, scale: 4 }),
 		breakerState: text("breaker_state").$type<GeoBreakerState>().notNull().default("CLOSED"),
+		breakerFailureCount: integer("breaker_failure_count").notNull().default(0),
+		breakerOpenedAt: at("breaker_opened_at"),
 		verificationStatus: text("verification_status").$type<GeoVerificationStatus>().notNull().default("UNVERIFIED"),
 		verificationNote: text("verification_note"),
+		verifiedBy: text("verified_by"),
+		verifiedAt: at("verified_at"),
 		enabled: boolean("enabled").notNull().default(false),
+		/** Identity of a target created from the bootstrap file, so re-applying it never duplicates. */
+		bootstrapKey: text("bootstrap_key"),
 		createdBy: text("created_by").notNull(),
 		createdAt: createdAt(),
 		updatedAt: updatedAt(),
 	},
 	(table) => [
 		index("geo_sampling_targets_org_platform_idx").on(table.organizationId, table.platform, table.surfaceMode),
+		uniqueIndex("geo_sampling_targets_org_bootstrap_key_idx").on(table.organizationId, table.bootstrapKey),
 		oneOf("geo_sampling_targets_platform_check", table.platform, GEO_PLATFORMS),
 		oneOf("geo_sampling_targets_surface_mode_check", table.surfaceMode, GEO_SURFACE_MODES),
 		oneOf("geo_sampling_targets_breaker_check", table.breakerState, GEO_BREAKER_STATES),
@@ -463,11 +470,15 @@ export const geoSamplingRuns = pgTable(
 		retryRelation: text("retry_relation").$type<GeoRetryRelation>(),
 		errorCode: text("error_code"),
 		errorDetail: text("error_detail"),
+		attemptCount: integer("attempt_count").notNull().default(0),
+		/** When a PLANNED run is next due; the sweep only re-queues runs past it, so backoff survives a lost job. */
+		nextAttemptAt: at("next_attempt_at"),
 		createdAt: createdAt(),
 		updatedAt: updatedAt(),
 	},
 	(table) => [
 		uniqueIndex("geo_sampling_runs_idempotency_key_idx").on(table.idempotencyKey),
+		index("geo_sampling_runs_status_due_idx").on(table.status, table.nextAttemptAt),
 		index("geo_sampling_runs_batch_status_idx").on(table.batchId, table.status),
 		index("geo_sampling_runs_org_status_idx").on(table.organizationId, table.status),
 		index("geo_sampling_runs_target_idx").on(table.targetId),
@@ -484,6 +495,10 @@ export const geoSamplingAttempts = pgTable(
 		runId: uuid("run_id")
 			.notNull()
 			.references(() => geoSamplingRuns.id),
+		/** Copied from the run so quota, concurrency and cost checks per target need no join. */
+		targetId: uuid("target_id")
+			.notNull()
+			.references(() => geoSamplingTargets.id),
 		attemptNo: integer("attempt_no").notNull(),
 		startedAt: at("started_at").notNull(),
 		durationMs: integer("duration_ms"),
@@ -494,6 +509,7 @@ export const geoSamplingAttempts = pgTable(
 	},
 	(table) => [
 		uniqueIndex("geo_sampling_attempts_run_attempt_idx").on(table.runId, table.attemptNo),
+		index("geo_sampling_attempts_target_started_idx").on(table.targetId, table.startedAt),
 		oneOf("geo_sampling_attempts_status_check", table.status, GEO_ATTEMPT_STATUSES),
 	],
 ).enableRLS();
