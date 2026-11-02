@@ -69,6 +69,13 @@ export async function loadRunContext(organizationId: string, runId: string): Pro
  * from counting twice in the batch's denominator.
  */
 export async function recountBatch(tx: DbConnection, batchId: string): Promise<GeoBatchStatus> {
+	// Taken before counting: a run finishing at the same moment then counts only after this
+	// transaction commits and sees its result, so the last one to count always sees every run.
+	const [batch] = await tx
+		.select({ status: geoSamplingBatches.status, startedAt: geoSamplingBatches.startedAt })
+		.from(geoSamplingBatches)
+		.where(eq(geoSamplingBatches.id, batchId))
+		.for("no key update");
 	const slots = await tx.execute<{ status: GeoRunStatus }>(sql`
 		SELECT status FROM (
 			SELECT DISTINCT ON (prompt_id, target_id, repeat_index) status
@@ -83,11 +90,6 @@ export async function recountBatch(tx: DbConnection, batchId: string): Promise<G
 		.from(geoSamplingAttempts)
 		.innerJoin(geoSamplingRuns, eq(geoSamplingRuns.id, geoSamplingAttempts.runId))
 		.where(eq(geoSamplingRuns.batchId, batchId));
-	const [batch] = await tx
-		.select({ status: geoSamplingBatches.status, startedAt: geoSamplingBatches.startedAt })
-		.from(geoSamplingBatches)
-		.where(eq(geoSamplingBatches.id, batchId))
-		.for("update");
 	const status = deriveBatchStatus(batch.status, counts);
 	const settled = status === "COMPLETED" || status === "PARTIAL" || status === "FAILED";
 	await tx

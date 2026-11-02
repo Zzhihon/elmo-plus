@@ -520,25 +520,30 @@ export async function pauseSamplingBatch(principal: GeoPrincipal, batchId: strin
 
 export async function resumeSamplingBatch(principal: GeoPrincipal, batchId: string): Promise<BatchRow> {
 	assertGeoPermission(principal, "sampling.run");
-	const before = await loadBatchForUpdate(principal, batchId);
-	if (before.status !== "PAUSED") throw new GeoError("CONFLICT", "只有已暂停的批次可以恢复");
-	const pending =
-		before.plannedCount - before.validCount - before.partialCount - before.unavailableCount - before.failedCount;
-	const status = deriveBatchStatus("RUNNING", {
-		planned: before.plannedCount,
-		valid: before.validCount,
-		partial: before.partialCount,
-		unavailable: before.unavailableCount,
-		failed: before.failedCount,
-		pending: Math.max(0, pending),
-	});
-	const after = await db.transaction(async (tx) => {
+	const { after, status } = await db.transaction(async (tx) => {
+		// Held like a recount holds it, so runs that finish while this decides are not missed.
+		const [before] = await tx
+			.select()
+			.from(geoSamplingBatches)
+			.where(and(eq(geoSamplingBatches.id, batchId), eq(geoSamplingBatches.organizationId, principal.organizationId)))
+			.for("no key update");
+		if (!before) throw new GeoError("NOT_FOUND", "采样批次不存在");
+		if (before.status !== "PAUSED") throw new GeoError("CONFLICT", "只有已暂停的批次可以恢复");
+		const pending =
+			before.plannedCount - before.validCount - before.partialCount - before.unavailableCount - before.failedCount;
+		const status = deriveBatchStatus("RUNNING", {
+			planned: before.plannedCount,
+			valid: before.validCount,
+			partial: before.partialCount,
+			unavailable: before.unavailableCount,
+			failed: before.failedCount,
+			pending: Math.max(0, pending),
+		});
 		const [row] = await tx
 			.update(geoSamplingBatches)
 			.set({ status, finishedAt: status === "RUNNING" ? null : sql`now()` })
-			.where(and(eq(geoSamplingBatches.id, batchId), eq(geoSamplingBatches.status, "PAUSED")))
+			.where(eq(geoSamplingBatches.id, batchId))
 			.returning();
-		if (!row) throw new GeoError("CONFLICT", "批次状态已变化，请刷新后重试");
 		await writeGeoAudit(tx, {
 			principal,
 			action: "sampling.batch.resume",
@@ -547,7 +552,7 @@ export async function resumeSamplingBatch(principal: GeoPrincipal, batchId: stri
 			before,
 			after: row,
 		});
-		return row;
+		return { after: row, status };
 	});
 	if (status === "RUNNING") await requestDispatch(principal.organizationId, batchId);
 	return after;

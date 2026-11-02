@@ -5,7 +5,7 @@ import { geoSamplingAttempts, geoSamplingBatches, geoSamplingRuns, geoSamplingTa
 import { and, eq, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { getBoss } from "../../boss";
 import { STALE_ATTEMPT_MS } from "./sampling-capture";
-import { finalizeRun, loadRunContext, scheduleRun } from "./sampling-store";
+import { finalizeRun, loadRunContext, recountBatch, scheduleRun } from "./sampling-store";
 
 export interface DispatchJobData {
 	organizationId?: string;
@@ -159,10 +159,33 @@ async function requeueLostRuns(now: Date): Promise<number> {
 	return lost.length;
 }
 
-export async function sweepSampling(now: Date = new Date()): Promise<{ stalled: number; requeued: number }> {
+/** Counts again for any batch still marked running with no run left to finish; nothing else would ever close it. */
+async function settleFinishedBatches(now: Date): Promise<number> {
+	const r = geoSamplingRuns;
+	const finished = await db
+		.select({ id: geoSamplingBatches.id })
+		.from(geoSamplingBatches)
+		.where(
+			and(
+				eq(geoSamplingBatches.status, "RUNNING"),
+				lt(geoSamplingBatches.updatedAt, new Date(now.getTime() - OVERDUE_MS)),
+				sql`not exists (select 1 from ${r} where ${r.batchId} = ${geoSamplingBatches.id} and ${r.status} in ('PLANNED', 'RUNNING'))`,
+			),
+		)
+		.limit(SWEEP_LIMIT);
+	for (const batch of finished) await db.transaction((tx) => recountBatch(tx, batch.id));
+	return finished.length;
+}
+
+export async function sweepSampling(
+	now: Date = new Date(),
+): Promise<{ stalled: number; requeued: number; settled: number }> {
 	const stalled = await recoverStalledRuns(now);
 	const requeued = await requeueLostRuns(now);
-	if (stalled || requeued)
-		console.log(`[geo-sampling] sweep recovered ${stalled} stalled and re-queued ${requeued} runs`);
-	return { stalled, requeued };
+	const settled = await settleFinishedBatches(now);
+	if (stalled || requeued || settled)
+		console.log(
+			`[geo-sampling] sweep recovered ${stalled} stalled, re-queued ${requeued} runs and settled ${settled} batches`,
+		);
+	return { stalled, requeued, settled };
 }
