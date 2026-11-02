@@ -874,15 +874,32 @@ export async function importPromptsCsv(principal: GeoPrincipal, text: string): P
 
 	return db.transaction(async (tx) => {
 		await lockPromptLibrary(tx, principal.organizationId);
-		const [roles, existing, members] = await Promise.all([
-			listBuyerRolesSeeded(tx, principal.organizationId),
-			tx
-				.select({ id: geoPrompts.id, question: geoPrompts.question, status: geoPrompts.status })
-				.from(geoPrompts)
-				.where(eq(geoPrompts.organizationId, principal.organizationId)),
-			tx.select({ userId: member.userId }).from(member).where(eq(member.organizationId, principal.organizationId)),
-		]);
-		const { valid, errors } = validatePromptCsvRows(rows, {
+		const roles = await listBuyerRolesSeeded(tx, principal.organizationId);
+		const existing = await tx
+			.select({
+				id: geoPrompts.id,
+				question: geoPrompts.question,
+				status: geoPrompts.status,
+				buyerRoleId: geoPrompts.buyerRoleId,
+				intent: geoPrompts.intent,
+				productLine: geoPrompts.productLine,
+				geoRegion: geoPrompts.geoRegion,
+				priority: geoPrompts.priority,
+				language: geoPrompts.language,
+				tier: geoPrompts.tier,
+				ownerId: geoPrompts.ownerId,
+			})
+			.from(geoPrompts)
+			.where(eq(geoPrompts.organizationId, principal.organizationId));
+		const members = await tx
+			.select({ userId: member.userId })
+			.from(member)
+			.where(eq(member.organizationId, principal.organizationId));
+		const {
+			valid,
+			unchanged: untouched,
+			errors,
+		} = validatePromptCsvRows(rows, {
 			roles: promptCsvRoleLookup(roles),
 			existing,
 			memberIds: new Set(members.map((row) => row.userId)),
@@ -891,7 +908,7 @@ export async function importPromptsCsv(principal: GeoPrincipal, text: string): P
 
 		let created = 0;
 		let updated = 0;
-		let unchanged = 0;
+		let unchanged = untouched.length;
 		for (const row of valid) {
 			const fields = {
 				question: row.question,
@@ -919,7 +936,7 @@ export async function importPromptsCsv(principal: GeoPrincipal, text: string): P
 			action: "prompt.import_csv",
 			entityType: "prompt",
 			entityId: principal.organizationId,
-			metadata: { rows: valid.length, created, updated, unchanged },
+			metadata: { rows: valid.length + untouched.length, created, updated, unchanged },
 		});
 		return { created, updated, unchanged, errors: [] };
 	});
