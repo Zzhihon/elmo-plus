@@ -6,7 +6,13 @@ import {
 	GEO_TASK_STATE_LABELS,
 } from "@workspace/geo-domain";
 import PDFDocument from "pdfkit";
-import { type CellMetrics, type EqualWeightSummary, formatMetric, formatSummaryRate, type MetricValue } from "./metrics";
+import {
+	type CellMetrics,
+	type EqualWeightSummary,
+	formatMetric,
+	formatSummaryRate,
+	type MetricValue,
+} from "./metrics";
 import { cellLabel, type ReportSnapshot } from "./report";
 
 export class GeoPdfFontError extends Error {

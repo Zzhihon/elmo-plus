@@ -1,5 +1,5 @@
 import { isPublicAddress } from "./address";
-import { type Resolver, type SafeFetchFailure, safeFetch, systemResolver } from "./safe-fetch";
+import { type Resolver, type SafeFetchFailure, type SafeFetchSuccess, safeFetch, systemResolver } from "./safe-fetch";
 import { checkUrl, normalizeHost, type UrlRefusal } from "./url-policy";
 
 const DEFAULT_MAX_BYTES = 6 * 1024 * 1024;
@@ -114,12 +114,16 @@ export function createGuardedFetch(options: GuardedFetchOptions = {}) {
 			if (init.signal?.aborted) throw init.signal.reason;
 			throw new GuardedFetchError(result.code, result.detail);
 		}
-		const noBody = result.status === 204 || result.status === 205 || result.status === 304;
-		return new Response(noBody ? null : Buffer.from(result.body), {
-			status: result.status,
-			headers: withoutEncoding(result.headers),
-		});
+		return toResponse(result);
 	};
+}
+
+function toResponse(result: SafeFetchSuccess): Response {
+	const noBody = result.status === 204 || result.status === 205 || result.status === 304;
+	return new Response(noBody ? null : Buffer.from(result.body), {
+		status: result.status,
+		headers: withoutEncoding(result.headers),
+	});
 }
 
 /** The body is already decoded and read in full, so these no longer describe it. */

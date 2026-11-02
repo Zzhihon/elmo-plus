@@ -16,9 +16,9 @@ import {
 	geoObservationCitations,
 	geoObservationClaims,
 	geoObservations,
+	geoOptimizationTasks,
 	geoSiteCrawlItems,
 	geoSitePageVersions,
-	geoOptimizationTasks,
 	geoTaskEvents,
 	geoTaskEvidence,
 } from "../db/schema-geo";

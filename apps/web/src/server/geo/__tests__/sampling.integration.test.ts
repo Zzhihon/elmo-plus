@@ -5,7 +5,13 @@ import path from "node:path";
 import type { GeoPrincipal } from "@workspace/geo-domain";
 import { getObjectStore } from "@workspace/geo-evidence";
 import { db } from "@workspace/lib/db/db";
-import { geoEvidenceUploads, geoObservations, geoOrgSettings, geoSamplingRuns, secrets } from "@workspace/lib/db/schema";
+import {
+	geoEvidenceUploads,
+	geoObservations,
+	geoOrgSettings,
+	geoSamplingRuns,
+	secrets,
+} from "@workspace/lib/db/schema";
 import { and, count, eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { listCredentials } from "@/server/geo/admin-core";
@@ -335,7 +341,10 @@ describe("a target's endpoint and stored credential", () => {
 			input({ baseUrl: "https://elsewhere.example.test/v1", model: "test-model" }),
 		);
 		expect(updated).toMatchObject({ credentialRef: null, verificationStatus: "UNVERIFIED" });
-		const stored = await db.select().from(secrets).where(eq(secrets.name, `geo-target:${target.id}`));
+		const stored = await db
+			.select()
+			.from(secrets)
+			.where(eq(secrets.name, `geo-target:${target.id}`));
 		expect(stored).toEqual([]);
 
 		const sent: (string | null)[] = [];

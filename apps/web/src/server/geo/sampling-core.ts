@@ -127,7 +127,9 @@ async function reservedCost(tx: DbConnection, organizationId: string): Promise<n
 		})
 		.from(geoSamplingRuns)
 		.innerJoin(geoSamplingTargets, eq(geoSamplingTargets.id, geoSamplingRuns.targetId))
-		.where(and(eq(geoSamplingRuns.organizationId, organizationId), inArray(geoSamplingRuns.status, ["PLANNED", "RUNNING"])))
+		.where(
+			and(eq(geoSamplingRuns.organizationId, organizationId), inArray(geoSamplingRuns.status, ["PLANNED", "RUNNING"])),
+		)
 		.groupBy(geoSamplingTargets.id);
 	return rows.reduce((sum, row) => sum + estimatedCostPerRun(row.surfaceMode, row.config) * row.runs, 0);
 }

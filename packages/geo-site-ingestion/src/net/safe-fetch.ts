@@ -91,7 +91,10 @@ export type SafeFetchResult = SafeFetchSuccess | SafeFetchError;
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 function policyOf(options: SafeFetchOptions) {
-	return { ...redirectPolicyOf(options.allowedHosts, options.allowedPorts), allowSensitivePaths: options.allowSensitivePaths };
+	return {
+		...redirectPolicyOf(options.allowedHosts, options.allowedPorts),
+		allowSensitivePaths: options.allowSensitivePaths,
+	};
 }
 
 class FetchAbort extends Error {

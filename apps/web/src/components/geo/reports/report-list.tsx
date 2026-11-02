@@ -53,12 +53,19 @@ const REVIEW_TONE: Record<GeoReportReviewStatus, GeoBadgeTone> = {
 	REJECTED: "danger",
 };
 
-export function GeoReportStatusBadges({ report }: { report: Pick<ReportSummary, "status" | "reviewStatus"> }) {
+export function GeoReportStatusBadges({
+	report,
+}: {
+	report: Pick<ReportSummary, "status" | "reviewStatus" | "pdfUnavailableReason">;
+}) {
 	return (
 		<div className="flex flex-wrap gap-1">
 			<GeoStatusBadge label={GEO_REPORT_STATUS_LABELS[report.status]} tone={STATUS_TONE[report.status]} />
 			{report.status === "SUCCEEDED" && (
 				<GeoStatusBadge label={GEO_REPORT_REVIEW_LABELS[report.reviewStatus]} tone={REVIEW_TONE[report.reviewStatus]} />
+			)}
+			{report.status === "SUCCEEDED" && report.pdfUnavailableReason && (
+				<GeoStatusBadge label="PDF 不可用" tone="warning" />
 			)}
 		</div>
 	);

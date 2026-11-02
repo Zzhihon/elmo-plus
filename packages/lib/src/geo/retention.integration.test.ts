@@ -548,7 +548,10 @@ describe("retention and evidence objects", () => {
 		await db.insert(geoOrgSettings).values({ organizationId, evidenceRetentionDays: 30 });
 		promptId = (await createPrompt(organizationId)).id;
 		targetId = (await createTarget(organizationId)).id;
-		const [set] = await db.insert(geoPromptSets).values({ organizationId, name: "基线", createdBy: "user-a" }).returning();
+		const [set] = await db
+			.insert(geoPromptSets)
+			.values({ organizationId, name: "基线", createdBy: "user-a" })
+			.returning();
 		const [batch] = await db
 			.insert(geoSamplingBatches)
 			.values({ organizationId, promptSetId: set.id, requestedBy: "user-a", idempotencyKey: randomUUID() })
@@ -651,7 +654,10 @@ describe("retention and evidence objects", () => {
 		const result = await purge();
 		expect(deleted).toEqual([uploadKey("f")]);
 		expect(result.evidence.rows.geo_evidence_uploads).toBe(1);
-		const pending = await db.select().from(geoEvidenceUploads).where(eq(geoEvidenceUploads.objectKey, uploadKey("0")));
+		const pending = await db
+			.select()
+			.from(geoEvidenceUploads)
+			.where(eq(geoEvidenceUploads.objectKey, uploadKey("0")));
 		expect(pending).toHaveLength(1);
 	});
 

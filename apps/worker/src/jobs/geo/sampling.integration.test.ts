@@ -651,7 +651,12 @@ describe("sampling a frozen set through a model API", () => {
 			try {
 				expect(await generateReport(organizationId, report.id)).toEqual({ status: "SKIPPED", reason: "claim-lost" });
 				const [row] = await db.select().from(geoGeneratedReports).where(eq(geoGeneratedReports.id, report.id));
-				expect(row).toMatchObject({ status: "SUCCEEDED", reviewStatus: "APPROVED", csvObjectKey: null, snapshot: null });
+				expect(row).toMatchObject({
+					status: "SUCCEEDED",
+					reviewStatus: "APPROVED",
+					csvObjectKey: null,
+					snapshot: null,
+				});
 			} finally {
 				spy.mockRestore();
 				vi.unstubAllEnvs();
@@ -790,7 +795,10 @@ describe("batch status under concurrent completion", () => {
 
 	it("settles a batch left marked running with no run still to finish", async () => {
 		const { batch, runs } = await planBatchOf(1);
-		await db.update(geoSamplingRuns).set({ status: "VALID" }).where(eq(geoSamplingRuns.id, runs[0] ?? ""));
+		await db
+			.update(geoSamplingRuns)
+			.set({ status: "VALID" })
+			.where(eq(geoSamplingRuns.id, runs[0] ?? ""));
 		const later = new Date(Date.now() + 3_600_000);
 		await sweepSampling(later);
 		const [row] = await db.select().from(geoSamplingBatches).where(eq(geoSamplingBatches.id, batch));

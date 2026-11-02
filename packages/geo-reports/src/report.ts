@@ -9,7 +9,13 @@ import {
 } from "@workspace/geo-domain";
 import { toCsv } from "./csv";
 import type { Insights } from "./insights";
-import { type CompetitorRef, type EqualWeightSummary, formatMetric, formatSummaryRate, type MetricValue } from "./metrics";
+import {
+	type CompetitorRef,
+	type EqualWeightSummary,
+	formatMetric,
+	formatSummaryRate,
+	type MetricValue,
+} from "./metrics";
 
 export const GEO_REPORT_FORMAT = "elmo-geo-report/1";
 
