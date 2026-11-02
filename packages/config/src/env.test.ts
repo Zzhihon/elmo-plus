@@ -158,3 +158,20 @@ describe("assertRequiredEnv", () => {
 		).not.toThrow();
 	});
 });
+
+describe("GEO workspace env requirements", () => {
+	const satisfied = (env: Record<string, string>) => !missingIds("local", env).has("GEO_OBJECT_STORE");
+
+	it("requires nothing while the workspace is off", () => {
+		expect(satisfied({})).toBe(true);
+		expect(satisfied({ GEO_WORKSPACE_ENABLED: "0" })).toBe(true);
+	});
+
+	it("requires a store, and keys for an S3 one, once it is on", () => {
+		expect(satisfied({ GEO_WORKSPACE_ENABLED: "1" })).toBe(false);
+		expect(satisfied({ GEO_WORKSPACE_ENABLED: "1", GEO_OBJECT_STORE_URL: "file:///var/lib/geo" })).toBe(true);
+		const s3 = { GEO_WORKSPACE_ENABLED: "1", GEO_OBJECT_STORE_URL: "https://s3.example.test/evidence" };
+		expect(satisfied(s3)).toBe(false);
+		expect(satisfied({ ...s3, GEO_OBJECT_STORE_ACCESS_KEY: "key", GEO_OBJECT_STORE_SECRET_KEY: "secret" })).toBe(true);
+	});
+});

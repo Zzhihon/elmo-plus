@@ -14,6 +14,7 @@
 		"./env": "./src/env.ts",
 		"./env-registry": "./src/env-registry.ts",
 		"./fanout-support": "./src/fanout-support.ts",
+		"./geo": "./src/geo.ts",
 		"./legal": "./src/legal.ts",
 		"./model-filter": "./src/model-filter.ts",
 		"./models": "./src/models.ts",

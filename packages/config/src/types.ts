@@ -87,6 +87,7 @@ export interface ClientConfig {
 	canRegister: boolean;
 	hasUsers: boolean;
 	turnstileSiteKey?: string;
+	geoWorkspaceEnabled: boolean;
 }
 
 export interface WebQueryResult {

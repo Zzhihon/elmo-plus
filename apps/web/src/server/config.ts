@@ -4,6 +4,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { CRISP_WEBSITE_ID } from "@workspace/config/constants";
 import { getDeploymentModeFromEnv, getEnvValidationState } from "@workspace/config/env";
+import { isGeoWorkspaceEnabled } from "@workspace/config/geo";
 import type { ClientConfig } from "@workspace/config/types";
 import { getDeployment } from "@workspace/deployment";
 import { getDefaultDelayHours } from "@workspace/lib/constants";
@@ -62,6 +63,7 @@ export const getClientConfig = createServerFn({ method: "GET" }).handler(async (
 		canRegister,
 		hasUsers,
 		turnstileSiteKey: deployment.mode === "cloud" ? process.env.VITE_TURNSTILE_SITE_KEY || undefined : undefined,
+		geoWorkspaceEnabled: isGeoWorkspaceEnabled(),
 	};
 });
 

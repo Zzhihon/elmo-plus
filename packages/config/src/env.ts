@@ -1,4 +1,5 @@
 import { ENV_REGISTRY, RESEARCH_PROVIDER_PREFERENCE } from "./env-registry";
+import { isGeoWorkspaceEnabled } from "./geo";
 import { parseScrapeTargets } from "./scrape-targets";
 import type { DeploymentMode, EnvRequirement } from "./types";
 
@@ -112,8 +113,28 @@ function buildResearchProviderRequirement(): EnvRequirement {
 	};
 }
 
+/** Evidence has nowhere to go without it, so an enabled workspace fails at startup rather than on the first crawl. */
+function buildGeoObjectStoreRequirement(): EnvRequirement {
+	return {
+		id: "GEO_OBJECT_STORE",
+		label: "GEO_OBJECT_STORE_URL",
+		description: "Needed once GEO_WORKSPACE_ENABLED is set. An http(s) store also needs its access and secret keys.",
+		isSatisfied: (env) => {
+			if (!isGeoWorkspaceEnabled(env)) return true;
+			const url = env.GEO_OBJECT_STORE_URL?.trim();
+			if (!url) return false;
+			return url.startsWith("file:") || requireAll(["GEO_OBJECT_STORE_ACCESS_KEY", "GEO_OBJECT_STORE_SECRET_KEY"])(env);
+		},
+	};
+}
+
 function buildRequirements(mode: DeploymentMode): EnvRequirement[] {
-	return [...buildStaticRequirements(mode), ...buildProviderKeyRequirements(), buildResearchProviderRequirement()];
+	return [
+		...buildStaticRequirements(mode),
+		...buildProviderKeyRequirements(),
+		buildResearchProviderRequirement(),
+		buildGeoObjectStoreRequirement(),
+	];
 }
 
 export const ENV_REQUIREMENTS: Record<DeploymentMode, EnvRequirement[]> = {

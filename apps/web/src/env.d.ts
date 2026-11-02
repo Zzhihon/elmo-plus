@@ -89,6 +89,15 @@ declare global {
 			readonly GOOGLE_CLIENT_SECRET?: string;
 			readonly RESEND_FROM_EMAIL?: string;
 			readonly TURNSTILE_SECRET_KEY?: string;
+			readonly GEO_WORKSPACE_ENABLED?: string;
+			readonly GEO_OBJECT_STORE_URL?: string;
+			readonly GEO_OBJECT_STORE_ACCESS_KEY?: string;
+			readonly GEO_OBJECT_STORE_SECRET_KEY?: string;
+			readonly GEO_OBJECT_STORE_REGION?: string;
+			readonly GEO_PDF_FONT_PATH?: string;
+			readonly GEO_CLAMD_HOST?: string;
+			readonly GEO_CLAMD_PORT?: string;
+			readonly GEO_BOOTSTRAP_PATH?: string;
 		}
 	}
 }

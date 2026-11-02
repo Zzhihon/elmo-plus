@@ -470,6 +470,61 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		requiredBy: "optional",
 		description: "Cloud only: Cloudflare Turnstile site key for the widget on the email auth forms.",
 	},
+	{
+		name: "GEO_WORKSPACE_ENABLED",
+		scope: "server",
+		requiredBy: "optional",
+		description: "Set to 1 to enable the GEO workspace: its pages, /api/v1/geo routes and worker queues.",
+	},
+	{
+		name: "GEO_OBJECT_STORE_URL",
+		scope: "server",
+		requiredBy: "optional",
+		description:
+			"Where GEO evidence is stored: file:///path, or https://host/bucket[/prefix] for path-style S3. Required once the GEO workspace is enabled.",
+	},
+	{
+		name: "GEO_OBJECT_STORE_ACCESS_KEY",
+		scope: "server",
+		requiredBy: "optional",
+		description: "S3 access key for GEO_OBJECT_STORE_URL.",
+	},
+	{
+		name: "GEO_OBJECT_STORE_SECRET_KEY",
+		scope: "server",
+		requiredBy: "optional",
+		description: "S3 secret key for GEO_OBJECT_STORE_URL.",
+	},
+	{
+		name: "GEO_OBJECT_STORE_REGION",
+		scope: "server",
+		requiredBy: "optional",
+		description: "S3 region for GEO_OBJECT_STORE_URL. Defaults to us-east-1.",
+	},
+	{
+		name: "GEO_PDF_FONT_PATH",
+		scope: "server",
+		requiredBy: "optional",
+		description: "Path to the CJK font used for GEO PDF reports, overriding the system font lookup.",
+	},
+	{
+		name: "GEO_CLAMD_HOST",
+		scope: "server",
+		requiredBy: "optional",
+		description: "ClamAV daemon host used to scan GEO knowledge uploads.",
+	},
+	{
+		name: "GEO_CLAMD_PORT",
+		scope: "server",
+		requiredBy: "optional",
+		description: "ClamAV daemon port used to scan GEO knowledge uploads.",
+	},
+	{
+		name: "GEO_BOOTSTRAP_PATH",
+		scope: "server",
+		requiredBy: "optional",
+		description: "Path to a deployment-specific GEO bootstrap file, kept outside the repository.",
+	},
 ];
 
 /**
