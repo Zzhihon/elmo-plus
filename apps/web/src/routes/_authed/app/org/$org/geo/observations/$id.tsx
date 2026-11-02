@@ -3,13 +3,13 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Button, buttonVariants } from "@workspace/ui/components/button";
 import { Skeleton } from "@workspace/ui/components/skeleton";
 import { useState } from "react";
-import { ObservationEvaluationSection } from "@/components/geo/observations/evaluation-section";
 import {
 	ObservationAnswer,
 	ObservationCitations,
 	ObservationNotices,
 	ObservationProvenance,
 } from "@/components/geo/observations/observation-detail";
+import { GeoObservationReviewPanel } from "@/components/geo/review/observation-review-panel";
 import { observationKeys } from "@/components/geo/sampling/keys";
 import { ResampleDialog } from "@/components/geo/sampling/resample-dialog";
 import { GeoPlatformBadge, GeoSurfaceModeBadge } from "@/components/geo/shell/evidence-badge";
@@ -85,7 +85,7 @@ function GeoObservationDetailPage() {
 					<ObservationAnswer observation={observation} />
 					<ObservationCitations observation={observation} />
 					<ObservationProvenance observation={observation} />
-					<ObservationEvaluationSection observation={observation} />
+					<GeoObservationReviewPanel observation={observation} />
 				</>
 			)}
 			{resampling && run && <ResampleDialog runId={run.id} onClose={() => setResampling(false)} />}
