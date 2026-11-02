@@ -24,11 +24,11 @@ import {
 	geoSitePages,
 	geoSitePageVersions,
 } from "@workspace/lib/db/schema";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { listConflicts, reviewClaim } from "@/server/geo/knowledge-core";
 import { createTasksFromFindings } from "@/server/geo/site-audit-core";
-import { createSite } from "@/server/geo/site-core";
+import { createSite, getKeyUrlCoverage, listSitePages, setKeyUrls } from "@/server/geo/site-core";
 import { createGeoOrganization } from "@/test/integration/geo-fixtures";
 
 const HOST = `site-${randomUUID().slice(0, 8)}.example-electric.test`;
@@ -287,6 +287,31 @@ describe("crawling an authorized site", () => {
 		// The approved fact is never overwritten by the crawl.
 		const [still] = await db.select().from(geoKnowledgeAssertions).where(eq(geoKnowledgeAssertions.id, approved.id));
 		expect(still?.status).toBe("APPROVED");
+	});
+
+	it("lists each page with its latest version and counts parsed key pages as covered", async () => {
+		const { rows } = await listSitePages(operator, { siteId }, { limit: 50, offset: 0 });
+		const product = rows.find((row) => row.url === `${BASE}products/kyn28`);
+		const [latest] = await db
+			.select()
+			.from(geoSitePageVersions)
+			.where(eq(geoSitePageVersions.pageId, product?.id as string))
+			.orderBy(desc(geoSitePageVersions.fetchedAt))
+			.limit(1);
+		expect(product).toMatchObject({
+			latestVersionId: latest?.id,
+			title: "KYN28 高压开关柜",
+			parseStatus: "PARSED",
+			versionCount: 2,
+		});
+
+		await setKeyUrls(admin, siteId, [`${BASE}products/kyn28`, `${BASE}products/retired`]);
+		const coverage = await getKeyUrlCoverage(operator, siteId);
+		expect(coverage.statuses.map((entry) => [entry.url, entry.status, entry.parsed])).toEqual([
+			[`${BASE}products/kyn28`, "ACTIVE", true],
+			[`${BASE}products/retired`, "GONE", true],
+		]);
+		expect(coverage).toMatchObject({ covered: 1 });
 	});
 
 	it("audits the stored pages after a crawl and turns a finding into a task", async () => {
