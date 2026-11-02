@@ -14,7 +14,6 @@ import { member, organization } from "@workspace/lib/db/schema";
 import { loadGeoMemberRoles } from "@workspace/lib/geo/roles";
 import { and, eq, or } from "drizzle-orm";
 import type { ApiAuth } from "@/lib/auth/api-auth";
-import { getAuthSession } from "@/lib/auth/helpers";
 import { READ_ONLY_MESSAGE } from "@/lib/read-only-errors";
 
 const ADMIN_ORGANIZATION_HEADER = "X-Geo-Organization-Id";
@@ -88,6 +87,8 @@ async function findMemberOrganizationId(userId: string, idOrSlug: string): Promi
 /** The signed-in person's roles in an organization, with no particular permission demanded. */
 export async function resolveGeoSessionPrincipal(idOrSlug: string, request?: Request): Promise<GeoPrincipal> {
 	assertEnabled();
+	// Loaded on demand so REST modules, which never use a session, do not start Better Auth on import.
+	const { getAuthSession } = await import("@/lib/auth/helpers");
 	const session = await getAuthSession();
 	if (!session) throw new GeoError("UNAUTHORIZED", "请先登录");
 
