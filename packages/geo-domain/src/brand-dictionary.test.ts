@@ -31,10 +31,7 @@ describe("alias deduplication", () => {
 
 describe("brand conflicts", () => {
 	it("refuses a competitor alias another entity already answers to", () => {
-		const conflicts = findBrandConflicts(
-			{ displayName: "某竞品", aliases: ["示例电气厂"], domains: [] },
-			[own],
-		);
+		const conflicts = findBrandConflicts({ displayName: "某竞品", aliases: ["示例电气厂"], domains: [] }, [own]);
 		expect(conflicts).toEqual([{ field: "name", term: "示例电气厂", entityId: "own", entityName: "示例电气" }]);
 	});
 

@@ -20,7 +20,7 @@ describe("prompt CSV import", () => {
 		const { valid, errors } = validatePromptCsvRows(
 			[
 				row(2, { question: "华南成套配电柜厂家有哪些", buyer_role: "采购负责人" }),
-				row(3, { question: "=HYPERLINK(\"http://x.test\")" }),
+				row(3, { question: '=HYPERLINK("http://x.test")' }),
 				row(4, { question: "华南成套配电柜厂家有哪些", priority: "P9" }),
 				row(5, { question: "", buyer_role: "评标专家" }),
 			],

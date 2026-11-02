@@ -118,28 +118,28 @@ export function findBrandConflicts(
 	candidate: GeoBrandTerms & { id?: string },
 	others: readonly GeoBrandConflictSubject[],
 ): GeoBrandConflict[] {
-	const conflicts: GeoBrandConflict[] = [];
 	const candidateNames = namesOf(candidate);
-	const candidateDomains = (candidate.domains ?? []).map((domain) => [domain, domainIdentity(domain)] as const);
+	const candidateDomains = candidate.domains ?? [];
+	return others
+		.filter((other) => other.id !== candidate.id)
+		.flatMap((other) => [
+			...nameConflicts(candidateNames, other),
+			...(other.status === "ACTIVE" ? domainConflicts(candidateDomains, other) : []),
+		]);
+}
 
-	for (const other of others) {
-		if (other.id === candidate.id) continue;
-		const active = other.status === "ACTIVE";
-		const taken = new Set((active ? namesOf(other) : [other.displayName]).map(normalizeBrandTerm));
-		for (const name of candidateNames) {
-			if (taken.has(normalizeBrandTerm(name))) {
-				conflicts.push({ field: "name", term: name, entityId: other.id, entityName: other.displayName });
-			}
-		}
-		if (!active) continue;
-		const takenDomains = new Set((other.domains ?? []).map(domainIdentity));
-		for (const [domain, identity] of candidateDomains) {
-			if (takenDomains.has(identity)) {
-				conflicts.push({ field: "domain", term: domain, entityId: other.id, entityName: other.displayName });
-			}
-		}
-	}
-	return conflicts;
+function nameConflicts(names: readonly string[], other: GeoBrandConflictSubject): GeoBrandConflict[] {
+	const taken = new Set((other.status === "ACTIVE" ? namesOf(other) : [other.displayName]).map(normalizeBrandTerm));
+	return names
+		.filter((name) => taken.has(normalizeBrandTerm(name)))
+		.map((term) => ({ field: "name", term, entityId: other.id, entityName: other.displayName }));
+}
+
+function domainConflicts(domains: readonly string[], other: GeoBrandConflictSubject): GeoBrandConflict[] {
+	const taken = new Set((other.domains ?? []).map(domainIdentity));
+	return domains
+		.filter((domain) => taken.has(domainIdentity(domain)))
+		.map((term) => ({ field: "domain", term, entityId: other.id, entityName: other.displayName }));
 }
 
 export function describeBrandConflicts(conflicts: readonly GeoBrandConflict[]): string {

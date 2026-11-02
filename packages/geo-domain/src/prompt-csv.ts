@@ -97,6 +97,67 @@ export function missingPromptCsvColumns(header: readonly string[]): GeoPromptCsv
 
 const FREE_TEXT_COLUMNS = ["question", "intent", "product_line", "geo_region"] as const;
 
+type Report = (column: GeoPromptCsvColumn | null, message: string) => void;
+type Cells = (column: GeoPromptCsvColumn) => string;
+
+interface FileState {
+	existingById: Map<string, GeoPromptCsvContext["existing"][number]>;
+	questionOwners: Map<string, string>;
+	seenInFile: Map<string, number>;
+}
+
+function checkFormulas(cell: Cells, report: Report) {
+	for (const column of FREE_TEXT_COLUMNS) {
+		if (looksLikeSpreadsheetFormula(cell(column).replace(/^'/, ""))) {
+			report(column, "内容以公式字符开头（= + - @），已拒绝导入");
+		}
+	}
+}
+
+function checkQuestion(question: string, report: Report) {
+	if (!question) report("question", "问法不能为空");
+	else if (question.length > GEO_PROMPT_QUESTION_MAX_LENGTH) {
+		report("question", `问法不能超过 ${GEO_PROMPT_QUESTION_MAX_LENGTH} 字`);
+	}
+}
+
+function checkPromptId(promptId: string | null, state: FileState, report: Report) {
+	if (!promptId) return;
+	const existing = UUID_SHAPE.test(promptId) ? state.existingById.get(promptId) : undefined;
+	if (!existing) report("prompt_id", "问法不存在");
+	else if (existing.status !== "DRAFT") report("prompt_id", "只有草稿状态的问法可以通过导入修改");
+}
+
+function checkDuplicate(line: number, question: string, promptId: string | null, state: FileState, report: Report) {
+	const key = normalizePromptQuestion(question);
+	if (!key) return;
+	const firstLine = state.seenInFile.get(key);
+	if (firstLine !== undefined) report("question", `与第 ${firstLine} 行问法重复`);
+	else state.seenInFile.set(key, line);
+	const owner = state.questionOwners.get(key);
+	if (owner && owner !== promptId) report("question", "问法库中已存在相同问法");
+}
+
+function readLabels(cell: Cells, context: GeoPromptCsvContext, report: Report) {
+	const roleName = cell("buyer_role");
+	const buyerRoleId = roleName ? (context.roles.get(roleName) ?? null) : null;
+	if (roleName && !buyerRoleId) report("buyer_role", `未知买方角色“${roleName}”`);
+
+	const priority = (cell("priority") || "P2") as GeoPriority;
+	if (!GEO_PRIORITIES.includes(priority)) report("priority", `优先级必须是 ${GEO_PRIORITIES.join(" / ")}`);
+
+	const tier = (cell("tier") || "CORE") as GeoPromptTier;
+	if (!GEO_PROMPT_TIERS.includes(tier)) report("tier", `层级必须是 ${GEO_PROMPT_TIERS.join(" / ")}`);
+
+	const language = cell("language") || "zh-CN";
+	if (!LANGUAGE_SHAPE.test(language)) report("language", "语言代码格式无效，例如 zh-CN");
+
+	const ownerId = cell("owner") || null;
+	if (ownerId && !context.memberIds.has(ownerId)) report("owner", "负责人不是本组织成员");
+
+	return { buyerRoleId, priority, tier, language, ownerId };
+}
+
 /**
  * The whole file is checked at once so every problem can be fixed in one pass.
  * `status` and `test_set_version` appear in exports but are never read back: a status
@@ -108,73 +169,34 @@ export function validatePromptCsvRows(
 ): { valid: GeoPromptCsvValidRow[]; errors: GeoPromptCsvError[] } {
 	const valid: GeoPromptCsvValidRow[] = [];
 	const errors: GeoPromptCsvError[] = [];
-	const existingById = new Map(context.existing.map((prompt) => [prompt.id, prompt]));
-	const questionOwners = new Map(context.existing.map((p) => [normalizePromptQuestion(p.question), p.id]));
-	const seenInFile = new Map<string, number>();
+	const state: FileState = {
+		existingById: new Map(context.existing.map((prompt) => [prompt.id, prompt])),
+		questionOwners: new Map(context.existing.map((prompt) => [normalizePromptQuestion(prompt.question), prompt.id])),
+		seenInFile: new Map(),
+	};
 
 	for (const { line, cells } of rows) {
 		const before = errors.length;
-		const report = (column: GeoPromptCsvColumn | null, message: string) => errors.push({ line, column, message });
-		const cell = (column: GeoPromptCsvColumn) => cells[column]?.trim() ?? "";
-		const optional = (column: GeoPromptCsvColumn) => cell(column) || null;
+		const report: Report = (column, message) => errors.push({ line, column, message });
+		const cell: Cells = (column) => cells[column]?.trim() ?? "";
 
-		for (const column of FREE_TEXT_COLUMNS) {
-			if (looksLikeSpreadsheetFormula(cell(column).replace(/^'/, ""))) {
-				report(column, "内容以公式字符开头（= + - @），已拒绝导入");
-			}
-		}
-
+		checkFormulas(cell, report);
 		const question = cell("question").replace(/^'/, "");
-		if (!question) report("question", "问法不能为空");
-		else if (question.length > GEO_PROMPT_QUESTION_MAX_LENGTH) {
-			report("question", `问法不能超过 ${GEO_PROMPT_QUESTION_MAX_LENGTH} 字`);
-		}
-
-		const promptId = optional("prompt_id");
-		if (promptId) {
-			const existing = UUID_SHAPE.test(promptId) ? existingById.get(promptId) : undefined;
-			if (!existing) report("prompt_id", "问法不存在");
-			else if (existing.status !== "DRAFT") report("prompt_id", "只有草稿状态的问法可以通过导入修改");
-		}
-
-		const questionKey = normalizePromptQuestion(question);
-		if (questionKey) {
-			const firstLine = seenInFile.get(questionKey);
-			if (firstLine !== undefined) report("question", `与第 ${firstLine} 行问法重复`);
-			else seenInFile.set(questionKey, line);
-			const owner = questionOwners.get(questionKey);
-			if (owner && owner !== promptId) report("question", "问法库中已存在相同问法");
-		}
-
-		const roleName = cell("buyer_role");
-		const buyerRoleId = roleName ? (context.roles.get(roleName) ?? null) : null;
-		if (roleName && !buyerRoleId) report("buyer_role", `未知买方角色“${roleName}”`);
-
-		const priority = (cell("priority") || "P2") as GeoPriority;
-		if (!GEO_PRIORITIES.includes(priority)) report("priority", `优先级必须是 ${GEO_PRIORITIES.join(" / ")}`);
-
-		const tier = (cell("tier") || "CORE") as GeoPromptTier;
-		if (!GEO_PROMPT_TIERS.includes(tier)) report("tier", `层级必须是 ${GEO_PROMPT_TIERS.join(" / ")}`);
-
-		const language = cell("language") || "zh-CN";
-		if (!LANGUAGE_SHAPE.test(language)) report("language", "语言代码格式无效，例如 zh-CN");
-
-		const ownerId = optional("owner");
-		if (ownerId && !context.memberIds.has(ownerId)) report("owner", "负责人不是本组织成员");
+		checkQuestion(question, report);
+		const promptId = cell("prompt_id") || null;
+		checkPromptId(promptId, state, report);
+		checkDuplicate(line, question, promptId, state, report);
+		const labels = readLabels(cell, context, report);
 
 		if (errors.length > before) continue;
 		valid.push({
 			line,
 			promptId,
 			question,
-			buyerRoleId,
-			intent: optional("intent"),
-			productLine: optional("product_line"),
-			geoRegion: optional("geo_region"),
-			priority,
-			language,
-			tier,
-			ownerId,
+			intent: cell("intent") || null,
+			productLine: cell("product_line") || null,
+			geoRegion: cell("geo_region") || null,
+			...labels,
 		});
 	}
 	return { valid, errors };
