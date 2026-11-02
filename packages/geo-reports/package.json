@@ -1,0 +1,23 @@
+{
+	"name": "@workspace/geo-reports",
+	"version": "0.7.7",
+	"private": true,
+	"license": "MIT",
+	"scripts": {
+		"check-types": "tsc --noEmit",
+		"test": "vitest run"
+	},
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"dependencies": {
+		"@workspace/geo-domain": "workspace:*",
+		"pdfkit": "^0.20.2"
+	},
+	"devDependencies": {
+		"@types/pdfkit": "^0.17.7",
+		"@types/node": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}

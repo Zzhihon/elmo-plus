@@ -68,6 +68,7 @@
 		"@brightdata/sdk": "^1.2.0",
 		"@mozilla/readability": "^0.6.0",
 		"@workspace/config": "workspace:*",
+		"@workspace/geo-domain": "workspace:*",
 		"ai": "^7.0.153",
 		"better-auth": "catalog:",
 		"dataforseo-client": "^2.1.9",

@@ -94,3 +94,6 @@ apps/web/storybook-static/
 apps/www/public/.well-known/agent-skills/
 # The model the worker loaded before it judged with Jev; old checkouts may still have it.
 apps/worker/mention-judge
+
+# Deployment-specific configuration that must never be published.
+infra/local/

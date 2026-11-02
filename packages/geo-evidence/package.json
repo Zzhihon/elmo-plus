@@ -1,0 +1,21 @@
+{
+	"name": "@workspace/geo-evidence",
+	"version": "0.7.7",
+	"private": true,
+	"license": "MIT",
+	"scripts": {
+		"check-types": "tsc --noEmit",
+		"test": "vitest run"
+	},
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"dependencies": {
+		"aws4fetch": "^1.0.20"
+	},
+	"devDependencies": {
+		"@types/node": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}
