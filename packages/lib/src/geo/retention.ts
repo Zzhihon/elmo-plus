@@ -4,7 +4,7 @@ import {
 	geoSystemPrincipal,
 	retentionCutoff,
 } from "@workspace/geo-domain";
-import { and, eq, inArray, lt, notInArray, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm";
 import type { db as Database } from "../db/db";
 import type { DbConnection } from "../db/db-connection";
 import {
@@ -13,6 +13,7 @@ import {
 	geoObservationCitations,
 	geoObservationClaims,
 	geoObservations,
+	geoSiteCrawlItems,
 	geoSitePageVersions,
 	geoTaskEvidence,
 } from "../db/schema-geo";
@@ -220,13 +221,13 @@ async function purgeEvidence(
 // ---------------------------------------------------------------------------
 
 /**
- * The latest version of a page and any version a knowledge or entity source or an
- * audit finding cites stay, so neither a reviewed fact nor a finding loses its evidence.
+ * The latest version of a page and any version a knowledge or entity source, an
+ * audit finding or a QA spot check cites stay, so no reviewed fact, finding or
+ * acceptance record loses its evidence. Crawl items are only the per-URL log of a
+ * run (its totals live on the run), so they go with the version they point at.
  */
-async function expiredPageVersionBatch(tx: DbConnection, organizationId: string, cutoff: Date, limit: number) {
-	const result = await tx.execute(sql`
-		select v.id, v.html_object_key, v.parsed_object_key from geo_site_page_versions v
-		where v.organization_id = ${organizationId} and v.fetched_at < ${cutoff}
+function expiredPageVersionFilter(organizationId: string, cutoff: Date) {
+	return sql`v.organization_id = ${organizationId} and v.fetched_at < ${cutoff}
 			and exists (
 				select 1 from geo_site_page_versions n
 				where n.page_id = v.page_id and (n.fetched_at > v.fetched_at or (n.fetched_at = v.fetched_at and n.id > v.id))
@@ -234,6 +235,13 @@ async function expiredPageVersionBatch(tx: DbConnection, organizationId: string,
 			and not exists (select 1 from geo_assertion_sources s where s.page_version_id = v.id)
 			and not exists (select 1 from geo_site_entity_sources e where e.page_version_id = v.id)
 			and not exists (select 1 from geo_site_audit_findings f where f.page_version_id = v.id)
+			and not exists (select 1 from geo_site_qa_items q where q.page_version_id = v.id)`;
+}
+
+async function expiredPageVersionBatch(tx: DbConnection, organizationId: string, cutoff: Date, limit: number) {
+	const result = await tx.execute(sql`
+		select v.id, v.html_object_key, v.parsed_object_key from geo_site_page_versions v
+		where ${expiredPageVersionFilter(organizationId, cutoff)}
 		order by v.fetched_at
 		limit ${limit}
 	`);
@@ -253,18 +261,15 @@ async function purgeSnapshots(
 		const committed = await db.transaction(async (tx) => {
 			const batch = await expiredPageVersionBatch(tx, organizationId, cutoff, limit);
 			if (batch.length === 0) return null;
+			const ids = batch.map((row) => row.id);
 			await allowPurge(tx);
+			const crawlItems = await tx
+				.delete(geoSiteCrawlItems)
+				.where(and(eq(geoSiteCrawlItems.organizationId, organizationId), inArray(geoSiteCrawlItems.versionId, ids)))
+				.returning({ id: geoSiteCrawlItems.id });
 			const deleted = await tx
 				.delete(geoSitePageVersions)
-				.where(
-					and(
-						eq(geoSitePageVersions.organizationId, organizationId),
-						inArray(
-							geoSitePageVersions.id,
-							batch.map((row) => row.id),
-						),
-					),
-				)
+				.where(and(eq(geoSitePageVersions.organizationId, organizationId), inArray(geoSitePageVersions.id, ids)))
 				.returning({ id: geoSitePageVersions.id });
 
 			// A reparse keeps the same HTML object, so a key leaves only once no version uses it.
@@ -283,9 +288,27 @@ async function purgeSnapshots(
 									inArray(geoSitePageVersions.parsedObjectKey, candidateKeys),
 								),
 							);
-			const used = new Set(stillUsed.flatMap((row) => [row.html, row.parsed]));
+			// Raw HTML is stored by content hash, so a page that changed back may have a fetch
+			// still waiting to be parsed from the very object an old version used.
+			const awaitingParse =
+				candidateKeys.length === 0
+					? []
+					: await tx
+							.select({ key: geoSiteCrawlItems.rawObjectKey })
+							.from(geoSiteCrawlItems)
+							.where(
+								and(
+									inArray(geoSiteCrawlItems.rawObjectKey, candidateKeys),
+									eq(geoSiteCrawlItems.outcome, "NEW_VERSION"),
+									isNull(geoSiteCrawlItems.versionId),
+								),
+							);
+			const used = new Set([
+				...stillUsed.flatMap((row) => [row.html, row.parsed]),
+				...awaitingParse.map((row) => row.key),
+			]);
 
-			const rows = { geo_site_page_versions: deleted.length };
+			const rows = { geo_site_page_versions: deleted.length, geo_site_crawl_items: crawlItems.length };
 			await summarize(tx, organizationId, "snapshot", cutoff, rows, requestId);
 			return { rows, keys: candidateKeys.filter((key) => !used.has(key)), size: batch.length };
 		});
@@ -393,11 +416,7 @@ export async function previewGeoRetention(
 			cutoff: snapshot?.toISOString() ?? null,
 			rows: snapshot
 				? await count(sql`select count(*) as count from geo_site_page_versions v
-						where v.organization_id = ${organizationId} and v.fetched_at < ${snapshot}
-							and exists (select 1 from geo_site_page_versions n where n.page_id = v.page_id and n.fetched_at > v.fetched_at)
-							and not exists (select 1 from geo_assertion_sources s where s.page_version_id = v.id)
-							and not exists (select 1 from geo_site_entity_sources e where e.page_version_id = v.id)
-							and not exists (select 1 from geo_site_audit_findings f where f.page_version_id = v.id)`)
+						where ${expiredPageVersionFilter(organizationId, snapshot)}`)
 				: 0,
 		},
 		{
