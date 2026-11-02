@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { GeoEmptyState } from "@/components/geo/shell/empty-state";
-import { GeoPageFrame } from "@/components/geo/shell/page-frame";
+import { GeoQuestionsView } from "@/components/geo/questions/questions-view";
 import { pageHead } from "@/lib/route-head";
 
 export const Route = createFileRoute("/_authed/app/org/$org/geo/questions")({
@@ -10,9 +9,6 @@ export const Route = createFileRoute("/_authed/app/org/$org/geo/questions")({
 });
 
 function GeoQuestionsPage() {
-	return (
-		<GeoPageFrame title="问法库" description="按买方角色维护问法，管理测试集版本与导入。">
-			<GeoEmptyState />
-		</GeoPageFrame>
-	);
+	const { organization } = Route.useRouteContext();
+	return <GeoQuestionsView organizationId={organization.id} />;
 }
