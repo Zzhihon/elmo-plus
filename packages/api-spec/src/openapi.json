@@ -4353,43 +4353,17 @@
 						"additionalProperties": true
 					},
 					"comparison": {
-						"type": ["array", "null"],
-						"items": {
-							"type": "object",
-							"properties": {
-								"platform": {
-									"type": "string"
-								},
-								"surfaceMode": {
-									"type": "string"
-								},
-								"before": {
-									"$ref": "#/components/schemas/GeoRetestCounts"
-								},
-								"after": {
-									"$ref": "#/components/schemas/GeoRetestCounts"
-								}
+						"description": "基线批次与复测批次按相同条件对比，口径与 `GET /geo/metrics/batch-comparison` 相同。未关联两个批次、调用者没有 GEO 权限 `metric.read`，或两个批次不属于同一问法集版本时为 null。",
+						"oneOf": [
+							{
+								"$ref": "#/components/schemas/GeoBatchComparison"
+							},
+							{
+								"type": "null"
 							}
-						}
+						]
 					},
 					"retestRounds": {
-						"type": "integer"
-					}
-				}
-			},
-			"GeoRetestCounts": {
-				"type": "object",
-				"properties": {
-					"valid": {
-						"type": "integer"
-					},
-					"evaluated": {
-						"type": "integer"
-					},
-					"mentioned": {
-						"type": "integer"
-					},
-					"recommended": {
 						"type": "integer"
 					}
 				}
@@ -6475,17 +6449,85 @@
 					"rows": {
 						"type": "array",
 						"items": {
-							"type": "object"
+							"$ref": "#/components/schemas/GeoBatchComparisonRow"
 						}
 					},
 					"reading": {
 						"type": "string"
 					},
 					"before": {
-						"type": "object"
+						"$ref": "#/components/schemas/GeoBatchRef"
 					},
 					"after": {
-						"type": "object"
+						"$ref": "#/components/schemas/GeoBatchRef"
+					}
+				}
+			},
+			"GeoBatchRef": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "string",
+						"format": "uuid"
+					},
+					"promptSetId": {
+						"type": "string",
+						"format": "uuid"
+					}
+				}
+			},
+			"GeoBatchComparisonRow": {
+				"type": "object",
+				"description": "同一平台与采样方式的两轮结果，只统计两轮都采样过的问法，重采样按计划位次去重，每个位次只计一条样本。",
+				"properties": {
+					"platform": {
+						"type": "string",
+						"enum": ["doubao", "deepseek", "yuanbao", "qwen"]
+					},
+					"surfaceMode": {
+						"type": "string",
+						"enum": ["LIVE_SURFACE", "MODEL_API", "MANUAL_EVIDENCE"]
+					},
+					"before": {
+						"$ref": "#/components/schemas/GeoBatchRoundFigures"
+					},
+					"after": {
+						"$ref": "#/components/schemas/GeoBatchRoundFigures"
+					},
+					"mentionDelta": {
+						"type": ["number", "null"],
+						"description": "百分点；任一轮无数据时为 null。"
+					},
+					"recommendationDelta": {
+						"type": ["number", "null"],
+						"description": "百分点；任一轮无数据时为 null。"
+					},
+					"conditionChanges": {
+						"type": "array",
+						"description": "两轮之间仍不一致的条件；非空时对比不可靠。",
+						"items": {
+							"type": "string"
+						}
+					}
+				}
+			},
+			"GeoBatchRoundFigures": {
+				"type": "object",
+				"properties": {
+					"validSamples": {
+						"type": "integer"
+					},
+					"evaluatedSamples": {
+						"type": "integer"
+					},
+					"mentionRate": {
+						"$ref": "#/components/schemas/GeoMetricValue"
+					},
+					"recommendationRate": {
+						"$ref": "#/components/schemas/GeoMetricValue"
+					},
+					"top3Rate": {
+						"$ref": "#/components/schemas/GeoMetricValue"
 					}
 				}
 			},

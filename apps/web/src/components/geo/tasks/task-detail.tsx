@@ -15,6 +15,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@workspace/ui/components/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card";
 import type { ReactNode } from "react";
+import { GeoBatchComparison } from "@/components/geo/insights/batch-comparison";
 import { GeoEmptyState } from "@/components/geo/shell/empty-state";
 import { GeoStatusBadge, GeoTaskStateBadge } from "@/components/geo/shell/status-badge";
 import { useGeoViewer } from "@/components/geo/shell/use-geo-viewer";
@@ -27,7 +28,6 @@ import {
 	SOURCE_KIND_LABELS,
 	TASK_KIND_LABELS,
 } from "./labels";
-import { GeoRetestComparison } from "./retest-comparison";
 import { GeoTaskActions } from "./task-actions";
 import { GeoTaskEditDialog } from "./task-edit-dialog";
 
@@ -132,6 +132,27 @@ function EvidenceList({ detail, orgSlug }: { detail: TaskDetail; orgSlug: string
 				</li>
 			))}
 		</ul>
+	);
+}
+
+function RetestComparison({ detail }: { detail: TaskDetail }) {
+	const viewer = useGeoViewer();
+	const { beforeBatchId, afterBatchId, promptId } = detail.task;
+	if (!beforeBatchId || !afterBatchId) {
+		return (
+			<GeoEmptyState title="尚未关联前后批次" description="关联基线批次和复测批次后，这里按平台与采样方式对比。" />
+		);
+	}
+	if (!viewer.can("metric.read")) {
+		return <GeoEmptyState title="没有查看指标的权限" description="复测对比使用洞察指标，需要指标查看权限。" />;
+	}
+	return (
+		<GeoBatchComparison
+			beforeBatchId={beforeBatchId}
+			afterBatchId={afterBatchId}
+			promptId={promptId}
+			comparison={detail.comparison}
+		/>
 	);
 }
 
@@ -344,7 +365,7 @@ export function GeoTaskDetailView({ detail, orgSlug }: { detail: TaskDetail; org
 							</Field>
 							<Field label="复测轮次">{detail.retestRounds}</Field>
 						</dl>
-						<GeoRetestComparison rows={detail.comparison} />
+						<RetestComparison detail={detail} />
 					</Section>
 				</div>
 

@@ -13,6 +13,7 @@ import {
 	type GeoTaskAction,
 	type GeoTaskState,
 	isHttpUrl,
+	principalCan,
 	taskGateProblem,
 	taskTransition,
 	transitionActorOf,
@@ -38,6 +39,7 @@ import { writeGeoAudit } from "@workspace/lib/geo/audit";
 import { createOptimizationTask, type GeoOptimizationTask } from "@workspace/lib/geo/tasks";
 import { and, asc, count, desc, eq, ilike, inArray, notInArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
+import { compareBatchesFor } from "./metrics-core";
 
 const TERMINAL: readonly GeoTaskState[] = ["VERIFIED", "CANCELLED"];
 const LAUNCH_PLAN_LOCKED: readonly GeoTaskState[] = ["PENDING_PUBLISH", "PUBLISHED", "PENDING_RETEST"];
@@ -271,57 +273,26 @@ async function batchSummaries(organizationId: string, ids: (string | null)[]) {
 		.where(and(eq(geoSamplingBatches.organizationId, organizationId), inArray(geoSamplingBatches.id, wanted)));
 }
 
-export interface RetestComparisonRow {
-	platform: string;
-	surfaceMode: string;
-	before: { valid: number; evaluated: number; mentioned: number; recommended: number };
-	after: { valid: number; evaluated: number; mentioned: number; recommended: number };
-}
-
 /**
- * Same platform and surface mode only, never pooled across them; a rate is only
- * as good as the evaluated valid samples behind it, which the UI shows alongside.
+ * Read with the same rules as the insights comparison. Null for a caller who may not
+ * read metrics, and for batches that cannot be compared under the same conditions
+ * (the comparison endpoint names the reason).
  */
-export async function compareRetestBatches(
-	organizationId: string,
-	beforeBatchId: string,
-	afterBatchId: string,
-	promptId: string | null,
-): Promise<RetestComparisonRow[]> {
-	const result = await db.execute(sql`
-		select r.batch_id, o.platform, o.surface_mode,
-			count(*) filter (where o.status = 'VALID') as valid,
-			count(e.id) filter (where o.status = 'VALID') as evaluated,
-			count(e.id) filter (where o.status = 'VALID' and e.brand_mentioned) as mentioned,
-			count(e.id) filter (where o.status = 'VALID' and e.recommendation = 'RECOMMENDED') as recommended
-		from geo_observations o
-		join geo_sampling_runs r on r.id = o.run_id
-		left join geo_evaluations e on e.observation_id = o.id and e.is_current
-		where o.organization_id = ${organizationId}
-			and r.batch_id in (${beforeBatchId}, ${afterBatchId})
-			${promptId ? sql`and o.prompt_id = ${promptId}` : sql``}
-		group by r.batch_id, o.platform, o.surface_mode
-	`);
-	const empty = () => ({ valid: 0, evaluated: 0, mentioned: 0, recommended: 0 });
-	const byKey = new Map<string, RetestComparisonRow>();
-	for (const row of result.rows as Record<string, string | number>[]) {
-		const key = `${row.platform}|${row.surface_mode}`;
-		const entry = byKey.get(key) ?? {
-			platform: String(row.platform),
-			surfaceMode: String(row.surface_mode),
-			before: empty(),
-			after: empty(),
-		};
-		const side = row.batch_id === beforeBatchId ? entry.before : entry.after;
-		side.valid = Number(row.valid);
-		side.evaluated = Number(row.evaluated);
-		side.mentioned = Number(row.mentioned);
-		side.recommended = Number(row.recommended);
-		byKey.set(key, entry);
+async function retestComparison(
+	principal: GeoPrincipal,
+	task: { beforeBatchId: string | null; afterBatchId: string | null; promptId: string | null },
+) {
+	if (!task.beforeBatchId || !task.afterBatchId || !principalCan(principal, "metric.read")) return null;
+	try {
+		return await compareBatchesFor(principal, {
+			before: task.beforeBatchId,
+			after: task.afterBatchId,
+			promptId: task.promptId ?? undefined,
+		});
+	} catch (error) {
+		if (error instanceof GeoError && error.code === "VALIDATION_ERROR") return null;
+		throw error;
 	}
-	return [...byKey.values()].sort((a, b) =>
-		`${a.platform}${a.surfaceMode}`.localeCompare(`${b.platform}${b.surfaceMode}`),
-	);
 }
 
 export async function getTaskDetail(principal: GeoPrincipal, id: string) {
@@ -385,10 +356,7 @@ export async function getTaskDetail(principal: GeoPrincipal, id: string) {
 		...(task.ownerId ? [task.ownerId] : []),
 		...events.map((event) => event.actorId),
 	]);
-	const comparison =
-		task.beforeBatchId && task.afterBatchId
-			? await compareRetestBatches(organizationId, task.beforeBatchId, task.afterBatchId, task.promptId)
-			: null;
+	const comparison = await retestComparison(principal, task);
 	const batchOf = (batchId: string | null) => batches.find((batch) => batch.id === batchId) ?? null;
 
 	return {

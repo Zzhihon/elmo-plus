@@ -6,8 +6,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useGeoOrganization } from "@/components/geo/sampling/use-geo-organization";
 import { GeoEmptyState } from "@/components/geo/shell/empty-state";
 import { compareBatchesFn } from "@/server/geo/metrics";
+import type { compareBatchesFor } from "@/server/geo/metrics-core";
 import { MetricFigure } from "./metric-figure";
 import { insightKeys } from "./search";
+
+type BatchComparisonResult = Awaited<ReturnType<typeof compareBatchesFor>>;
 
 function delta(value: number | null): string {
 	if (value === null) return "—";
@@ -22,20 +25,24 @@ export function GeoBatchComparison({
 	beforeBatchId,
 	afterBatchId,
 	promptId,
+	comparison: loaded,
 }: {
 	beforeBatchId: string;
 	afterBatchId: string;
 	promptId?: string | null;
+	/** Already read with the page (the task detail carries it), so it is not fetched twice. */
+	comparison?: BatchComparisonResult | null;
 }) {
 	const organization = useGeoOrganization();
 	const query = { before: beforeBatchId, after: afterBatchId, promptId: promptId ?? undefined };
 	const comparison = useQuery({
 		queryKey: insightKeys.comparison(organization.id, query),
 		queryFn: () => compareBatchesFn({ data: { organizationId: organization.id, query } }),
+		enabled: !loaded,
 	});
-	if (comparison.isLoading) return <Skeleton className="h-40 w-full" />;
-	if (comparison.error) return <p className="text-sm text-destructive">{comparison.error.message}</p>;
-	const data = comparison.data;
+	if (!loaded && comparison.isLoading) return <Skeleton className="h-40 w-full" />;
+	if (!loaded && comparison.error) return <p className="text-sm text-destructive">{comparison.error.message}</p>;
+	const data = loaded ?? comparison.data;
 	if (!data) return null;
 	if (data.rows.length === 0) return <GeoEmptyState title="两个批次都没有可对比的采样结果" />;
 	return (
