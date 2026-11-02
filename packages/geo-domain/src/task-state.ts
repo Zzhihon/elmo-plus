@@ -80,6 +80,10 @@ export interface GeoTaskFacts {
 	riskLevel: GeoRiskLevel;
 	authorId: string | null;
 	ownerId: string | null;
+	/** Everyone the task's history made responsible; a handover does not turn them into reviewers. */
+	pastOwnerIds?: readonly string[];
+	/** Who gave the technical approval this round, who then may not also give the marketing one. */
+	techApproverId?: string | null;
 	/** The state a paused task returns to. */
 	pausedFrom?: GeoTaskState | null;
 }
@@ -101,6 +105,8 @@ export interface GeoTaskTransitionInput {
 	payload?: GeoTaskTransitionPayload;
 }
 
+const APPROVALS: readonly GeoTaskAction[] = ["APPROVE_TECH", "APPROVE_MARKETING"];
+
 function target(task: GeoTaskFacts, action: GeoTaskAction): GeoTaskState | undefined {
 	if (action === "PAUSE") return PAUSABLE.includes(task.state) ? "PAUSED" : undefined;
 	if (action === "RESUME") return task.state === "PAUSED" ? (task.pausedFrom ?? undefined) : undefined;
@@ -109,10 +115,18 @@ function target(task: GeoTaskFacts, action: GeoTaskAction): GeoTaskState | undef
 }
 
 function isAuthorOrOwner(task: GeoTaskFacts, actor: GeoTransitionActor): boolean {
-	return actor.kind === "principal" && (actor.id === task.authorId || actor.id === task.ownerId);
+	if (actor.kind !== "principal") return false;
+	return actor.id === task.authorId || actor.id === task.ownerId || Boolean(task.pastOwnerIds?.includes(actor.id));
 }
 
-const APPROVALS: readonly GeoTaskAction[] = ["APPROVE_TECH", "APPROVE_MARKETING"];
+function approvalProblem(task: GeoTaskFacts, action: GeoTaskAction, actor: GeoTransitionActor) {
+	if (!APPROVALS.includes(action) || task.riskLevel !== "HIGH") return null;
+	if (isAuthorOrOwner(task, actor)) return fail<GeoTaskState>("FORBIDDEN", "高风险内容不能由作者或责任人本人审核");
+	if (action === "APPROVE_MARKETING" && actor.kind === "principal" && actor.id === task.techApproverId) {
+		return fail<GeoTaskState>("FORBIDDEN", "高风险内容的技术审核和市场审核必须由不同的人完成");
+	}
+	return null;
+}
 
 function publishProblem(
 	task: GeoTaskFacts,
@@ -158,9 +172,5 @@ export function taskTransition(input: GeoTaskTransitionInput): GeoTransitionResu
 		action === "REJECT" ? (REJECT_PERMISSION[task.state] ?? ACTION_PERMISSION.REJECT) : ACTION_PERMISSION[action];
 	if (!actorHolds(actor, permission)) return fail("FORBIDDEN", "当前账号没有执行此工单操作的权限");
 
-	if (APPROVALS.includes(action) && task.riskLevel === "HIGH" && isAuthorOrOwner(task, actor)) {
-		return fail("FORBIDDEN", "高风险内容不能由作者或责任人本人审核");
-	}
-
-	return payloadProblem(input) ?? { ok: true, to };
+	return approvalProblem(task, action, actor) ?? payloadProblem(input) ?? { ok: true, to };
 }

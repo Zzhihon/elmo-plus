@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type GeoBatchFacts, type GeoTaskGateInput, taskGateProblem } from "./task-gates";
+import { contentVersionRisk, type GeoBatchFacts, type GeoTaskGateInput, taskGateProblem } from "./task-gates";
 import { taskTransition } from "./task-state";
 
 const CREATED = new Date("2026-05-01T00:00:00Z");
@@ -159,5 +159,47 @@ describe("publishing is not proof of effect", () => {
 				payload: { comment: "参数与手册不一致" },
 			}),
 		).toEqual({ ok: true, to: "REJECTED" });
+	});
+});
+
+describe("separation of duties on a high-risk task", () => {
+	const reviewing = {
+		state: "PENDING_TECH_REVIEW" as const,
+		kind: "FAQ" as const,
+		riskLevel: "HIGH" as const,
+		authorId: "writer",
+		ownerId: "current-owner",
+	};
+	const tech = (id: string) => ({ kind: "principal", id, roles: ["tech_reviewer"] }) as const;
+
+	it("keeps a past owner out of the review after a handover", () => {
+		const task = { ...reviewing, pastOwnerIds: ["former-owner"] };
+		expect(taskTransition({ task, action: "APPROVE_TECH", actor: tech("former-owner") })).toMatchObject({
+			ok: false,
+			code: "FORBIDDEN",
+		});
+		expect(taskTransition({ task, action: "APPROVE_TECH", actor: tech("engineer") })).toMatchObject({ ok: true });
+	});
+
+	it("needs two people for the two reviews", () => {
+		const task = { ...reviewing, state: "PENDING_MARKETING_REVIEW" as const, techApproverId: "both" };
+		const actor = (id: string) => ({ kind: "principal", id, roles: ["marketing_reviewer"] }) as const;
+		expect(taskTransition({ task, action: "APPROVE_MARKETING", actor: actor("both") })).toMatchObject({
+			ok: false,
+			code: "FORBIDDEN",
+		});
+		expect(taskTransition({ task, action: "APPROVE_MARKETING", actor: actor("marketer") })).toMatchObject({ ok: true });
+	});
+});
+
+describe("risk of a content version", () => {
+	it("is high when a fact or a checked value in it is high risk", () => {
+		expect(contentVersionRisk({ claims: [{ riskLevel: "HIGH" }], validation: null })).toBe("HIGH");
+		expect(
+			contentVersionRisk({ claims: [{ riskLevel: "NORMAL" }], validation: { result: { checks: [{ risk: "HIGH" }] } } }),
+		).toBe("HIGH");
+		expect(
+			contentVersionRisk({ claims: [{ riskLevel: "NORMAL" }], validation: { result: { checks: [{ risk: "NORMAL" }] } } }),
+		).toBe("NORMAL");
 	});
 });

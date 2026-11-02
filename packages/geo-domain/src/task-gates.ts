@@ -28,6 +28,20 @@ export function launchPlanProblem(task: { kind: GeoTaskKind; riskLevel: GeoRiskL
 	return missing.length === 0 ? null : `高风险官网改造进入待发布前必须填写：${missing.join("、")}`;
 }
 
+function holdsHighRisk(entries: unknown, key: "riskLevel" | "risk"): boolean {
+	return Array.isArray(entries) && entries.some((entry) => (entry as Record<string, unknown> | null)?.[key] === "HIGH");
+}
+
+/**
+ * High when a content version rests on a high-risk fact or states a high-risk value.
+ * A task's risk follows from this and from its evidence, so a creator cannot switch
+ * off separation of duties by declaring the task ordinary.
+ */
+export function contentVersionRisk(version: { claims: unknown; validation: unknown }): GeoRiskLevel {
+	const stored = version.validation as { result?: { checks?: unknown } } | null;
+	return holdsHighRisk(version.claims, "riskLevel") || holdsHighRisk(stored?.result?.checks, "risk") ? "HIGH" : "NORMAL";
+}
+
 export interface GeoBatchFacts {
 	id: string;
 	promptSetId: string;

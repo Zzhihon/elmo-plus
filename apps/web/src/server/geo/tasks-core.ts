@@ -36,9 +36,11 @@ import {
 	user,
 } from "@workspace/lib/db/schema";
 import { writeGeoAudit } from "@workspace/lib/geo/audit";
-import { createOptimizationTask, type GeoOptimizationTask } from "@workspace/lib/geo/tasks";
+import { createOptimizationTask, derivedTaskRisk, type GeoOptimizationTask } from "@workspace/lib/geo/tasks";
 import { and, asc, count, desc, eq, ilike, inArray, notInArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
+import { assertContentReleasable } from "./drafts-core";
+import { hiddenFromReader } from "./knowledge-shared";
 import { compareBatchesFor } from "./metrics-core";
 
 const TERMINAL: readonly GeoTaskState[] = ["VERIFIED", "CANCELLED"];
@@ -322,6 +324,7 @@ export async function getTaskDetail(principal: GeoPrincipal, id: string) {
 				findingRecommendation: geoSiteAuditFindings.recommendation,
 				findingPageUrl: geoSitePages.normalizedUrl,
 				assertionClaim: geoKnowledgeAssertions.claimText,
+				assertionScope: geoKnowledgeAssertions.publicationScope,
 				assertionStatus: geoKnowledgeAssertions.status,
 			})
 			.from(geoTaskEvidence)
@@ -370,8 +373,9 @@ export async function getTaskDetail(principal: GeoPrincipal, id: string) {
 		prompt: prompt[0] ?? null,
 		names,
 		events: events.map((event) => ({ ...event, createdAt: event.createdAt.toISOString() })),
-		evidence: evidence.map((row) => ({
+		evidence: evidence.map(({ assertionScope, ...row }) => ({
 			...row,
+			assertionClaim: hiddenFromReader(principal, assertionScope) ? null : row.assertionClaim,
 			observationSampledAt: row.observationSampledAt?.toISOString() ?? null,
 		})),
 		content: content.map((item) => ({ ...item, updatedAt: item.updatedAt.toISOString() })),
@@ -471,7 +475,7 @@ async function recordEvent(
 	tx: DbConnection,
 	principal: GeoPrincipal,
 	task: GeoOptimizationTask,
-	event: { from: GeoTaskState; to: GeoTaskState; action: string; comment?: string | null },
+	event: { from: GeoTaskState; to: GeoTaskState; action: string; comment?: string | null; ownerChanged?: boolean },
 ) {
 	await tx.insert(geoTaskEvents).values({
 		organizationId: principal.organizationId,
@@ -480,8 +484,22 @@ async function recordEvent(
 		toState: event.to,
 		action: event.action,
 		actorId: principal.actorId,
+		ownerId: event.ownerChanged ? task.ownerId : null,
 		comment: event.comment ?? null,
 	});
+}
+
+/** Past owners, and who approved the current technical review; the state machine compares reviewers with both. */
+async function reviewHistory(tx: DbConnection, organizationId: string, taskId: string) {
+	const events = await tx
+		.select({ action: geoTaskEvents.action, actorId: geoTaskEvents.actorId, ownerId: geoTaskEvents.ownerId })
+		.from(geoTaskEvents)
+		.where(and(eq(geoTaskEvents.organizationId, organizationId), eq(geoTaskEvents.taskId, taskId)))
+		.orderBy(desc(geoTaskEvents.createdAt));
+	return {
+		pastOwnerIds: events.map((event) => event.ownerId).filter((id): id is string => id !== null),
+		techApproverId: events.find((event) => event.action === "APPROVE_TECH")?.actorId ?? null,
+	};
 }
 
 export async function createTask(principal: GeoPrincipal, input: CreateTaskInput) {
@@ -559,6 +577,8 @@ export async function transitionTask(principal: GeoPrincipal, id: string, input:
 		const { action } = input;
 		if (action === "ASSIGN" && input.ownerId) await assertMember(tx, principal.organizationId, input.ownerId);
 		const published = publishFields(principal, input);
+		const riskLevel =
+			task.riskLevel === "HIGH" ? "HIGH" : await derivedTaskRisk(tx, principal.organizationId, task.id);
 
 		const beforeBatchId = input.beforeBatchId ?? task.beforeBatchId;
 		const afterBatchId = input.afterBatchId ?? task.afterBatchId;
@@ -567,9 +587,10 @@ export async function transitionTask(principal: GeoPrincipal, id: string, input:
 				task: {
 					state: task.state,
 					kind: task.kind,
-					riskLevel: task.riskLevel,
+					riskLevel,
 					authorId: task.createdBy,
 					ownerId: task.ownerId,
+					...(await reviewHistory(tx, principal.organizationId, task.id)),
 					pausedFrom: task.pausedFrom,
 				},
 				action,
@@ -586,31 +607,36 @@ export async function transitionTask(principal: GeoPrincipal, id: string, input:
 			}),
 		);
 
-		const contentStates =
+		const linkedContent =
 			action === "PUBLISH"
-				? (
-						await tx
-							.select({ state: geoContentItems.approvalState })
-							.from(geoContentItems)
-							.where(and(eq(geoContentItems.organizationId, principal.organizationId), eq(geoContentItems.taskId, id)))
-					).map((row) => row.state)
+				? await tx
+						.select()
+						.from(geoContentItems)
+						.where(and(eq(geoContentItems.organizationId, principal.organizationId), eq(geoContentItems.taskId, id)))
 				: [];
 		const problem = taskGateProblem({
 			action,
-			task,
+			task: { ...task, riskLevel },
 			payload: { publishedUrl: input.publishedUrl, publishedAt: published.publishedAt },
-			contentStates,
+			contentStates: linkedContent.map((item) => item.approvalState),
 			before: action === "VERIFY" ? await batchFacts(tx, principal.organizationId, beforeBatchId) : null,
 			after: action === "VERIFY" ? await batchFacts(tx, principal.organizationId, afterBatchId) : null,
 		});
 		if (problem) throw new GeoError(problem.code, problem.message);
+		for (const item of linkedContent) await assertContentReleasable(tx, principal, item);
 
 		const [updated] = await tx
 			.update(geoOptimizationTasks)
-			.set(changesFor(task, action, to, input, published))
+			.set({ ...changesFor(task, action, to, input, published), riskLevel })
 			.where(eq(geoOptimizationTasks.id, id))
 			.returning();
-		await recordEvent(tx, principal, updated, { from: task.state, to, action, comment: eventComment(action, input) });
+		await recordEvent(tx, principal, updated, {
+			from: task.state,
+			to,
+			action,
+			comment: eventComment(action, input),
+			ownerChanged: updated.ownerId !== task.ownerId,
+		});
 		await writeGeoAudit(tx, {
 			principal,
 			action: "task.transition",
@@ -701,6 +727,7 @@ export async function updateTask(principal: GeoPrincipal, id: string, input: Upd
 			to: task.state,
 			action: "UPDATE",
 			comment: `修改：${changed.map((key) => FIELD_LABELS[key]).join("、")}`,
+			ownerChanged: changed.includes("ownerId"),
 		});
 		await writeGeoAudit(tx, {
 			principal,

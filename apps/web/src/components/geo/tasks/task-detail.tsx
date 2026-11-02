@@ -126,7 +126,7 @@ function EvidenceList({ detail, orgSlug }: { detail: TaskDetail; orgSlug: string
 									</span>
 								)}
 							</div>
-							<span>{item.assertionClaim}</span>
+							<span>{item.assertionClaim ?? "保密内容（无权查看）"}</span>
 						</div>
 					)}
 				</li>
