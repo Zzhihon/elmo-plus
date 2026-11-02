@@ -20,6 +20,9 @@ import {
 	GEO_CONFLICT_STATUSES,
 	GEO_CONTENT_APPROVAL_STATES,
 	GEO_CONTENT_KINDS,
+	GEO_CRAWL_ITEM_OUTCOMES,
+	GEO_CRAWL_ITEM_SOURCES,
+	GEO_CRAWL_ITEM_STATUSES,
 	GEO_CRAWL_MODES,
 	GEO_CRAWL_STATUSES,
 	GEO_EVALUATION_REVIEW_STATUSES,
@@ -45,6 +48,8 @@ import {
 	GEO_SITE_ENTITY_KINDS,
 	GEO_SITE_ENTITY_STATUSES,
 	GEO_SITE_PAGE_STATUSES,
+	GEO_SITE_QA_SAMPLE_STATUSES,
+	GEO_SITE_QA_VERDICTS,
 	GEO_SURFACE_MODES,
 	GEO_TASK_KINDS,
 	GEO_TASK_SOURCE_KINDS,
@@ -72,6 +77,9 @@ import {
 	type GeoConflictStatus,
 	type GeoContentApprovalState,
 	type GeoContentKind,
+	type GeoCrawlItemOutcome,
+	type GeoCrawlItemSource,
+	type GeoCrawlItemStatus,
 	type GeoCrawlMode,
 	type GeoCrawlStatus,
 	type GeoDictionaryEntityChange,
@@ -101,6 +109,8 @@ import {
 	type GeoSiteEntityKind,
 	type GeoSiteEntityStatus,
 	type GeoSitePageStatus,
+	type GeoSiteQaSampleStatus,
+	type GeoSiteQaVerdict,
 	type GeoSurfaceMode,
 	type GeoTaskKind,
 	type GeoTaskSourceKind,
@@ -701,6 +711,8 @@ export const geoSiteSources = pgTable(
 		opWindow: jsonb("op_window"),
 		crawlCron: text("crawl_cron"),
 		userAgentContact: text("user_agent_contact"),
+		/** The pages the customer confirmed must be found; coverage is measured against them. */
+		keyUrls: text("key_urls").array().notNull().default([]),
 		enabled: boolean("enabled").notNull().default(true),
 		lastSuccessAt: at("last_success_at"),
 		authorizationNote: text("authorization_note"),
@@ -723,6 +735,8 @@ export const geoSiteCrawlRuns = pgTable(
 		status: text("status").$type<GeoCrawlStatus>().notNull().default("QUEUED"),
 		counts: jsonb("counts").notNull().default({}),
 		policyVersion: text("policy_version").notNull(),
+		/** What this run was asked to do: seed override, link following, page budget. */
+		config: jsonb("config").notNull().default({}),
 		idempotencyKey: text("idempotency_key").notNull(),
 		startedAt: at("started_at"),
 		finishedAt: at("finished_at"),
@@ -837,6 +851,128 @@ export const geoSiteEntitySources = pgTable(
 			table.fieldPath,
 		),
 		index("geo_site_entity_sources_version_idx").on(table.pageVersionId),
+	],
+).enableRLS();
+
+/** Every profile a source has had, so a page can be re-parsed with any of them. Append-only. */
+export const geoSiteProfileVersions = pgTable(
+	"geo_site_profile_versions",
+	{
+		id: pk(),
+		organizationId: org(),
+		siteSourceId: uuid("site_source_id")
+			.notNull()
+			.references(() => geoSiteSources.id),
+		version: integer("version").notNull(),
+		profile: jsonb("profile").notNull(),
+		createdBy: text("created_by").notNull(),
+		createdAt: createdAt(),
+	},
+	(table) => [uniqueIndex("geo_site_profile_versions_source_version_idx").on(table.siteSourceId, table.version)],
+).enableRLS();
+
+/** The frontier of one crawl run and what each URL came to; it is also what makes a run resumable. */
+export const geoSiteCrawlItems = pgTable(
+	"geo_site_crawl_items",
+	{
+		id: pk(),
+		organizationId: org(),
+		runId: uuid("run_id")
+			.notNull()
+			.references(() => geoSiteCrawlRuns.id),
+		url: text("url").notNull(),
+		source: text("source").$type<GeoCrawlItemSource>().notNull(),
+		depth: integer("depth").notNull().default(0),
+		priority: integer("priority").notNull().default(2),
+		isAsset: boolean("is_asset").notNull().default(false),
+		discoveredFrom: text("discovered_from"),
+		status: text("status").$type<GeoCrawlItemStatus>().notNull().default("QUEUED"),
+		outcome: text("outcome").$type<GeoCrawlItemOutcome>(),
+		pageId: uuid("page_id").references(() => geoSitePages.id),
+		httpStatus: integer("http_status"),
+		attempts: integer("attempts").notNull().default(0),
+		durationMs: integer("duration_ms"),
+		finalUrl: text("final_url"),
+		contentHash: text("content_hash"),
+		rawObjectKey: text("raw_object_key"),
+		fetchedAt: at("fetched_at"),
+		/** Filled by the parse job once the immutable version row exists. */
+		versionId: uuid("version_id").references(() => geoSitePageVersions.id),
+		detail: text("detail"),
+		createdAt: createdAt(),
+		updatedAt: updatedAt(),
+	},
+	(table) => [
+		uniqueIndex("geo_site_crawl_items_run_url_idx").on(table.runId, table.url),
+		index("geo_site_crawl_items_run_status_idx").on(table.runId, table.status, table.priority, table.depth),
+		index("geo_site_crawl_items_pending_parse_idx")
+			.on(table.organizationId, table.updatedAt)
+			.where(sql`${table.outcome} in ('NEW_VERSION', 'ASSET_STORED') and ${table.versionId} is null`),
+		oneOf("geo_site_crawl_items_source_check", table.source, GEO_CRAWL_ITEM_SOURCES),
+		oneOf("geo_site_crawl_items_status_check", table.status, GEO_CRAWL_ITEM_STATUSES),
+		nullOrOneOf("geo_site_crawl_items_outcome_check", table.outcome, GEO_CRAWL_ITEM_OUTCOMES),
+	],
+).enableRLS();
+
+/**
+ * One row per remote host, shared by every organization and worker: the politeness
+ * limit belongs to the site being crawled, so it cannot be split by tenant.
+ */
+export const geoSiteHostThrottle = pgTable("geo_site_host_throttle", {
+	host: text("host").primaryKey().notNull(),
+	holder: text("holder"),
+	leaseUntil: at("lease_until"),
+	nextAllowedAt: at("next_allowed_at").defaultNow().notNull(),
+	consecutiveFailures: integer("consecutive_failures").notNull().default(0),
+	breakerOpenUntil: at("breaker_open_until"),
+	lastSuccessAt: at("last_success_at"),
+	updatedAt: updatedAt(),
+}).enableRLS();
+
+export const geoSiteQaSamples = pgTable(
+	"geo_site_qa_samples",
+	{
+		id: pk(),
+		organizationId: org(),
+		siteSourceId: uuid("site_source_id")
+			.notNull()
+			.references(() => geoSiteSources.id),
+		status: text("status").$type<GeoSiteQaSampleStatus>().notNull().default("OPEN"),
+		population: integer("population").notNull(),
+		sampleSize: integer("sample_size").notNull(),
+		seed: text("seed").notNull(),
+		createdBy: text("created_by").notNull(),
+		completedAt: at("completed_at"),
+		createdAt: createdAt(),
+	},
+	(table) => [
+		index("geo_site_qa_samples_source_created_idx").on(table.siteSourceId, table.createdAt),
+		oneOf("geo_site_qa_samples_status_check", table.status, GEO_SITE_QA_SAMPLE_STATUSES),
+	],
+).enableRLS();
+
+export const geoSiteQaItems = pgTable(
+	"geo_site_qa_items",
+	{
+		id: pk(),
+		organizationId: org(),
+		sampleId: uuid("sample_id")
+			.notNull()
+			.references(() => geoSiteQaSamples.id),
+		pageVersionId: uuid("page_version_id")
+			.notNull()
+			.references(() => geoSitePageVersions.id),
+		fieldPath: text("field_path").notNull(),
+		extractedValue: text("extracted_value"),
+		verdict: text("verdict").$type<GeoSiteQaVerdict>(),
+		note: text("note"),
+		reviewerId: text("reviewer_id"),
+		reviewedAt: at("reviewed_at"),
+		createdAt: createdAt(),
+	},
+	(table) => [
+		uniqueIndex("geo_site_qa_items_sample_version_field_idx").on(table.sampleId, table.pageVersionId, table.fieldPath),
+		nullOrOneOf("geo_site_qa_items_verdict_check", table.verdict, GEO_SITE_QA_VERDICTS),
 	],
 ).enableRLS();
 
