@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { parseBootstrapTargets } from "@workspace/geo-cn-providers";
-import { geoSystemPrincipal } from "@workspace/geo-domain";
+import { GeoError, geoSystemPrincipal } from "@workspace/geo-domain";
 import type { DbConnection } from "@workspace/lib/db/db-connection";
 import { geoSamplingTargets } from "@workspace/lib/db/schema";
 import { writeGeoAudit } from "@workspace/lib/geo/audit";
@@ -9,15 +9,16 @@ import { writeGeoAudit } from "@workspace/lib/geo/audit";
  * Applies the `targets` section of the bootstrap file. A target is identified by its
  * `key`; one that already exists is left as it is, because an administrator may have
  * changed it since, so running this again never overwrites or duplicates anything.
- * Every target arrives UNVERIFIED whatever the file says.
+ * Every target arrives UNVERIFIED whatever the file says. A section with any error
+ * throws, like the other sections, so a broken file is never reported as imported.
  */
 export async function applyGeoBootstrapTargets(
 	db: DbConnection,
 	organizationId: string,
 	section: unknown,
-): Promise<{ created: number; skipped: number; errors: string[] }> {
+): Promise<{ created: number; skipped: number }> {
 	const { targets, errors } = parseBootstrapTargets(section);
-	if (errors.length) return { created: 0, skipped: 0, errors };
+	if (errors.length) throw new GeoError("VALIDATION_ERROR", `引导配置中的采样目标无效：${errors.join("；")}`);
 	const principal = geoSystemPrincipal(organizationId, "bootstrap", randomUUID());
 	let created = 0;
 	for (const target of targets) {
@@ -58,5 +59,5 @@ export async function applyGeoBootstrapTargets(
 			metadata: { bootstrapKey: target.key },
 		});
 	}
-	return { created, skipped: targets.length - created, errors: [] };
+	return { created, skipped: targets.length - created };
 }
