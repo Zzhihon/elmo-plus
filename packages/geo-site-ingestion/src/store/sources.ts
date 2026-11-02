@@ -1,7 +1,7 @@
 import { GeoError, type GeoPrincipal, geoSystemPrincipal } from "@workspace/geo-domain";
 import type { DbConnection } from "@workspace/lib/db/db-connection";
 import { geoSiteProfileVersions, geoSiteSources } from "@workspace/lib/db/schema";
-import { writeGeoAudit } from "@workspace/lib/geo/audit";
+import { geoAuditHash, writeGeoAudit } from "@workspace/lib/geo/audit";
 import { and, desc, eq } from "drizzle-orm";
 import type { z } from "zod";
 import { URL_REFUSAL_LABELS } from "../net/url-policy";
@@ -90,6 +90,11 @@ function checkedConfig(config: SiteSourceConfig): SiteSourceConfig {
 	const checked = checkSourceUrls(config);
 	if (checked.refused.length > 0) throw new SiteUrlRefusedError(checked.refused);
 	return { ...config, baseUrl: checked.baseUrl, seedUrls: checked.seedUrls, keyUrls: checked.keyUrls };
+}
+
+/** jsonb returns keys in its own order, so a profile read back never stringifies the way it was written. */
+function sameValue(a: unknown, b: unknown): boolean {
+	return geoAuditHash(a) === geoAuditHash(b);
 }
 
 function rowValues(config: SiteSourceConfig) {
@@ -181,7 +186,7 @@ export async function updateSiteSource(
 	const existing = await loadSiteSource(tx, principal.organizationId, sourceId);
 	const current = configOfSource(existing);
 	const config = checkedConfig(parseSourceConfig({ ...current, ...patch }));
-	const profileChanged = JSON.stringify(config.profile) !== JSON.stringify(current.profile);
+	const profileChanged = !sameValue(config.profile, current.profile);
 	if (profileChanged && config.profile.version <= current.profile.version) {
 		throw new GeoError("VALIDATION_ERROR", `解析配置有改动时版本号必须大于当前的 ${current.profile.version}`);
 	}
@@ -272,7 +277,7 @@ export async function applyGeoBootstrapSites(
 				return;
 			}
 			const current = configOfSource(existing);
-			const same = JSON.stringify(rowValues(current)) === JSON.stringify(rowValues(config));
+			const same = sameValue(rowValues(current), rowValues(config));
 			if (same || config.profile.version < current.profile.version) {
 				result.unchanged++;
 				return;
