@@ -526,6 +526,8 @@ export async function listCredentials(principal: GeoPrincipal) {
 			),
 	]);
 	const configured = new Set(credentials.map((credential) => credential.ref));
+	// A target's own credential, set on the target itself, is not one of these organization references.
+	const referencing = targets.filter((target) => isGeoCredentialRef(target.credentialRef as string));
 	return {
 		credentials: credentials.map((credential) => ({
 			ref: credential.ref,
@@ -533,9 +535,9 @@ export async function listCredentials(principal: GeoPrincipal) {
 			updatedAt: credential.updatedAt.toISOString(),
 			keyId: credential.keyId,
 			needsReencryption: credential.needsReencryption,
-			usedBy: targets.filter((target) => target.credentialRef === credential.ref).map((target) => target.platform),
+			usedBy: referencing.filter((target) => target.credentialRef === credential.ref).map((target) => target.platform),
 		})),
-		missingRefs: [...new Set(targets.map((target) => target.credentialRef as string))].filter(
+		missingRefs: [...new Set(referencing.map((target) => target.credentialRef as string))].filter(
 			(ref) => !configured.has(ref),
 		),
 	};
