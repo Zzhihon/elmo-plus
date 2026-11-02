@@ -138,7 +138,13 @@ export function SiteSourceDialog({
 				>
 					<div className="grid gap-2">
 						<Label htmlFor="site-base-url">站点首页</Label>
-						<Input id="site-base-url" value={form.baseUrl} onChange={set("baseUrl")} placeholder="http://www.example.com/" required />
+						<Input
+							id="site-base-url"
+							value={form.baseUrl}
+							onChange={set("baseUrl")}
+							placeholder="http://www.example.com/"
+							required
+						/>
 					</div>
 					<div className="grid gap-4 sm:grid-cols-2">
 						<div className="grid gap-2">
@@ -153,7 +159,15 @@ export function SiteSourceDialog({
 					<div className="grid gap-4 sm:grid-cols-3">
 						<div className="grid gap-2">
 							<Label htmlFor="site-rps">每秒请求数（上限 2）</Label>
-							<Input id="site-rps" type="number" step="0.1" min="0.1" max="2" value={form.requestsPerSecond} onChange={set("requestsPerSecond")} />
+							<Input
+								id="site-rps"
+								type="number"
+								step="0.1"
+								min="0.1"
+								max="2"
+								value={form.requestsPerSecond}
+								onChange={set("requestsPerSecond")}
+							/>
 						</div>
 						<div className="grid gap-2">
 							<Label htmlFor="site-pages">单次页面预算</Label>

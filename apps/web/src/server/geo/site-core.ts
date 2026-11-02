@@ -25,6 +25,8 @@ import {
 import { renderSnapshotForViewing } from "@workspace/geo-site-ingestion/snapshot";
 import {
 	auditRefusedUrls,
+	type CrawlRunMeta,
+	type CrawlRunSummary,
 	createCrawlRun,
 	createSiteSource,
 	enqueueCrawlRun,
@@ -34,8 +36,6 @@ import {
 	loadCrawlRun,
 	loadParsedPage,
 	loadSiteSource,
-	type CrawlRunMeta,
-	type CrawlRunSummary,
 	type ParsedSummary,
 	profileOfSource,
 	runConfigOf,
@@ -78,7 +78,12 @@ export interface Paging {
 	offset: number;
 }
 
-async function withRefusalAudit<T>(principal: GeoPrincipal, action: string, siteSourceId: string | undefined, run: () => Promise<T>) {
+async function withRefusalAudit<T>(
+	principal: GeoPrincipal,
+	action: string,
+	siteSourceId: string | undefined,
+	run: () => Promise<T>,
+) {
 	try {
 		return await run();
 	} catch (error) {
@@ -295,7 +300,10 @@ export async function startCrawl(
 export async function listCrawlRuns(principal: GeoPrincipal, siteId: string, paging: Paging) {
 	assertGeoPermission(principal, "site.read");
 	await loadSiteSource(db, principal.organizationId, siteId);
-	const where = and(eq(geoSiteCrawlRuns.organizationId, principal.organizationId), eq(geoSiteCrawlRuns.siteSourceId, siteId));
+	const where = and(
+		eq(geoSiteCrawlRuns.organizationId, principal.organizationId),
+		eq(geoSiteCrawlRuns.siteSourceId, siteId),
+	);
 	const [rows, [{ value: total }]] = await Promise.all([
 		db
 			.select()
@@ -370,9 +378,7 @@ export const sitePageFilterSchema = z.object({
 	status: z.enum(GEO_SITE_PAGE_STATUSES).optional(),
 	parseStatus: z.enum(GEO_PARSE_STATUSES).optional(),
 	q: z.string().max(200).optional(),
-	hasError: z
-		.union([z.boolean(), z.enum(["true", "false"]).transform((value) => value === "true")])
-		.optional(),
+	hasError: z.union([z.boolean(), z.enum(["true", "false"]).transform((value) => value === "true")]).optional(),
 	reviewStatus: z.enum(["PENDING_REVIEW", "APPROVED", "NONE"]).optional(),
 	seenAfter: z.string().datetime({ offset: true }).optional(),
 	seenBefore: z.string().datetime({ offset: true }).optional(),
@@ -399,7 +405,9 @@ export async function listSitePages(principal: GeoPrincipal, filters: SitePageFi
 	if (filters.siteId) conditions.push(eq(geoSitePages.siteSourceId, filters.siteId));
 	if (filters.category) {
 		conditions.push(
-			filters.category === "uncategorized" ? isNull(geoSitePages.category) : eq(geoSitePages.category, filters.category),
+			filters.category === "uncategorized"
+				? isNull(geoSitePages.category)
+				: eq(geoSitePages.category, filters.category),
 		);
 	}
 	if (filters.status) conditions.push(eq(geoSitePages.status, filters.status));
@@ -708,7 +716,11 @@ export async function requestReparse(principal: GeoPrincipal, pageId: string, in
 
 export async function refetchPage(principal: GeoPrincipal, pageId: string) {
 	const page = await loadPage(principal, pageId);
-	return startCrawl(principal, page.siteSourceId, { mode: "INCREMENTAL", urls: [page.normalizedUrl], followLinks: false });
+	return startCrawl(principal, page.siteSourceId, {
+		mode: "INCREMENTAL",
+		urls: [page.normalizedUrl],
+		followLinks: false,
+	});
 }
 
 // ---------------------------------------------------------------------------
@@ -730,10 +742,7 @@ function fieldValueText(value: unknown): string | null {
 	if (typeof value === "string") return truncate(value, 1000);
 	if (Array.isArray(value)) {
 		if (value.length === 0) return null;
-		return truncate(
-			value.map((entry) => (Array.isArray(entry) ? entry.join(" | ") : String(entry))).join("\n"),
-			1000,
-		);
+		return truncate(value.map((entry) => (Array.isArray(entry) ? entry.join(" | ") : String(entry))).join("\n"), 1000);
 	}
 	return truncate(JSON.stringify(value), 1000);
 }
@@ -825,7 +834,9 @@ export async function listQaSamples(principal: GeoPrincipal, siteId: string) {
 	const samples = await db
 		.select()
 		.from(geoSiteQaSamples)
-		.where(and(eq(geoSiteQaSamples.organizationId, principal.organizationId), eq(geoSiteQaSamples.siteSourceId, siteId)))
+		.where(
+			and(eq(geoSiteQaSamples.organizationId, principal.organizationId), eq(geoSiteQaSamples.siteSourceId, siteId)),
+		)
 		.orderBy(desc(geoSiteQaSamples.createdAt))
 		.limit(50);
 	if (samples.length === 0) return [];

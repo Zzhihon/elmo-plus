@@ -31,7 +31,10 @@ import {
 } from "./site-core";
 
 const org = z.object({ organizationId: z.string().min(1) });
-const pagingSchema = z.object({ page: z.number().int().min(1).default(1), limit: z.number().int().min(1).max(100).default(20) });
+const pagingSchema = z.object({
+	page: z.number().int().min(1).default(1),
+	limit: z.number().int().min(1).max(100).default(20),
+});
 
 function paging(input: { page: number; limit: number }) {
 	return { page: input.page, limit: input.limit, offset: (input.page - 1) * input.limit };
@@ -43,7 +46,9 @@ export const listSitesFn = createServerFn({ method: "GET" })
 
 export const getSiteFn = createServerFn({ method: "GET" })
 	.validator(org.extend({ siteId: z.string().uuid() }))
-	.handler(async ({ data }) => getSite(await requireGeoServerFnPrincipal(data.organizationId, "site.read"), data.siteId));
+	.handler(async ({ data }) =>
+		getSite(await requireGeoServerFnPrincipal(data.organizationId, "site.read"), data.siteId),
+	);
 
 export const createSiteFn = createServerFn({ method: "POST" })
 	.validator(org.extend({ config: z.unknown() }))
@@ -120,10 +125,7 @@ export const getPageVersionFn = createServerFn({ method: "GET" })
 export const getSnapshotViewFn = createServerFn({ method: "GET" })
 	.validator(org.extend({ versionId: z.string().uuid() }))
 	.handler(async ({ data }) =>
-		getSnapshotForViewing(
-			await requireGeoServerFnPrincipal(data.organizationId, "site.read_snapshot"),
-			data.versionId,
-		),
+		getSnapshotForViewing(await requireGeoServerFnPrincipal(data.organizationId, "site.read_snapshot"), data.versionId),
 	);
 
 export const requestReparseFn = createServerFn({ method: "POST" })
