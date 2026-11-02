@@ -35,6 +35,10 @@ export interface SafeFetchOptions {
 	/** Tests narrow this to reach a local server; production keeps public addresses only. */
 	addressAllowed?: (address: string) => boolean;
 	signal?: AbortSignal;
+	/** For calling an API rather than reading a page. */
+	request?: { method: "GET" | "POST"; headers?: Record<string, string>; body?: string };
+	/** API endpoints legitimately sit under paths such as /api that a crawler has no business visiting. */
+	allowSensitivePaths?: boolean;
 }
 
 export interface RedirectHop {
@@ -85,6 +89,13 @@ export interface SafeFetchError {
 export type SafeFetchResult = SafeFetchSuccess | SafeFetchError;
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+
+function policyOf(options: SafeFetchOptions) {
+	return {
+		...redirectPolicyOf(options.allowedHosts, options.allowedPorts),
+		allowSensitivePaths: options.allowSensitivePaths,
+	};
+}
 
 class FetchAbort extends Error {
 	constructor(
@@ -162,22 +173,29 @@ function request(
 		const req = transport.request(
 			url,
 			{
-				method: "GET",
+				method: options.request?.method ?? "GET",
 				lookup: pinnedLookup(pinned),
 				agent: false,
-				headers: {
-					"User-Agent": options.userAgent,
-					Accept: options.accept ?? "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1",
-					"Accept-Encoding": "gzip, deflate, br",
-					"Accept-Language": "zh-CN,zh;q=0.9,en;q=0.5",
-					Connection: "close",
-				},
+				headers: options.request
+					? {
+							"User-Agent": options.userAgent,
+							"Accept-Encoding": "gzip, deflate, br",
+							...options.request.headers,
+							Connection: "close",
+						}
+					: {
+							"User-Agent": options.userAgent,
+							Accept: options.accept ?? "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1",
+							"Accept-Encoding": "gzip, deflate, br",
+							"Accept-Language": "zh-CN,zh;q=0.9,en;q=0.5",
+							Connection: "close",
+						},
 			},
 			(response) => resolve({ response, address: pinned.address }),
 		);
 		register((error) => req.destroy(error));
 		req.on("error", reject);
-		req.end();
+		req.end(options.request?.body);
 	});
 }
 
@@ -276,7 +294,7 @@ async function hop(
 
 	response.resume();
 	const target = new URL(response.headers.location, url).toString();
-	const decision = checkUrl(target, redirectPolicyOf(options.allowedHosts, options.allowedPorts));
+	const decision = checkUrl(target, policyOf(options));
 	redirects.push({ from: current, to: decision.ok ? decision.url : target, status });
 	if (!decision.ok) {
 		return {
@@ -346,7 +364,7 @@ export async function safeFetch(input: string, options: SafeFetchOptions): Promi
 	});
 
 	try {
-		const first = checkUrl(current, redirectPolicyOf(options.allowedHosts, options.allowedPorts));
+		const first = checkUrl(current, policyOf(options));
 		if (!first.ok) return fail("URL_REFUSED", `网址被拒绝：${first.reason}`, { blockedReason: first.reason });
 
 		for (let index = 0; ; index++) {

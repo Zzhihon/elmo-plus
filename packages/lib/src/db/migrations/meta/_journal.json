@@ -246,6 +246,13 @@
       "when": 1793652471691,
       "tag": "0034_geo_workspace_slices",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1793656320021,
+      "tag": "0035_geo_fix_sampling",
+      "breakpoints": true
     }
   ]
 }

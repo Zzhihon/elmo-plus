@@ -21,10 +21,10 @@ export const getInsightsFn = createServerFn({ method: "GET" })
 	});
 
 export const getOverviewFn = createServerFn({ method: "GET" })
-	.validator(org)
+	.validator(org.extend({ crossMode: z.boolean().optional() }))
 	.handler(async ({ data }) => {
 		const principal = await requireGeoServerFnPrincipal(data.organizationId, "metric.read");
-		return getOverview(principal);
+		return getOverview(principal, { crossMode: data.crossMode });
 	});
 
 /** For the task retest view: the two linked batches compared under the same conditions. */

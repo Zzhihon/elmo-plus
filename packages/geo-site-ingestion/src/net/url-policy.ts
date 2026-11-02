@@ -16,6 +16,8 @@ export type UrlRefusal =
 export type UrlDecision = { ok: true; url: string; host: string } | { ok: false; reason: UrlRefusal; url: string };
 
 export interface UrlPolicy {
+	/** For API endpoints, which legitimately sit under paths such as /api; the crawler never sets it. */
+	allowSensitivePaths?: boolean;
 	allowedHosts: readonly string[];
 	/** Non-default ports that are also acceptable. Empty in every real source. */
 	allowedPorts?: readonly number[];
@@ -87,7 +89,7 @@ export function checkUrl(input: string, policy: UrlPolicy, base?: string): UrlDe
 	const url = normalizeUrl(parsed.toString());
 	if (!url) return { ok: false, reason: "INVALID", url: input };
 	const target = pathAndQuery(new URL(url));
-	if (SENSITIVE_PATH.test(target)) return { ok: false, reason: "SENSITIVE_PATH", url };
+	if (!policy.allowSensitivePaths && SENSITIVE_PATH.test(target)) return { ok: false, reason: "SENSITIVE_PATH", url };
 	if (policy.exclude?.some((pattern) => new RegExp(pattern).test(target))) {
 		return { ok: false, reason: "EXCLUDED", url };
 	}

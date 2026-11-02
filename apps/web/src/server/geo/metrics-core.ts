@@ -87,7 +87,11 @@ function resolveWindow(query: MetricQuery): { from: string; to: string } {
  * optionally one platform or surface mode. Without a set the most sampled one in the
  * window is used, so a page never silently mixes question-set versions.
  */
-export async function getInsights(principal: GeoPrincipal, query: MetricQuery): Promise<InsightsResult> {
+export async function getInsights(
+	principal: GeoPrincipal,
+	query: MetricQuery,
+	options: { crossMode?: boolean } = {},
+): Promise<InsightsResult> {
 	assertGeoPermission(principal, "metric.read");
 	const { organizationId } = principal;
 	const window = resolveWindow(query);
@@ -106,7 +110,7 @@ export async function getInsights(principal: GeoPrincipal, query: MetricQuery): 
 		platform: query.platform,
 		surfaceMode: query.surfaceMode,
 	});
-	const insights = computeInsights(data);
+	const insights = computeInsights({ ...data, crossMode: options.crossMode });
 	return {
 		meta: {
 			...window,
@@ -141,22 +145,37 @@ export interface OverviewResult extends InsightsResult {
 	pending: { reviewPool: number; reportsToReview: number; openTasks: number; runningBatches: number };
 }
 
-/** What happened in the last seven days, per platform and mode, counted straight from the evidence. */
+/**
+ * What happened in the last seven days, per platform and mode, counted straight from the
+ * evidence. A planned slot counts once however often it was re-sampled, with the same
+ * preference as the rates: its latest valid sample, otherwise its latest sample.
+ */
 async function recentResults(organizationId: string): Promise<OverviewResult["recent"]> {
 	const to = chinaDate(new Date());
 	const from = chinaDate(new Date(Date.now() - 6 * 86_400_000));
 	const range = chinaDayRange(from, to);
 	const result = await db.execute(sql`
-		select o.platform, o.surface_mode,
+		with slots as (
+			select distinct on (
+				coalesce(r.batch_id::text || '|' || o.prompt_id || '|' || o.target_id || '|' || r.repeat_index, o.id::text)
+			) o.id, o.platform, o.surface_mode, o.status
+			from ${geoObservations} o
+			left join geo_sampling_runs r on r.id = o.run_id
+			where o.organization_id = ${organizationId}
+				and o.sampled_at >= ${range.start} and o.sampled_at < ${range.end}
+			order by
+				coalesce(r.batch_id::text || '|' || o.prompt_id || '|' || o.target_id || '|' || r.repeat_index, o.id::text),
+				(o.status = 'VALID') desc,
+				o.sampled_at desc
+		)
+		select s.platform, s.surface_mode,
 			count(*)::int as total,
-			count(*) filter (where o.status = 'VALID')::int as valid,
-			count(e.id) filter (where o.status = 'VALID')::int as evaluated,
-			count(e.id) filter (where o.status = 'VALID' and e.brand_mentioned)::int as mentioned
-		from ${geoObservations} o
-		left join geo_evaluations e on e.observation_id = o.id and e.is_current
-		where o.organization_id = ${organizationId}
-			and o.sampled_at >= ${range.start} and o.sampled_at < ${range.end}
-		group by o.platform, o.surface_mode
+			count(*) filter (where s.status = 'VALID')::int as valid,
+			count(e.id) filter (where s.status = 'VALID')::int as evaluated,
+			count(e.id) filter (where s.status = 'VALID' and e.brand_mentioned)::int as mentioned
+		from slots s
+		left join geo_evaluations e on e.observation_id = s.id and e.is_current
+		group by s.platform, s.surface_mode
 	`);
 	const cells = (result.rows as Record<string, unknown>[]).map((row) => ({
 		platform: row.platform as GeoPlatform,
@@ -217,9 +236,12 @@ async function pendingWork(organizationId: string): Promise<OverviewResult["pend
 	};
 }
 
-export async function getOverview(principal: GeoPrincipal): Promise<OverviewResult> {
+export async function getOverview(
+	principal: GeoPrincipal,
+	options: { crossMode?: boolean } = {},
+): Promise<OverviewResult> {
 	const [insights, recent, pending] = await Promise.all([
-		getInsights(principal, {}),
+		getInsights(principal, {}, options),
 		recentResults(principal.organizationId),
 		pendingWork(principal.organizationId),
 	]);

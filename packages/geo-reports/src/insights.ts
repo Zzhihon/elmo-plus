@@ -59,12 +59,31 @@ export interface Gap {
 	observationIds: string[];
 }
 
+/** One surface mode's headline figures: an equal-weight mean over that mode's platforms only. */
+export interface SurfaceModeOverview {
+	surfaceMode: GeoSurfaceMode;
+	mention: EqualWeightSummary;
+	recommendation: EqualWeightSummary;
+	planned: number;
+	valid: number;
+	pendingEvaluation: number;
+}
+
+export interface InsightsOverview {
+	bySurfaceMode: SurfaceModeOverview[];
+	/** Mixes answers captured in different ways, so it exists only when someone explicitly asks for it. */
+	crossMode: { mention: EqualWeightSummary; recommendation: EqualWeightSummary } | null;
+}
+
+export const GEO_CROSS_MODE_NOTE =
+	"跨采样方式等权平均：混合了用户界面实测、模型 API 代理评测与人工证据，不代表其中任何一种口径，仅供内部参考。";
+
 export interface Insights {
 	cells: CellMetrics[];
 	trends: CellTrend[];
 	prompts: PromptRow[];
 	gaps: Gap[];
-	overview: { mention: EqualWeightSummary; recommendation: EqualWeightSummary };
+	overview: InsightsOverview;
 	totals: { planned: number; valid: number; evaluated: number; pendingEvaluation: number };
 	/** True when no cell has a single valid sample: every rate must read "数据不足", never 0%. */
 	noData: boolean;
@@ -180,15 +199,32 @@ function promptRows(
 	return { rows, gaps };
 }
 
+function surfaceModeOverview(cells: readonly CellMetrics[]): SurfaceModeOverview[] {
+	const modes = [...new Set(cells.map((cell) => cell.surfaceMode))];
+	return modes.map((surfaceMode) => {
+		const own = cells.filter((cell) => cell.surfaceMode === surfaceMode);
+		const note = "同一采样方式内跨平台等权平均，仅用于内部概览；各平台的口径与样本量见分平台数据。";
+		return {
+			surfaceMode,
+			mention: equalWeightSummary(own, (cell) => cell.mentionRate, note),
+			recommendation: equalWeightSummary(own, (cell) => cell.recommendationRate, note),
+			planned: own.reduce((sum, cell) => sum + cell.validSampleRate.breakdown.planned, 0),
+			valid: own.reduce((sum, cell) => sum + cell.validSamples, 0),
+			pendingEvaluation: own.reduce((sum, cell) => sum + cell.pendingEvaluation, 0),
+		};
+	});
+}
+
 /**
  * Everything the insight pages and reports show, per platform and surface mode. Samples
- * of different cells are never pooled; the only cross-cell figure is the labelled
- * equal-weight overview.
+ * of different cells are never pooled; headline figures stay within one surface mode
+ * unless `crossMode` explicitly asks for the labelled mixed summary.
  */
 export function computeInsights(input: {
 	samples: readonly MetricSample[];
 	slots: readonly PlannedSlot[];
 	competitors: readonly CompetitorRef[];
+	crossMode?: boolean;
 }): Insights {
 	const sampleGroups = groupByCell(input.samples);
 	const slotGroups = groupByCell(input.slots);
@@ -234,8 +270,13 @@ export function computeInsights(input: {
 		prompts: rows,
 		gaps,
 		overview: {
-			mention: equalWeightSummary(cells, (cell) => cell.mentionRate),
-			recommendation: equalWeightSummary(cells, (cell) => cell.recommendationRate),
+			bySurfaceMode: surfaceModeOverview(cells),
+			crossMode: input.crossMode
+				? {
+						mention: equalWeightSummary(cells, (cell) => cell.mentionRate, GEO_CROSS_MODE_NOTE),
+						recommendation: equalWeightSummary(cells, (cell) => cell.recommendationRate, GEO_CROSS_MODE_NOTE),
+					}
+				: null,
 		},
 		totals,
 		noData: totals.valid === 0,

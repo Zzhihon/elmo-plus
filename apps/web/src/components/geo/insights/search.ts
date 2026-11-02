@@ -22,7 +22,8 @@ export const insightKeys = {
 	all: (organizationId: string) => ["geo", "insights", organizationId] as const,
 	insights: (organizationId: string, query: object) => [...insightKeys.all(organizationId), "metrics", query] as const,
 	claims: (organizationId: string, query: object) => [...insightKeys.all(organizationId), "claims", query] as const,
-	overview: (organizationId: string) => [...insightKeys.all(organizationId), "overview"] as const,
+	overview: (organizationId: string, crossMode = false) =>
+		[...insightKeys.all(organizationId), "overview", crossMode] as const,
 	reviewPool: (organizationId: string, filters: object, page: number) =>
 		[...insightKeys.all(organizationId), "review-pool", filters, page] as const,
 	review: (organizationId: string, observationId: string) =>

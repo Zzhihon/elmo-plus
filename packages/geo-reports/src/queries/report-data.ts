@@ -37,6 +37,7 @@ export interface ReportRequest {
 	promptSetId: string | null;
 	notes: string | null;
 	nextPlan: string[] | null;
+	crossModeSummary?: boolean;
 }
 
 const TASK_LIMIT = 200;
@@ -167,7 +168,7 @@ export async function assembleReportSnapshot(db: DbConnection, request: ReportRe
 		reviewPoolSize(db, request.organizationId),
 		db.select({ slug: organization.slug }).from(organization).where(eq(organization.id, request.organizationId)),
 	]);
-	const insights = computeInsights(data);
+	const insights = computeInsights({ ...data, crossMode: request.crossModeSummary });
 	const from = chinaDate(request.periodStart);
 	const to = chinaDate(new Date(request.periodEnd.getTime() - 1));
 	return {
@@ -182,7 +183,7 @@ export async function assembleReportSnapshot(db: DbConnection, request: ReportRe
 			timezone: "Asia/Shanghai",
 		},
 		conditions: { promptSet, evaluatorVersions: insights.evaluatorVersions, targets: data.targets },
-		methodology: methodology(promptSet),
+		methodology: methodology(promptSet, request.crossModeSummary),
 		insights,
 		competitors: data.competitors,
 		findings: buildFindings(insights, data.competitors),

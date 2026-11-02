@@ -25,7 +25,7 @@ const dictionary: GeoDictionarySnapshot = {
 			domains: ["www.example-electric.test"],
 		},
 		{ ...entity, id: "rival", kind: "COMPETITOR", displayName: "示例科技", shortName: null, aliases: [] },
-		{ ...entity, id: "grid", kind: "COMPETITOR", displayName: "华电设备", shortName: "华电", aliases: [] },
+		{ ...entity, id: "grid", kind: "COMPETITOR", displayName: "样华设备", shortName: "样华", aliases: [] },
 		{
 			...entity,
 			id: "gone",
@@ -60,14 +60,14 @@ describe("alias matching in Chinese text", () => {
 	});
 
 	it("does not let a two-character alias match inside an unrelated longer word", () => {
-		expect(hitsIn("中华电力公司负责区域电网")).toEqual([]);
+		expect(hitsIn("模样华丽的柜体负责区域电网")).toEqual([]);
 		expect(hitsIn("示例性的说明不代表任何厂家")).toEqual([]);
 	});
 
 	it("still finds a short alias that stands on its own", () => {
-		expect(hitsIn("华电的柜体做工扎实。")).toEqual([["grid", "华电"]]);
+		expect(hitsIn("样华的柜体做工扎实。")).toEqual([["grid", "样华"]]);
 		expect(hitsIn("可以考虑示例，售后响应快")).toEqual([["own", "示例"]]);
-		expect(hitsIn("华电集团")).toEqual([["grid", "华电"]]);
+		expect(hitsIn("样华集团")).toEqual([["grid", "样华"]]);
 	});
 
 	it("matches Latin names on word boundaries regardless of width and case", () => {
@@ -87,7 +87,7 @@ describe("rule evaluation", () => {
 	const evaluate = (answer: string) => evaluateWithRules({ answer, dictionary, citations: [], approvedAssertions: [] });
 
 	it("reads a ranked shortlist and the brand's position in it", () => {
-		const result = evaluate("推荐以下厂家：\n1. 华电设备：老牌企业\n2. 示例电气：交付快\n3. 示例科技：价格低");
+		const result = evaluate("推荐以下厂家：\n1. 样华设备：老牌企业\n2. 示例电气：交付快\n3. 示例科技：价格低");
 		expect(result.hasOrderedList).toBe(true);
 		expect(result.brandRank).toBe(2);
 		expect(result.recommendation).toBe("RECOMMENDED");

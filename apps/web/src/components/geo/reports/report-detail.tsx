@@ -294,6 +294,14 @@ function ReportStatusNotes({ data }: { data: ReportData }) {
 					<AlertDescription>{data.errorSummary ?? "报告生成失败"}</AlertDescription>
 				</Alert>
 			)}
+			{data.status === "SUCCEEDED" && data.pdfUnavailableReason && (
+				<Alert>
+					<AlertTitle>PDF 不可用</AlertTitle>
+					<AlertDescription>
+						报告已生成，指标快照与 CSV 可以正常查看和下载，但没有生成 PDF：{data.pdfUnavailableReason}
+					</AlertDescription>
+				</Alert>
+			)}
 			{(data.status === "QUEUED" || data.status === "RUNNING") && (
 				<Alert>
 					<AlertTitle>报告生成中</AlertTitle>

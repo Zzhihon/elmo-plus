@@ -9,13 +9,63 @@ const context: GeoPromptCsvContext = {
 		["PROCUREMENT_LEAD", ROLE_ID],
 		["采购负责人", ROLE_ID],
 	]),
-	existing: [{ id: FROZEN_ID, question: "高低压开关柜供应商怎么比较", status: "FROZEN" }],
+	existing: [
+		{
+			id: FROZEN_ID,
+			question: "高低压开关柜供应商怎么比较",
+			status: "FROZEN",
+			buyerRoleId: ROLE_ID,
+			intent: "选型",
+			productLine: "=开关柜",
+			geoRegion: null,
+			priority: "P1",
+			language: "zh-CN",
+			tier: "CORE",
+			ownerId: "user-1",
+		},
+	],
 	memberIds: new Set(["user-1"]),
 };
 
 const row = (line: number, cells: Record<string, string>) => ({ line, cells });
 
 describe("prompt CSV import", () => {
+	const untouched = {
+		prompt_id: FROZEN_ID,
+		question: "高低压开关柜供应商怎么比较",
+		buyer_role: "采购负责人",
+		intent: "选型",
+		product_line: "'=开关柜",
+		priority: "P1",
+		language: "zh-CN",
+		tier: "CORE",
+		status: "FROZEN",
+		test_set_version: "基线 v1",
+		owner: "user-1",
+	};
+
+	it("counts a reviewed row that came back unchanged, alongside a new row in the same file", () => {
+		const { valid, unchanged, errors } = validatePromptCsvRows(
+			[row(2, untouched), row(3, { question: "华南成套配电柜厂家有哪些" })],
+			context,
+		);
+		expect(errors).toEqual([]);
+		expect(unchanged).toEqual([2]);
+		expect(valid.map((entry) => entry.line)).toEqual([3]);
+	});
+
+	it.each([
+		["question", { question: "高低压开关柜供应商如何比较" }],
+		["priority", { priority: "P0" }],
+		["owner", { owner: "" }],
+		["tier", { tier: "EXTENDED" }],
+	])("refuses a reviewed row whose %s was changed", (_field, change) => {
+		const { valid, unchanged, errors } = validatePromptCsvRows([row(2, { ...untouched, ...change })], context);
+		expect(valid).toEqual([]);
+		expect(unchanged).toEqual([]);
+		expect(errors.map(({ line, column }) => [line, column])).toEqual([[2, "prompt_id"]]);
+	});
+
 	it("reports every problem by line and column instead of stopping at the first", () => {
 		const { valid, errors } = validatePromptCsvRows(
 			[

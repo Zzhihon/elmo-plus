@@ -136,3 +136,32 @@ export function deriveBatchStatus(current: GeoBatchStatus, counts: GeoBatchCount
 	if (counts.valid + counts.partial > 0) return "PARTIAL";
 	return "FAILED";
 }
+
+const OBJECT_NAME = /^[A-Za-z0-9._-]+$/;
+const UPLOAD_NAME = /^[0-9a-f]{64}\.[a-z0-9]{2,5}$/;
+
+export interface GeoObservationEvidencePointer {
+	organizationId: string;
+	runId: string | null;
+	importBatchId: string | null;
+	evidenceUri: string | null;
+}
+
+/**
+ * Which kind of object this observation may own: the raw response its own run stored, or
+ * a file uploaded for its import (the caller still has to find that upload record). Any
+ * other pointer is only text, however much it looks like a key, so nothing ever reads or
+ * deletes knowledge originals, reports or snapshots through an observation.
+ */
+export function observationEvidenceOwnership(pointer: GeoObservationEvidencePointer): "RUN" | "UPLOAD" | null {
+	const { organizationId, runId, importBatchId, evidenceUri } = pointer;
+	if (!evidenceUri) return null;
+	if (runId) {
+		const prefix = `geo/${organizationId}/observations/${runId}/`;
+		if (!evidenceUri.startsWith(prefix)) return null;
+		return OBJECT_NAME.test(evidenceUri.slice(prefix.length)) ? "RUN" : null;
+	}
+	const prefix = `geo/${organizationId}/evidence/`;
+	if (!importBatchId || !evidenceUri.startsWith(prefix)) return null;
+	return UPLOAD_NAME.test(evidenceUri.slice(prefix.length)) ? "UPLOAD" : null;
+}

@@ -8,6 +8,7 @@ import {
 	geoAuditLogs,
 	geoDictionaryVersions,
 	geoEvaluations,
+	geoEvidenceUploads,
 	geoKnowledgeAssertions,
 	geoObservationCitations,
 	geoObservationClaims,
@@ -18,6 +19,8 @@ import {
 	geoPromptSetItems,
 	geoPromptSets,
 	geoPrompts,
+	geoSamplingBatches,
+	geoSamplingRuns,
 	geoSamplingTargets,
 	geoSiteCrawlItems,
 	geoSiteCrawlRuns,
@@ -509,6 +512,167 @@ describe("retention purge", () => {
 			.from(geoAuditLogs)
 			.where(and(eq(geoAuditLogs.organizationId, organizationId), eq(geoAuditLogs.action, "retention.purge")));
 		expect(summaries).toHaveLength(3);
+	});
+});
+
+describe("retention and evidence objects", () => {
+	let organizationId: string;
+	let promptId: string;
+	let targetId: string;
+	let batchId: string;
+	const deleted: string[] = [];
+	const config = () => ({ evidenceRetentionDays: 30, snapshotRetentionDays: null, auditRetentionDays: null });
+	const purge = () =>
+		purgeExpiredGeoData(db, organizationId, config(), {
+			now: NOW,
+			deleteObject: async (key) => {
+				deleted.push(key);
+			},
+		});
+	const uploadKey = (name: string) => `geo/${organizationId}/evidence/${name.repeat(64)}.png`;
+
+	async function recordUpload(name: string, extra: Partial<typeof geoEvidenceUploads.$inferInsert> = {}) {
+		await db.insert(geoEvidenceUploads).values({
+			organizationId,
+			objectKey: uploadKey(name),
+			sha256: name.repeat(64),
+			contentType: "image/png",
+			sizeBytes: 8,
+			uploadedBy: "user-a",
+			...extra,
+		});
+	}
+
+	beforeAll(async () => {
+		organizationId = await createOrganization();
+		await db.insert(geoOrgSettings).values({ organizationId, evidenceRetentionDays: 30 });
+		promptId = (await createPrompt(organizationId)).id;
+		targetId = (await createTarget(organizationId)).id;
+		const [set] = await db
+			.insert(geoPromptSets)
+			.values({ organizationId, name: "基线", createdBy: "user-a" })
+			.returning();
+		const [batch] = await db
+			.insert(geoSamplingBatches)
+			.values({ organizationId, promptSetId: set.id, requestedBy: "user-a", idempotencyKey: randomUUID() })
+			.returning();
+		batchId = batch.id;
+	});
+
+	it("never deletes a knowledge original, report or snapshot an imported observation points at", async () => {
+		const protectedKeys = [
+			`geo/${organizationId}/knowledge/${"a".repeat(64)}.pdf`,
+			`geo/${organizationId}/reports/r1/report.pdf`,
+			`geo/${organizationId}/site/s1/raw/abc.html`,
+			`geo/${organizationId}/observations/some-other-run/attempt-1.json`,
+		];
+		for (const evidenceUri of protectedKeys) {
+			await insertObservation(organizationId, promptId, targetId, daysAgo(90), {
+				surfaceMode: "MANUAL_EVIDENCE",
+				importBatchId: randomUUID(),
+				evidenceUri,
+			});
+		}
+		const result = await purge();
+		expect(result.evidence.rows.geo_observations).toBe(4);
+		expect(deleted).toEqual([]);
+	});
+
+	it("does not delete an evidence-shaped key the observation's import never uploaded", async () => {
+		await recordUpload("c", { importBatchId: randomUUID() });
+		await insertObservation(organizationId, promptId, targetId, daysAgo(90), {
+			surfaceMode: "MANUAL_EVIDENCE",
+			importBatchId: randomUUID(),
+			evidenceUri: uploadKey("c"),
+		});
+		await purge();
+		expect(deleted).toEqual([]);
+	});
+
+	it("deletes the raw response of the observation's own run", async () => {
+		const [run] = await db
+			.insert(geoSamplingRuns)
+			.values({
+				organizationId,
+				batchId,
+				promptId,
+				targetId,
+				repeatIndex: 0,
+				idempotencyKey: randomUUID(),
+				status: "VALID",
+			})
+			.returning();
+		const key = `geo/${organizationId}/observations/${run.id}/attempt-1.json`;
+		await insertObservation(organizationId, promptId, targetId, daysAgo(90), { runId: run.id, evidenceUri: key });
+		deleted.length = 0;
+		await purge();
+		expect(deleted).toEqual([key]);
+	});
+
+	it("deletes an imported file with its upload record once nothing uses it, and only then", async () => {
+		const importBatchId = randomUUID();
+		await recordUpload("d", { importBatchId });
+		const shared = { surfaceMode: "MANUAL_EVIDENCE" as const, importBatchId, evidenceUri: uploadKey("d") };
+		await insertObservation(organizationId, promptId, targetId, daysAgo(90), shared);
+		const recent = await insertObservation(organizationId, promptId, targetId, daysAgo(5), shared);
+		deleted.length = 0;
+		await purge();
+		expect(deleted).toEqual([]);
+
+		await db.transaction(async (tx) => {
+			await tx.execute(sql`select set_config('geo.retention_purge', 'on', true)`);
+			await tx.delete(geoObservations).where(eq(geoObservations.id, recent.id));
+		});
+		await insertObservation(organizationId, promptId, targetId, daysAgo(90), shared);
+		await purge();
+		expect(deleted).toEqual([uploadKey("d")]);
+		const records = await db
+			.select()
+			.from(geoEvidenceUploads)
+			.where(eq(geoEvidenceUploads.objectKey, uploadKey("d")));
+		expect(records).toEqual([]);
+	});
+
+	it("keeps a file someone just uploaded again, though the import that used it has expired", async () => {
+		const importBatchId = randomUUID();
+		await recordUpload("e", { importBatchId });
+		await recordUpload("e", { createdAt: daysAgo(1) });
+		await insertObservation(organizationId, promptId, targetId, daysAgo(90), {
+			surfaceMode: "MANUAL_EVIDENCE",
+			importBatchId,
+			evidenceUri: uploadKey("e"),
+		});
+		deleted.length = 0;
+		await purge();
+		expect(deleted).toEqual([]);
+	});
+
+	it("removes an upload no import ever used once it is past retention", async () => {
+		await recordUpload("f", { createdAt: daysAgo(90) });
+		await recordUpload("0", { createdAt: daysAgo(5) });
+		deleted.length = 0;
+		const result = await purge();
+		expect(deleted).toEqual([uploadKey("f")]);
+		expect(result.evidence.rows.geo_evidence_uploads).toBe(1);
+		const pending = await db
+			.select()
+			.from(geoEvidenceUploads)
+			.where(eq(geoEvidenceUploads.objectKey, uploadKey("0")));
+		expect(pending).toHaveLength(1);
+	});
+
+	it("leaves a note on the work order that loses the evidence", async () => {
+		const observation = await insertObservation(organizationId, promptId, targetId, daysAgo(90));
+		const [task] = await db
+			.insert(geoOptimizationTasks)
+			.values({ organizationId, title: "纠正参数", kind: "FAQ", sourceKind: "OBSERVATION", createdBy: "user-a" })
+			.returning();
+		await db.insert(geoTaskEvidence).values({ organizationId, taskId: task.id, observationId: observation.id });
+		await purge();
+		const events = await db.select().from(geoTaskEvents).where(eq(geoTaskEvents.taskId, task.id));
+		expect(events).toHaveLength(1);
+		expect(events[0]).toMatchObject({ action: "EVIDENCE_EXPIRED", actorId: "system:retention" });
+		expect(events[0]?.comment).toContain("1 条");
 	});
 });
 

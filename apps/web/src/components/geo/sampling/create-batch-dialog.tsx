@@ -38,6 +38,7 @@ export function CreateBatchDialog({
 	const [promptSetId, setPromptSetId] = useState<string | null>(null);
 	const [selected, setSelected] = useState<string[]>([]);
 	const [repeatCount, setRepeatCount] = useState("3");
+	const [includeExtended, setIncludeExtended] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [idempotencyKey] = useState(() => `ui-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`);
 
@@ -49,7 +50,8 @@ export function CreateBatchDialog({
 	const automatic = targets.filter((target) => target.surfaceMode !== "MANUAL_EVIDENCE");
 	const set = sets.data?.find((item) => item.id === promptSetId);
 	const repeats = Number(repeatCount);
-	const planned = set && Number.isInteger(repeats) ? set.itemCount * selected.length * repeats : 0;
+	const questions = set ? (includeExtended ? set.itemCount : set.coreCount) : 0;
+	const planned = Number.isInteger(repeats) ? questions * selected.length * repeats : 0;
 	const setItems = useMemo(
 		() => Object.fromEntries((sets.data ?? []).map((item) => [item.id, `${item.name} · v${item.version}`])),
 		[sets.data],
@@ -60,7 +62,13 @@ export function CreateBatchDialog({
 			createSamplingBatchFn({
 				data: {
 					organizationId: organization.id,
-					batch: { promptSetId: promptSetId ?? "", targetIds: selected, repeatCount: repeats, idempotencyKey },
+					batch: {
+						promptSetId: promptSetId ?? "",
+						targetIds: selected,
+						repeatCount: repeats,
+						includeExtended,
+						idempotencyKey,
+					},
 				},
 			}),
 		onSuccess: async () => {
@@ -96,7 +104,8 @@ export function CreateBatchDialog({
 							<SelectContent>
 								{(sets.data ?? []).map((item) => (
 									<SelectItem key={item.id} value={item.id}>
-										{item.name} · v{item.version}（{item.itemCount} 问）
+										{item.name} · v{item.version}（核心 {item.coreCount} 问
+										{item.extendedCount > 0 ? `，扩展 ${item.extendedCount} 问` : ""}）
 									</SelectItem>
 								))}
 							</SelectContent>
@@ -105,6 +114,21 @@ export function CreateBatchDialog({
 							<p className="text-xs text-muted-foreground">还没有冻结的问法集，请先在问法库冻结基线。</p>
 						)}
 					</div>
+					{set && set.extendedCount > 0 && (
+						<label className="flex items-start gap-2 text-sm" htmlFor="batch-include-extended">
+							<Checkbox
+								id="batch-include-extended"
+								checked={includeExtended}
+								onCheckedChange={(checked) => setIncludeExtended(checked === true)}
+							/>
+							<span>
+								同时采样 {set.extendedCount} 个扩展问法
+								<span className="block text-xs text-muted-foreground">
+									默认只采样核心问法；扩展问法不用于常规高频监测，选择后会记录在批次上。
+								</span>
+							</span>
+						</label>
+					)}
 					<fieldset className="flex flex-col gap-2">
 						<legend className="mb-1 text-sm font-medium">采样目标</legend>
 						{automatic.length === 0 && <p className="text-sm text-muted-foreground">没有可自动采样的目标。</p>}

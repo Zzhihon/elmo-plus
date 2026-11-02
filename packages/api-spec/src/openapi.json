@@ -3255,6 +3255,11 @@
 						"maximum": 10,
 						"default": 3
 					},
+					"includeExtended": {
+						"type": "boolean",
+						"default": false,
+						"description": "默认只采样冻结集中的核心问法；为 true 时同时采样扩展问法，并记录在批次上"
+					},
 					"idempotencyKey": {
 						"type": "string",
 						"maxLength": 200,
@@ -3290,6 +3295,10 @@
 					},
 					"repeatCount": {
 						"type": "integer"
+					},
+					"includesExtended": {
+						"type": "boolean",
+						"description": "本批次是否按明确选择包含了扩展问法"
 					},
 					"plannedCount": {
 						"type": "integer",
@@ -3493,7 +3502,7 @@
 					"evidenceLocation": {
 						"type": "string",
 						"maxLength": 2000,
-						"description": "http(s) 链接、上传接口返回的 upload:<sha256>.<ext>，或存档说明"
+						"description": "http(s) 链接、上传接口返回的 upload:<sha256>.<ext>（只能引用当前账号为本次导入上传、尚未被其他导入使用的文件），或存档说明；不接受存储对象路径"
 					},
 					"citations": {
 						"oneOf": [
@@ -6562,6 +6571,11 @@
 							"type": "string",
 							"maxLength": 2000
 						}
+					},
+					"crossModeSummary": {
+						"type": "boolean",
+						"default": false,
+						"description": "附加一项单独标注的跨采样方式汇总；默认不跨采样方式汇总"
 					}
 				}
 			},
@@ -6623,6 +6637,10 @@
 					},
 					"hasCsv": {
 						"type": "boolean"
+					},
+					"pdfUnavailableReason": {
+						"type": ["string", "null"],
+						"description": "报告已生成但没有 PDF 的原因（例如缺少中文字体）；指标快照与 CSV 不受影响"
 					}
 				}
 			},

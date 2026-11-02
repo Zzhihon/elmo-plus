@@ -1,7 +1,7 @@
 import type { GeoObservationStatus, GeoRecommendation } from "@workspace/geo-domain";
 import { describe, expect, it } from "vitest";
 import { compareBatches } from "./compare";
-import { computeInsights } from "./insights";
+import { computeInsights, GEO_CROSS_MODE_NOTE } from "./insights";
 import {
 	computeCellMetrics,
 	equalWeightSummary,
@@ -199,6 +199,27 @@ describe("competitor coverage", () => {
 		expect(second?.mentioned).toMatchObject({ numerator: 2, denominator: 2 });
 		expect(second?.recommended).toMatchObject({ numerator: 2, denominator: 2 });
 	});
+
+	it("leaves samples from before a competitor joined the dictionary out of its denominator", () => {
+		const oldHit = { entityId: "c1", mentioned: true, recommendation: "MENTIONED_ONLY" as GeoRecommendation };
+		const newHit = { entityId: "c2", mentioned: false, recommendation: "NOT_MENTIONED" as GeoRecommendation };
+		const metrics = cell([
+			sample({ evaluation: { competitorHits: [oldHit] } }),
+			sample({ evaluation: { competitorHits: [oldHit] } }),
+			sample({ evaluation: { competitorHits: [oldHit, newHit] } }),
+		]);
+		const [existing, added] = metrics.competitors;
+		expect(existing?.mentioned).toMatchObject({ numerator: 3, denominator: 3 });
+		expect(added?.mentioned).toMatchObject({ status: "OK", numerator: 0, denominator: 1 });
+	});
+
+	it("reads as no data, never 0%, when no sample was evaluated against the competitor yet", () => {
+		const metrics = cell([sample({ evaluation: { competitorHits: [] } })]);
+		const [added] = metrics.competitors;
+		expect(added?.mentioned.status).toBe("NO_DATA");
+		expect(added?.recommended.status).toBe("NO_DATA");
+		expect(added && formatMetric(added.mentioned)).toBe("数据不足");
+	});
 });
 
 describe("citation sources", () => {
@@ -262,9 +283,38 @@ describe("platforms are never pooled", () => {
 			"deepseek|MODEL_API",
 			"qwen|MANUAL_EVIDENCE",
 		]);
-		expect(insights.overview.mention).toMatchObject({ cellsIncluded: 2, cellsWithoutData: 1, weighting: "EQUAL" });
-		expect(insights.overview.mention.value).toMatchObject({ status: "OK", rate: 0.5 });
-		expect(equalWeightSummary([], (entry) => entry.mentionRate).value.status).toBe("NO_DATA");
+		const [api, manual] = insights.overview.bySurfaceMode.filter((mode) => mode.surfaceMode !== "LIVE_SURFACE");
+		expect(api?.mention).toMatchObject({ cellsIncluded: 1, cellsWithoutData: 0, weighting: "EQUAL" });
+		expect(api?.mention.value).toMatchObject({ status: "OK", rate: 1 });
+		expect(manual?.mention.value).toMatchObject({ status: "OK", rate: 0 });
+		expect(equalWeightSummary([], (entry) => entry.mentionRate, "").value.status).toBe("NO_DATA");
+	});
+
+	it("gives no figure across surface modes unless it is explicitly asked for, and labels it then", () => {
+		const input = {
+			samples: [sample({ evaluation: mentioned }), sample({ platform: "qwen", surfaceMode: "MANUAL_EVIDENCE" })],
+			slots: [],
+			competitors: [],
+		};
+		expect(computeInsights(input).overview.crossMode).toBeNull();
+		const mixed = computeInsights({ ...input, crossMode: true }).overview.crossMode;
+		expect(mixed?.mention.value).toMatchObject({ status: "OK", rate: 0.5 });
+		expect(mixed?.mention.note).toBe(GEO_CROSS_MODE_NOTE);
+	});
+
+	it("averages the platforms of one surface mode without claiming counts that would not give that rate", () => {
+		const insights = computeInsights({
+			samples: [
+				sample({ evaluation: mentioned }),
+				sample({ platform: "qwen" }),
+				sample({ platform: "qwen" }),
+				sample({ platform: "qwen" }),
+			],
+			slots: [],
+			competitors: [],
+		});
+		const [mode] = insights.overview.bySurfaceMode;
+		expect(mode?.mention.value).toEqual({ status: "OK", rate: 0.5, lowSample: true });
 	});
 });
 

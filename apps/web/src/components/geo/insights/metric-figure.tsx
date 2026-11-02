@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import type { GeoPlatform, GeoSurfaceMode } from "@workspace/geo-domain";
-import type { MetricValue } from "@workspace/geo-reports";
+import { formatSummaryRate, type MetricValue, type SummaryRate } from "@workspace/geo-reports";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/components/tooltip";
 import { cn } from "@workspace/ui/lib/utils";
 import type { ReactNode } from "react";
@@ -52,6 +52,19 @@ export function MetricFigure({
 				{percent(value)}
 			</span>
 			<span className="text-xs tabular-nums text-muted-foreground">{fraction(value)}</span>
+			{value.lowSample && <GeoStatusBadge label="低样本" tone="warning" />}
+		</span>
+	);
+}
+
+/** An equal-weight mean: only ever a rate, because summed counts would not produce it. */
+export function SummaryFigure({ value }: { value: SummaryRate }) {
+	if (value.status === "NO_DATA") {
+		return <span className="text-2xl font-semibold text-muted-foreground">{formatSummaryRate(value)}</span>;
+	}
+	return (
+		<span className="inline-flex flex-wrap items-baseline gap-1.5">
+			<span className="text-2xl font-semibold tabular-nums">{formatSummaryRate(value)}</span>
 			{value.lowSample && <GeoStatusBadge label="低样本" tone="warning" />}
 		</span>
 	);

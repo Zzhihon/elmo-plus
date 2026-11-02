@@ -6,7 +6,13 @@ import {
 	GEO_TASK_STATE_LABELS,
 } from "@workspace/geo-domain";
 import PDFDocument from "pdfkit";
-import { type CellMetrics, formatMetric, type MetricValue } from "./metrics";
+import {
+	type CellMetrics,
+	type EqualWeightSummary,
+	formatMetric,
+	formatSummaryRate,
+	type MetricValue,
+} from "./metrics";
 import { cellLabel, type ReportSnapshot } from "./report";
 
 export class GeoPdfFontError extends Error {
@@ -32,7 +38,7 @@ const DEFAULT_COLLECTION_FACE = "NotoSansCJKsc-Regular";
 
 /**
  * `GEO_PDF_FONT_PATH` may name a face inside a collection as `path#Face`. Without a
- * usable CJK font the report must fail rather than render boxes in place of Chinese.
+ * usable CJK font there must be no PDF at all, rather than one with boxes in place of Chinese.
  */
 export function resolveCjkFont(env: Record<string, string | undefined> = process.env): CjkFont {
 	const configured = env.GEO_PDF_FONT_PATH?.trim();
@@ -136,8 +142,19 @@ function writeMetrics(out: Writer, snapshot: ReportSnapshot) {
 			`错误描述率：${rate(cell.errorRate.value)}；待技术审核 ${cell.errorRate.awaitingTechReview} 条`,
 		]);
 	}
-	const overview = snapshot.insights.overview.mention;
-	out.paragraph(`跨平台内部概览（等权）：品牌提及率 ${rate(overview.value)}。${overview.note}`);
+	const summary = (entry: EqualWeightSummary) =>
+		`${formatSummaryRate(entry.value)}${entry.value.status === "OK" && entry.value.lowSample ? " 样本量低" : ""}（${entry.cellsIncluded} 个平台）`;
+	for (const mode of snapshot.insights.overview.bySurfaceMode) {
+		out.paragraph(
+			`${GEO_SURFACE_MODE_LABELS[mode.surfaceMode]}内部概览（等权）：品牌提及率 ${summary(mode.mention)}；推荐率 ${summary(mode.recommendation)}。${mode.mention.note}`,
+		);
+	}
+	const mixed = snapshot.insights.overview.crossMode;
+	if (mixed) {
+		out.paragraph(
+			`跨采样方式汇总（按要求附加）：品牌提及率 ${summary(mixed.mention)}；推荐率 ${summary(mixed.recommendation)}。${mixed.mention.note}`,
+		);
+	}
 	out.heading("四、趋势");
 	for (const trend of snapshot.insights.trends) {
 		const breaks = trend.points.filter((point) => point.breakpoint.length > 0).length;

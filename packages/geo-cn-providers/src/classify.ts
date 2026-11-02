@@ -170,7 +170,12 @@ const NETWORK_CODES = new Set([
 	"UND_ERR_CONNECT_TIMEOUT",
 	"CERT_HAS_EXPIRED",
 	"UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+	"DNS_FAILED",
+	"NETWORK",
 ]);
+
+/** Raised by the guarded fetch; retrying cannot help, the endpoint itself has to change. */
+const ENDPOINT_REFUSED_CODES = new Set(["URL_REFUSED", "ADDRESS_BLOCKED", "REDIRECT_BLOCKED", "TOO_MANY_REDIRECTS"]);
 
 function errorCodeOf(error: unknown): string | undefined {
 	if (!error || typeof error !== "object") return undefined;
@@ -183,6 +188,11 @@ function errorCodeOf(error: unknown): string | undefined {
 export function classifyThrown(error: unknown): CaptureFailure {
 	const name = error instanceof Error ? error.name : "";
 	const code = errorCodeOf(error);
+	if (code && ENDPOINT_REFUSED_CODES.has(code)) {
+		return captureFailure("CONFIG", "ENDPOINT_BLOCKED", "采样目标端点不是允许访问的公网地址，或发生了重定向");
+	}
+	if (code === "TOO_LARGE") return captureFailure("INVALID_RESPONSE", "RESPONSE_TOO_LARGE", "平台响应过大");
+	if (code === "TIMEOUT") return captureFailure("TIMEOUT", "TIMEOUT", "请求超时");
 	if (name === "TimeoutError" || name === "AbortError" || code === "UND_ERR_HEADERS_TIMEOUT" || code === "ETIMEDOUT") {
 		return captureFailure("TIMEOUT", "TIMEOUT", "请求超时");
 	}

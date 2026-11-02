@@ -78,10 +78,24 @@ export interface GeoPromptCsvValidRow {
 	ownerId: string | null;
 }
 
+export interface GeoPromptCsvExisting {
+	id: string;
+	question: string;
+	status: GeoPromptStatus;
+	buyerRoleId: string | null;
+	intent: string | null;
+	productLine: string | null;
+	geoRegion: string | null;
+	priority: GeoPriority;
+	language: string;
+	tier: GeoPromptTier;
+	ownerId: string | null;
+}
+
 export interface GeoPromptCsvContext {
 	/** Each role under both its code and its title; callers build it with `promptCsvRoleLookup`. */
 	roles: ReadonlyMap<string, string>;
-	existing: readonly { id: string; question: string; status: GeoPromptStatus }[];
+	existing: readonly GeoPromptCsvExisting[];
 	memberIds: ReadonlySet<string>;
 }
 
@@ -95,6 +109,12 @@ export function missingPromptCsvColumns(header: readonly string[]): GeoPromptCsv
 	return REQUIRED_COLUMNS.filter((column) => !header.includes(column));
 }
 
+const FREE_TEXT_FIELDS = {
+	question: "question",
+	intent: "intent",
+	product_line: "productLine",
+	geo_region: "geoRegion",
+} as const;
 const FREE_TEXT_COLUMNS = ["question", "intent", "product_line", "geo_region"] as const;
 
 type Report = (column: GeoPromptCsvColumn | null, message: string) => void;
@@ -106,11 +126,17 @@ interface FileState {
 	seenInFile: Map<string, number>;
 }
 
-function checkFormulas(cell: Cells, report: Report) {
+/** Export guards a formula-like cell with a leading apostrophe; reading it back removes the guard. */
+function freeText(cell: Cells, column: (typeof FREE_TEXT_COLUMNS)[number]): string | null {
+	return cell(column).replace(/^'/, "") || null;
+}
+
+/** Refuses formula-like text coming in; what the library already holds came back from an export, not from here. */
+function checkFormulas(cell: Cells, existing: GeoPromptCsvExisting | undefined, report: Report) {
 	for (const column of FREE_TEXT_COLUMNS) {
-		if (looksLikeSpreadsheetFormula(cell(column).replace(/^'/, ""))) {
-			report(column, "内容以公式字符开头（= + - @），已拒绝导入");
-		}
+		const value = cell(column).replace(/^'/, "");
+		if (value === existing?.[FREE_TEXT_FIELDS[column]]) continue;
+		if (looksLikeSpreadsheetFormula(value)) report(column, "内容以公式字符开头（= + - @），已拒绝导入");
 	}
 }
 
@@ -125,7 +151,22 @@ function checkPromptId(promptId: string | null, state: FileState, report: Report
 	if (!promptId) return;
 	const existing = UUID_SHAPE.test(promptId) ? state.existingById.get(promptId) : undefined;
 	if (!existing) report("prompt_id", "问法不存在");
-	else if (existing.status !== "DRAFT") report("prompt_id", "只有草稿状态的问法可以通过导入修改");
+}
+
+const COMPARED_FIELDS = [
+	"question",
+	"buyerRoleId",
+	"intent",
+	"productLine",
+	"geoRegion",
+	"priority",
+	"language",
+	"tier",
+	"ownerId",
+] as const;
+
+function matchesExisting(row: GeoPromptCsvValidRow, existing: GeoPromptCsvExisting): boolean {
+	return COMPARED_FIELDS.every((field) => (row[field] ?? null) === (existing[field]?.trim() || null));
 }
 
 function checkDuplicate(line: number, question: string, promptId: string | null, state: FileState, report: Report) {
@@ -161,13 +202,16 @@ function readLabels(cell: Cells, context: GeoPromptCsvContext, report: Report) {
 /**
  * The whole file is checked at once so every problem can be fixed in one pass.
  * `status` and `test_set_version` appear in exports but are never read back: a status
- * only ever changes through review, and a spreadsheet must not be a way around it.
+ * only ever changes through review, and a spreadsheet must not be a way around it. So an
+ * exported file can come straight back: reviewed rows that still match are only counted,
+ * and only a reviewed row someone actually changed is an error.
  */
 export function validatePromptCsvRows(
 	rows: readonly GeoPromptCsvRowInput[],
 	context: GeoPromptCsvContext,
-): { valid: GeoPromptCsvValidRow[]; errors: GeoPromptCsvError[] } {
+): { valid: GeoPromptCsvValidRow[]; unchanged: number[]; errors: GeoPromptCsvError[] } {
 	const valid: GeoPromptCsvValidRow[] = [];
+	const unchanged: number[] = [];
 	const errors: GeoPromptCsvError[] = [];
 	const state: FileState = {
 		existingById: new Map(context.existing.map((prompt) => [prompt.id, prompt])),
@@ -180,24 +224,28 @@ export function validatePromptCsvRows(
 		const report: Report = (column, message) => errors.push({ line, column, message });
 		const cell: Cells = (column) => cells[column]?.trim() ?? "";
 
-		checkFormulas(cell, report);
+		const promptId = cell("prompt_id") || null;
+		checkFormulas(cell, promptId ? state.existingById.get(promptId) : undefined, report);
 		const question = cell("question").replace(/^'/, "");
 		checkQuestion(question, report);
-		const promptId = cell("prompt_id") || null;
 		checkPromptId(promptId, state, report);
 		checkDuplicate(line, question, promptId, state, report);
 		const labels = readLabels(cell, context, report);
 
 		if (errors.length > before) continue;
-		valid.push({
+		const parsed: GeoPromptCsvValidRow = {
 			line,
 			promptId,
 			question,
-			intent: cell("intent") || null,
-			productLine: cell("product_line") || null,
-			geoRegion: cell("geo_region") || null,
+			intent: freeText(cell, "intent"),
+			productLine: freeText(cell, "product_line"),
+			geoRegion: freeText(cell, "geo_region"),
 			...labels,
-		});
+		};
+		const existing = promptId ? state.existingById.get(promptId) : undefined;
+		if (!existing || existing.status === "DRAFT") valid.push(parsed);
+		else if (matchesExisting(parsed, existing)) unchanged.push(line);
+		else report("prompt_id", "只有草稿状态的问法可以通过导入修改；这一行与问法库中的内容不一致");
 	}
-	return { valid, errors };
+	return { valid, unchanged, errors };
 }

@@ -49,17 +49,15 @@ interface Judged {
 
 /** A first, automated evaluation of one answer, as the evaluation job stores it. */
 async function insertEvaluation(observationId: string, judged: Judged): Promise<string> {
-	const competitorHits = judged.competitor
-		? [
-				{
-					entityId: competitorId,
-					name: "样板开关",
-					mentioned: true,
-					recommendation: "MENTIONED_ONLY" as const,
-					rank: 2,
-				},
-			]
-		: [];
+	const competitorHits = [
+		{
+			entityId: competitorId,
+			name: "样板开关",
+			mentioned: judged.competitor === true,
+			recommendation: judged.competitor ? ("MENTIONED_ONLY" as const) : ("NOT_MENTIONED" as const),
+			rank: judged.competitor ? 2 : null,
+		},
+	];
 	const citationAttribution = judged.ownCitation
 		? [
 				{
@@ -264,11 +262,25 @@ describe("review pool", () => {
 		expect(filtered.total).toBe(0);
 		const overview = await getOverview(operator);
 		expect(overview.pending.reviewPool).toBe(1);
+		// Seven stored answers, but a timeout and its re-sample are one planned slot.
 		expect(overview.recent.cells.find((cell) => cell.platform === "deepseek")).toMatchObject({
-			total: 7,
+			total: 6,
 			valid: 5,
+			notValid: 1,
 			evaluated: 5,
 		});
+	});
+
+	it("gives headline figures per surface mode, with a mixed figure only when it is asked for", async () => {
+		const plain = await getOverview(operator);
+		expect(plain.insights.overview.crossMode).toBeNull();
+		expect(plain.insights.overview.bySurfaceMode.map((mode) => mode.surfaceMode)).toEqual(["MODEL_API"]);
+		const [api] = plain.insights.overview.bySurfaceMode;
+		expect(api?.mention).toMatchObject({ weighting: "EQUAL", cellsIncluded: 1, cellsWithoutData: 1 });
+		expect(api?.mention.value).toMatchObject({ status: "OK" });
+
+		const mixed = await getOverview(operator, { crossMode: true });
+		expect(mixed.insights.overview.crossMode?.mention.note).toContain("跨采样方式");
 	});
 });
 

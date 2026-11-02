@@ -19,6 +19,7 @@ import {
 import { geoObjectKey, getObjectStore, hostOf, normalizeUrl } from "@workspace/geo-evidence";
 import { db } from "@workspace/lib/db/db";
 import {
+	geoEvidenceUploads,
 	geoObservationCitations,
 	geoObservations,
 	geoPromptSetItems,
@@ -28,7 +29,7 @@ import {
 } from "@workspace/lib/db/schema";
 import { writeGeoAudit } from "@workspace/lib/geo/audit";
 import { parse as parseCsv } from "csv-parse/sync";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { enqueueGeoJob } from "@/lib/geo/enqueue";
 
@@ -54,6 +55,10 @@ export type ManualImportResult =
 			skippedRows: number[];
 	  }
 	| { ok: false; code: "EVIDENCE_REQUIRED" | "VALIDATION_ERROR"; message: string; errors: ManualRowError[] };
+
+type ImportOutcome =
+	| { rejected: ManualRowError[] }
+	| { created: { id: string; status: ManualImportRow["status"] }[]; skippedRows: number[] };
 
 function rejected(errors: ManualRowError[]): ManualImportResult {
 	const code = manualImportErrorCode(errors);
@@ -94,6 +99,11 @@ function parseContent(input: ManualImportInput): { rows: unknown[] } | { error: 
 
 function normalizeQuestion(text: string): string {
 	return text.replace(/\s+/g, " ").trim();
+}
+
+interface EvidencePointer {
+	uri: string;
+	uploaded: boolean;
 }
 
 interface ResolvedPrompt {
@@ -201,17 +211,17 @@ async function resolveTargets(
 async function resolveEvidence(
 	organizationId: string,
 	rows: ManualImportRow[],
-): Promise<{ resolved: Map<number, string>; errors: ManualRowError[] }> {
+): Promise<{ resolved: Map<number, EvidencePointer>; errors: ManualRowError[] }> {
 	const errors: ManualRowError[] = [];
-	const resolved = new Map<number, string>();
+	const resolved = new Map<number, EvidencePointer>();
 	const store = getObjectStore();
 	for (const row of rows) {
 		if (!isUploadedEvidenceRef(row.evidenceLocation)) {
-			resolved.set(row.row, row.evidenceLocation);
+			resolved.set(row.row, { uri: row.evidenceLocation, uploaded: false });
 			continue;
 		}
 		const key = geoObjectKey(organizationId, "evidence", row.evidenceLocation.slice("upload:".length));
-		if (await store.head(key)) resolved.set(row.row, key);
+		if (await store.head(key)) resolved.set(row.row, { uri: key, uploaded: true });
 		else
 			errors.push({
 				row: row.row,
@@ -263,10 +273,10 @@ export async function importManualObservations(
 			sampledAt: row.sampledAt,
 			responseText: row.responseText,
 		});
-		return { row, prompt, target, fingerprint, evidenceUri: evidence.resolved.get(row.row) as string };
+		return { row, prompt, target, fingerprint, evidence: evidence.resolved.get(row.row) as EvidencePointer };
 	});
 
-	const result = await db.transaction(async (tx) => {
+	const result = await db.transaction(async (tx): Promise<ImportOutcome> => {
 		// Nothing unique backs the fingerprint, so a double submit must queue behind the first import.
 		await tx.execute(
 			sql`select pg_advisory_xact_lock(hashtextextended(${`geo-manual-import:${principal.organizationId}`}, 0))`,
@@ -282,6 +292,36 @@ export async function importManualObservations(
 				),
 			);
 		const seen = new Set(existing.map((item) => item.fingerprint));
+		const fresh = prepared.filter((item) => !seen.has(item.fingerprint));
+		const uploadKeys = [...new Set(fresh.filter((item) => item.evidence.uploaded).map((item) => item.evidence.uri))];
+		const available =
+			uploadKeys.length === 0
+				? new Set<string>()
+				: new Set(
+						(
+							await tx
+								.select({ key: geoEvidenceUploads.objectKey })
+								.from(geoEvidenceUploads)
+								.where(
+									and(
+										eq(geoEvidenceUploads.organizationId, principal.organizationId),
+										eq(geoEvidenceUploads.uploadedBy, principal.actorId),
+										isNull(geoEvidenceUploads.importBatchId),
+										inArray(geoEvidenceUploads.objectKey, uploadKeys),
+									),
+								)
+						).map((row) => row.key),
+					);
+		const unbound: ManualRowError[] = fresh
+			.filter((item) => item.evidence.uploaded && !available.has(item.evidence.uri))
+			.map((item) => ({
+				row: item.row.row,
+				field: "evidenceLocation",
+				code: "EVIDENCE_REQUIRED",
+				message: "引用的证据文件不是由当前账号为本次导入上传的，或已被其他导入使用，请重新上传",
+			}));
+		if (unbound.length > 0) return { rejected: unbound };
+
 		const created: { id: string; status: ManualImportRow["status"] }[] = [];
 		const skippedRows: number[] = [];
 		for (const item of prepared) {
@@ -315,7 +355,7 @@ export async function importManualObservations(
 					providerVersion: "manual",
 					modelVersion: item.row.modelVersion,
 					sourceMethodVersion: MANUAL_SOURCE_METHOD_VERSION,
-					evidenceUri: item.evidenceUri,
+					evidenceUri: item.evidence.uri,
 					importBatchId,
 					importedBy: principal.actorId,
 				})
@@ -335,6 +375,19 @@ export async function importManualObservations(
 				);
 			}
 		}
+		if (uploadKeys.length > 0) {
+			await tx
+				.update(geoEvidenceUploads)
+				.set({ importBatchId })
+				.where(
+					and(
+						eq(geoEvidenceUploads.organizationId, principal.organizationId),
+						eq(geoEvidenceUploads.uploadedBy, principal.actorId),
+						isNull(geoEvidenceUploads.importBatchId),
+						inArray(geoEvidenceUploads.objectKey, uploadKeys),
+					),
+				);
+		}
 		await writeGeoAudit(tx, {
 			principal,
 			action: "observation.import",
@@ -349,6 +402,7 @@ export async function importManualObservations(
 		});
 		return { created, skippedRows };
 	});
+	if ("rejected" in result) return rejected(result.rejected);
 
 	for (const { id: observationId, status } of result.created) {
 		if (!isEvaluableObservation(status)) continue;
@@ -411,17 +465,24 @@ export async function uploadEvidenceFile(principal: GeoPrincipal, file: File): P
 	if (!type) throw new GeoError("VALIDATION_ERROR", "只支持 PNG、JPEG、WebP 截图或 PDF 文件");
 	const sha256 = createHash("sha256").update(bytes).digest("hex");
 	const name = `${sha256}.${type.ext}`;
-	await getObjectStore().put(geoObjectKey(principal.organizationId, "evidence", name), bytes, {
-		contentType: type.mime,
-	});
-	await db.transaction((tx) =>
-		writeGeoAudit(tx, {
+	const objectKey = geoObjectKey(principal.organizationId, "evidence", name);
+	await getObjectStore().put(objectKey, bytes, { contentType: type.mime });
+	await db.transaction(async (tx) => {
+		await tx.insert(geoEvidenceUploads).values({
+			organizationId: principal.organizationId,
+			objectKey,
+			sha256,
+			contentType: type.mime,
+			sizeBytes: bytes.length,
+			uploadedBy: principal.actorId,
+		});
+		await writeGeoAudit(tx, {
 			principal,
 			action: "evidence.upload",
 			entityType: "evidence_file",
 			entityId: sha256,
 			metadata: { size: bytes.length, contentType: type.mime },
-		}),
-	);
+		});
+	});
 	return { ref: `upload:${name}`, sha256, size: bytes.length, contentType: type.mime };
 }

@@ -31,7 +31,7 @@ class MisconfiguredAdapter implements GeoCaptureAdapter {
 
 export function createCaptureAdapter(
 	target: CaptureTarget,
-	options: { credential: string | null; timeoutMs: number; fetch?: FetchLike; now?: () => Date },
+	options: { credential: string | null; timeoutMs: number; fetch: FetchLike; now?: () => Date },
 ): GeoCaptureAdapter {
 	if (target.surfaceMode === "MANUAL_EVIDENCE") return new ManualEvidenceAdapter();
 	if (target.surfaceMode === "MODEL_API") {

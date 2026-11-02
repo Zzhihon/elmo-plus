@@ -1,7 +1,9 @@
 import {
+	type GeoObservationEvidencePointer,
 	type GeoRetentionCategory,
 	type GeoRetentionSettings,
 	geoSystemPrincipal,
+	observationEvidenceOwnership,
 	retentionCutoff,
 } from "@workspace/geo-domain";
 import { and, eq, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm";
@@ -10,11 +12,14 @@ import type { DbConnection } from "../db/db-connection";
 import {
 	geoAuditLogs,
 	geoEvaluations,
+	geoEvidenceUploads,
 	geoObservationCitations,
 	geoObservationClaims,
 	geoObservations,
+	geoOptimizationTasks,
 	geoSiteCrawlItems,
 	geoSitePageVersions,
+	geoTaskEvents,
 	geoTaskEvidence,
 } from "../db/schema-geo";
 import { writeGeoAudit } from "./audit";
@@ -103,6 +108,10 @@ async function summarize(
 // Sampling evidence
 // ---------------------------------------------------------------------------
 
+interface ExpiredObservation extends GeoObservationEvidencePointer {
+	id: string;
+}
+
 /**
  * Newest first, and never a row that a kept observation's retry chain still
  * points at: `retry_of_observation_id` cannot be cleared on an immutable row, so a
@@ -113,7 +122,7 @@ async function expiredObservationBatch(
 	organizationId: string,
 	cutoff: Date,
 	limit: number,
-): Promise<{ id: string; evidenceUri: string | null }[]> {
+): Promise<ExpiredObservation[]> {
 	const result = await tx.execute(sql`
 		with recursive kept_refs(id) as (
 			select retry_of_observation_id from geo_observations
@@ -122,14 +131,19 @@ async function expiredObservationBatch(
 			select o.retry_of_observation_id from geo_observations o join kept_refs k on o.id = k.id
 			where o.retry_of_observation_id is not null
 		)
-		select o.id, o.evidence_uri from geo_observations o
+		select o.id, o.run_id, o.import_batch_id, o.evidence_uri from geo_observations o
 		where o.organization_id = ${organizationId} and o.sampled_at < ${cutoff}
 			and not exists (select 1 from kept_refs k where k.id = o.id)
 		order by o.sampled_at desc, o.id desc
 		limit ${limit}
 	`);
-	const rows = (result.rows as { id: string; evidence_uri: string | null }[]).map((row) => ({
+	const rows = (
+		result.rows as { id: string; run_id: string | null; import_batch_id: string | null; evidence_uri: string | null }[]
+	).map((row) => ({
 		id: row.id,
+		organizationId,
+		runId: row.run_id,
+		importBatchId: row.import_batch_id,
 		evidenceUri: row.evidence_uri,
 	}));
 
@@ -169,6 +183,7 @@ async function purgeEvidence(
 				.delete(geoObservationClaims)
 				.where(inArray(geoObservationClaims.observationId, ids))
 				.returning({ id: geoObservationClaims.id });
+			await recordEvidenceExpiry(tx, organizationId, ids);
 			const taskEvidence = await tx
 				.delete(geoTaskEvidence)
 				.where(inArray(geoTaskEvidence.observationId, ids))
@@ -186,17 +201,8 @@ async function purgeEvidence(
 				.where(and(eq(geoObservations.organizationId, organizationId), inArray(geoObservations.id, ids)))
 				.returning({ id: geoObservations.id });
 
-			const candidateKeys = [...new Set(batch.map((row) => row.evidenceUri))].filter((key) =>
-				ownedKey(organizationId, key),
-			);
-			const stillUsed =
-				candidateKeys.length === 0
-					? []
-					: await tx
-							.select({ key: geoObservations.evidenceUri })
-							.from(geoObservations)
-							.where(inArray(geoObservations.evidenceUri, candidateKeys));
-			const used = new Set(stillUsed.map((row) => row.key));
+			const keys = await unusedEvidenceKeys(tx, organizationId, await ownedEvidenceKeys(tx, organizationId, batch));
+			const uploads = await releaseUploads(tx, organizationId, keys);
 
 			const rows = {
 				geo_observations: observations.length,
@@ -204,16 +210,158 @@ async function purgeEvidence(
 				geo_observation_citations: citations.length,
 				geo_observation_claims: claims.length,
 				geo_task_evidence: taskEvidence.length,
+				...(uploads > 0 ? { geo_evidence_uploads: uploads } : {}),
 			};
 			await summarize(tx, organizationId, "evidence", cutoff, rows, requestId);
-			return { rows, keys: candidateKeys.filter((key) => !used.has(key)), size: batch.length };
+			return { rows, keys, size: batch.length };
 		});
 		if (!committed) break;
 		add(result, committed.rows);
 		await deleteObjects(committed.keys, deps, result);
 		if (committed.size < limit) break;
 	}
+	await purgeAbandonedUploads(db, organizationId, cutoff, deps, requestId, result);
 	return result;
+}
+
+/** A work order keeps a record of the evidence it lost, so its history does not silently change. */
+async function recordEvidenceExpiry(
+	tx: DbConnection,
+	organizationId: string,
+	observationIds: readonly string[],
+): Promise<void> {
+	const linked = await tx
+		.select({
+			taskId: geoTaskEvidence.taskId,
+			state: geoOptimizationTasks.state,
+			count: sql<number>`count(*)::int`,
+		})
+		.from(geoTaskEvidence)
+		.innerJoin(geoOptimizationTasks, eq(geoOptimizationTasks.id, geoTaskEvidence.taskId))
+		.where(inArray(geoTaskEvidence.observationId, [...observationIds]))
+		.groupBy(geoTaskEvidence.taskId, geoOptimizationTasks.state);
+	if (linked.length === 0) return;
+	await tx.insert(geoTaskEvents).values(
+		linked.map((row) => ({
+			organizationId,
+			taskId: row.taskId,
+			fromState: row.state,
+			toState: row.state,
+			action: "EVIDENCE_EXPIRED",
+			actorId: "system:retention",
+			comment: `${row.count} 条关联的采样证据已超过保留期并被删除`,
+		})),
+	);
+}
+
+/** Only what these observations own: their own run's response, or a file uploaded for their own import. */
+async function ownedEvidenceKeys(
+	tx: DbConnection,
+	organizationId: string,
+	batch: readonly ExpiredObservation[],
+): Promise<string[]> {
+	const owned = new Set<string>();
+	const uploaded: { key: string; importBatchId: string }[] = [];
+	for (const row of batch) {
+		const ownership = observationEvidenceOwnership(row);
+		if (!row.evidenceUri || !ownership) continue;
+		if (ownership === "RUN") owned.add(row.evidenceUri);
+		else if (row.importBatchId) uploaded.push({ key: row.evidenceUri, importBatchId: row.importBatchId });
+	}
+	if (uploaded.length > 0) {
+		const records = await tx
+			.select({ key: geoEvidenceUploads.objectKey, importBatchId: geoEvidenceUploads.importBatchId })
+			.from(geoEvidenceUploads)
+			.where(
+				and(
+					eq(geoEvidenceUploads.organizationId, organizationId),
+					inArray(geoEvidenceUploads.objectKey, [...new Set(uploaded.map((row) => row.key))]),
+				),
+			);
+		const bound = new Set(records.map((record) => `${record.key}|${record.importBatchId}`));
+		for (const { key, importBatchId } of uploaded) if (bound.has(`${key}|${importBatchId}`)) owned.add(key);
+	}
+	return [...owned];
+}
+
+/**
+ * Files are stored by content hash, so a key can outlive one observation: another
+ * observation may still point at it, or someone may have just uploaded the same bytes.
+ */
+async function unusedEvidenceKeys(
+	tx: DbConnection,
+	organizationId: string,
+	keys: readonly string[],
+): Promise<string[]> {
+	if (keys.length === 0) return [];
+	const observations = await tx
+		.select({ key: geoObservations.evidenceUri })
+		.from(geoObservations)
+		.where(and(eq(geoObservations.organizationId, organizationId), inArray(geoObservations.evidenceUri, [...keys])));
+	const pending = await tx
+		.select({ key: geoEvidenceUploads.objectKey })
+		.from(geoEvidenceUploads)
+		.where(
+			and(
+				eq(geoEvidenceUploads.organizationId, organizationId),
+				isNull(geoEvidenceUploads.importBatchId),
+				inArray(geoEvidenceUploads.objectKey, [...keys]),
+			),
+		);
+	const used = new Set<string | null>([...observations, ...pending].map((row) => row.key));
+	return keys.filter((key) => !used.has(key));
+}
+
+async function releaseUploads(tx: DbConnection, organizationId: string, keys: readonly string[]): Promise<number> {
+	if (keys.length === 0) return 0;
+	const released = await tx
+		.delete(geoEvidenceUploads)
+		.where(and(eq(geoEvidenceUploads.organizationId, organizationId), inArray(geoEvidenceUploads.objectKey, [...keys])))
+		.returning({ id: geoEvidenceUploads.id });
+	return released.length;
+}
+
+/** A file uploaded but never imported has no observation to expire with, so it ages out on its own. */
+async function purgeAbandonedUploads(
+	db: Db,
+	organizationId: string,
+	cutoff: Date,
+	deps: GeoRetentionDeps,
+	requestId: string,
+	result: GeoRetentionCategoryResult,
+): Promise<void> {
+	const limit = deps.batchSize ?? DEFAULT_BATCH;
+	for (;;) {
+		const committed = await db.transaction(async (tx) => {
+			const abandoned = await tx
+				.select({ id: geoEvidenceUploads.id, key: geoEvidenceUploads.objectKey })
+				.from(geoEvidenceUploads)
+				.where(
+					and(
+						eq(geoEvidenceUploads.organizationId, organizationId),
+						isNull(geoEvidenceUploads.importBatchId),
+						lt(geoEvidenceUploads.createdAt, cutoff),
+					),
+				)
+				.limit(limit);
+			if (abandoned.length === 0) return null;
+			await tx.delete(geoEvidenceUploads).where(
+				inArray(
+					geoEvidenceUploads.id,
+					abandoned.map((row) => row.id),
+				),
+			);
+			const keys = await unusedEvidenceKeys(tx, organizationId, [...new Set(abandoned.map((row) => row.key))]);
+			const released = await releaseUploads(tx, organizationId, keys);
+			const rows = { geo_evidence_uploads: abandoned.length + released };
+			await summarize(tx, organizationId, "evidence", cutoff, rows, requestId);
+			return { rows, keys, size: abandoned.length };
+		});
+		if (!committed) return;
+		add(result, committed.rows);
+		await deleteObjects(committed.keys, deps, result);
+		if (committed.size < limit) return;
+	}
 }
 
 // ---------------------------------------------------------------------------

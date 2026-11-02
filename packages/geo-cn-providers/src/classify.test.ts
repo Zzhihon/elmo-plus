@@ -58,4 +58,16 @@ describe("failure classification", () => {
 		expect(failure.message).not.toContain("sk-");
 		expect(failure.message).toContain("invalid_api_key");
 	});
+
+	it("does not retry an endpoint the network layer refused, and never reports what it resolved to", () => {
+		for (const code of ["ADDRESS_BLOCKED", "URL_REFUSED", "REDIRECT_BLOCKED", "TOO_MANY_REDIRECTS"]) {
+			const failure = classifyThrown(Object.assign(new Error("db.internal 解析到 10.0.0.5"), { code }));
+			expect(failure).toMatchObject({ kind: "CONFIG", code: "ENDPOINT_BLOCKED", retryable: false });
+			expect(failure.message).not.toContain("10.0.0.5");
+		}
+		expect(classifyThrown(Object.assign(new Error("x"), { code: "DNS_FAILED" }))).toMatchObject({
+			kind: "NETWORK",
+			retryable: true,
+		});
+	});
 });

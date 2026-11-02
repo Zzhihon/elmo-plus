@@ -252,6 +252,7 @@ function checkResponseText(value: unknown): FieldCheck<string> {
 }
 
 const SCHEME = /^[a-z][a-z0-9+.-]+:/i;
+const OBJECT_KEY_SHAPE = /^\/*geo\//i;
 
 function checkEvidenceLocation(value: unknown): FieldCheck<string> {
 	const location = optionalText(value, MAX_EVIDENCE_LOCATION + 1);
@@ -262,6 +263,12 @@ function checkEvidenceLocation(value: unknown): FieldCheck<string> {
 		return {
 			value: null,
 			errors: [malformed("evidenceLocation", "证据位置只能是 http(s) 链接、已上传的证据文件或存档说明")],
+		};
+	}
+	if (OBJECT_KEY_SHAPE.test(location)) {
+		return {
+			value: null,
+			errors: [malformed("evidenceLocation", "证据位置不能是存储对象路径，请通过“上传截图”上传证据文件")],
 		};
 	}
 	return { value: location, errors: [] };

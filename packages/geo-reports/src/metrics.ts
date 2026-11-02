@@ -17,7 +17,7 @@ import {
 } from "@workspace/geo-domain";
 
 /** Bump when a formula below changes: reports record which definitions produced them. */
-export const GEO_METRIC_VERSION = "geo-metrics-v1";
+export const GEO_METRIC_VERSION = "geo-metrics-v2";
 
 /** A rate over fewer evaluated valid samples than this is flagged as low-sample. */
 export const GEO_LOW_SAMPLE_THRESHOLD = 20;
@@ -379,18 +379,20 @@ export function computeCellMetrics(input: {
 	).length;
 
 	const competitors = input.competitors.map((competitor) => {
-		let competitorMentioned = 0;
-		let competitorRecommended = 0;
-		for (const sample of evaluated) {
+		// An evaluation holds one entry per competitor its dictionary version had, mentioned or
+		// not, so a missing entry means the answer was never checked for this one: not a "no".
+		const assessed = evaluated.flatMap((sample) => {
 			const hit = sample.evaluation.competitorHits.find((entry) => entry.entityId === competitor.entityId);
-			if (hit?.mentioned) competitorMentioned++;
-			if (hit?.recommendation === "RECOMMENDED") competitorRecommended++;
-		}
+			return hit ? [hit] : [];
+		});
+		const emptyReason = "该竞品加入词典前的样本未按其评估，暂无可比样本";
 		return {
 			entityId: competitor.entityId,
 			name: competitor.name,
-			mentioned: metricValue(competitorMentioned, evaluated.length),
-			recommended: metricValue(competitorRecommended, evaluated.length),
+			mentioned: metricValue(assessed.filter((hit) => hit.mentioned).length, assessed.length, { emptyReason }),
+			recommended: metricValue(assessed.filter((hit) => hit.recommendation === "RECOMMENDED").length, assessed.length, {
+				emptyReason,
+			}),
 		};
 	});
 
@@ -433,8 +435,10 @@ export function groupByCell<T extends { platform: GeoPlatform; surfaceMode: GeoS
 	return groups;
 }
 
+export type SummaryRate = { status: "OK"; rate: number; lowSample: boolean } | { status: "NO_DATA"; reason: string };
+
 export interface EqualWeightSummary {
-	value: MetricValue;
+	value: SummaryRate;
 	cellsIncluded: number;
 	cellsWithoutData: number;
 	weighting: "EQUAL";
@@ -442,41 +446,35 @@ export interface EqualWeightSummary {
 }
 
 /**
- * The only cross-platform number: the plain mean of each cell's own rate, labelled as
- * an equal-weight internal summary. Cells without data are left out, not averaged in as 0.
+ * The plain mean of each cell's own rate, labelled as an equal-weight internal summary.
+ * It has no numerator or denominator of its own, since summed counts would not give
+ * this rate. Cells without data are left out, not averaged in as 0.
  */
 export function equalWeightSummary(
 	cells: readonly CellMetrics[],
 	pick: (cell: CellMetrics) => MetricValue,
+	note: string,
 ): EqualWeightSummary {
-	const rates = cells.map(pick).filter((value) => value.status === "OK");
-	const cellsWithoutData = cells.length - rates.length;
-	const note = "跨平台、跨采样方式等权平均，仅用于内部概览；各平台的口径与样本量见分平台数据。";
-	if (rates.length === 0) {
-		return {
-			value: { status: "NO_DATA", numerator: 0, denominator: 0, reason: "所有平台均无有效样本" },
-			cellsIncluded: 0,
-			cellsWithoutData,
-			weighting: "EQUAL",
-			note,
-		};
-	}
-	const mean = rates.reduce((sum, value) => sum + (value.status === "OK" ? value.rate : 0), 0) / rates.length;
-	const numerator = rates.reduce((sum, value) => sum + value.numerator, 0);
-	const denominator = rates.reduce((sum, value) => sum + value.denominator, 0);
-	return {
-		value: {
-			status: "OK",
-			numerator,
-			denominator,
-			rate: mean,
-			lowSample: rates.some((value) => value.status === "OK" && value.lowSample),
-		},
+	const rates = cells.map(pick).flatMap((value) => (value.status === "OK" ? [value] : []));
+	const summary = {
 		cellsIncluded: rates.length,
-		cellsWithoutData,
-		weighting: "EQUAL",
+		cellsWithoutData: cells.length - rates.length,
+		weighting: "EQUAL" as const,
 		note,
 	};
+	if (rates.length === 0) return { ...summary, value: { status: "NO_DATA", reason: "没有有效样本" } };
+	return {
+		...summary,
+		value: {
+			status: "OK",
+			rate: rates.reduce((sum, value) => sum + value.rate, 0) / rates.length,
+			lowSample: rates.some((value) => value.lowSample),
+		},
+	};
+}
+
+export function formatSummaryRate(value: SummaryRate): string {
+	return value.status === "OK" ? `${(value.rate * 100).toFixed(1)}%` : "数据不足";
 }
 
 export function formatMetric(value: MetricValue, options: { notProvided?: boolean } = {}): string {

@@ -12,6 +12,15 @@ const complete = {
 };
 
 describe("manual evidence import", () => {
+	it.each(["geo/org-1/knowledge/abc.pdf", "/geo/org-1/reports/r1/report.pdf", "GEO/org-1/site/s1/raw/a.html"])(
+		"refuses %s: a storage path is not a note, and a file has to be uploaded",
+		(evidenceLocation) => {
+			const { rows, errors } = validateManualRows([{ ...complete, evidenceLocation }], now);
+			expect(rows).toEqual([]);
+			expect(errors.map((error) => error.field)).toEqual(["evidenceLocation"]);
+		},
+	);
+
 	it("accepts a complete row and reads a zoneless time as China Standard Time", () => {
 		const { rows, errors } = validateManualRows([complete], now);
 		expect(errors).toEqual([]);

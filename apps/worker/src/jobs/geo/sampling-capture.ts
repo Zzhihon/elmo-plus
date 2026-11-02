@@ -22,6 +22,7 @@ import {
 } from "@workspace/geo-cn-providers";
 import { isTerminalRunStatus } from "@workspace/geo-domain";
 import { geoObjectKey, getObjectStore } from "@workspace/geo-evidence";
+import { guardedFetch } from "@workspace/geo-site-ingestion";
 import { db } from "@workspace/lib/db/db";
 import { geoSamplingAttempts, geoSamplingRuns, geoSamplingTargets } from "@workspace/lib/db/schema";
 import { raiseGeoAlert, resolveGeoAlert } from "@workspace/lib/geo/alerts";
@@ -98,19 +99,21 @@ async function acquireSlot(ctx: RunContext, probe: boolean, now: Date): Promise<
 			.from(a)
 			.where(and(eq(a.targetId, target.id), gt(a.startedAt, at(30 * 86_400_000))));
 
+		const nextCostEstimate = estimatedCostPerRun(target.surfaceMode, target.config);
 		const quota = checkQuota(
 			{
 				maxConcurrency: probe ? 1 : target.maxConcurrency,
 				perMinuteQuota: target.perMinuteQuota,
 				perDayQuota: target.perDayQuota,
 				costBudget: target.costBudget === null ? null : Number(target.costBudget),
-				nextCostEstimate: estimatedCostPerRun(target.surfaceMode, target.config),
+				nextCostEstimate,
 			},
 			{
 				running: usage.running,
 				lastMinute: usage.lastMinute,
 				lastDay: usage.lastDay,
-				costLast30Days: Number(usage.cost),
+				// An attempt in flight has no recorded cost yet; without its estimate the budget could be overrun.
+				costLast30Days: Number(usage.cost) + usage.running * nextCostEstimate,
 			},
 		);
 		if (!quota.ok)
@@ -208,7 +211,11 @@ async function storeRawEvidence(ctx: RunContext, attemptNo: number, result: Capt
 
 async function runCapture(ctx: RunContext, policy: RetryPolicy, fetchImpl?: FetchLike): Promise<CaptureResult> {
 	const credential = await loadTargetCredential(ctx.target.credentialRef);
-	const adapter = createCaptureAdapter(ctx.target, { credential, timeoutMs: policy.timeoutMs, fetch: fetchImpl });
+	const adapter = createCaptureAdapter(ctx.target, {
+		credential,
+		timeoutMs: policy.timeoutMs,
+		fetch: fetchImpl ?? guardedFetch,
+	});
 	try {
 		return await adapter.capture({
 			promptId: ctx.run.promptId,
