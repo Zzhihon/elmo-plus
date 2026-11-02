@@ -141,11 +141,7 @@ function CandidatesCard({
 			<CardHeader className="pb-2 text-sm font-medium">结构化候选与待审核事实</CardHeader>
 			<CardContent className="flex flex-col gap-3 text-sm">
 				<p className="text-muted-foreground">
-					官网内容只是“来源已采集、事实待审核”。爬虫不会修改已批准的事实；新值会作为待审核候选与旧值并列，请在{" "}
-					<Link to="/app/org/$org/geo/knowledge" params={{ org }} className="underline">
-						企业知识库
-					</Link>{" "}
-					中审核。
+					官网内容只是“来源已采集、事实待审核”。爬虫不会修改已批准的事实；新值会作为待审核候选与旧值并列，请逐条进入企业知识库审核。
 				</p>
 				{entities.length === 0 ? (
 					<span className="text-muted-foreground">该页面没有映射出实体。</span>
@@ -171,6 +167,13 @@ function CandidatesCard({
 						<span className="text-xs text-muted-foreground">
 							{GEO_ASSERTION_STATUS_LABELS[assertion.status as GeoAssertionStatus]} · {assertion.fieldPath}
 						</span>
+						<Link
+							to="/app/org/$org/geo/knowledge/$id"
+							params={{ org, id: assertion.id }}
+							className="text-xs whitespace-nowrap underline"
+						>
+							在知识库中审核
+						</Link>
 					</div>
 				))}
 			</CardContent>

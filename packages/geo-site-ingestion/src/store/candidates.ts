@@ -16,6 +16,7 @@ import {
 	geoSiteSources,
 } from "@workspace/lib/db/schema";
 import { writeGeoAudit } from "@workspace/lib/geo/audit";
+import { detectAssertionConflicts } from "@workspace/lib/geo/knowledge";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type { AssertionCandidate, EntityCandidate, FieldLocator } from "../contracts";
 import { siteContentNormalizer, siteKnowledgeMapper } from "../knowledge";
@@ -287,7 +288,11 @@ export async function normalizeSiteVersion(
 		assertions: siteKnowledgeMapper.map(entity, effectiveProfile),
 	}));
 	const principal = geoSystemPrincipal(input.organizationId, "site-normalize", `normalize-${row.version.id}`);
-	return deps.db.transaction((tx) =>
-		upsertSiteCandidates(tx, principal, { pageVersionId: row.version.id, candidates }),
-	);
+	return deps.db.transaction(async (tx) => {
+		const result = await upsertSiteCandidates(tx, principal, { pageVersionId: row.version.id, candidates });
+		await detectAssertionConflicts(tx, principal, {
+			assertionIds: result.assertions.filter((assertion) => assertion.created).map((assertion) => assertion.id),
+		});
+		return result;
+	});
 }
