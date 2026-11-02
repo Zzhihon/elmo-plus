@@ -18,6 +18,7 @@ import {
 	GEO_BREAKER_STATES,
 	GEO_CLAIM_VERDICTS,
 	GEO_CONFLICT_STATUSES,
+	GEO_CONTENT_ACTIONS,
 	GEO_CONTENT_APPROVAL_STATES,
 	GEO_CONTENT_KINDS,
 	GEO_CRAWL_ITEM_OUTCOMES,
@@ -75,6 +76,7 @@ import {
 	type GeoBreakerState,
 	type GeoClaimVerdict,
 	type GeoConflictStatus,
+	type GeoContentAction,
 	type GeoContentApprovalState,
 	type GeoContentKind,
 	type GeoCrawlItemOutcome,
@@ -1052,7 +1054,13 @@ export const geoKnowledgeAssets = pgTable(
 		validUntil: at("valid_until"),
 		publicationScope: text("publication_scope").$type<GeoPublicationScope>().notNull().default("INTERNAL"),
 		confidentiality: text("confidentiality").$type<GeoPublicationScope>().notNull().default("INTERNAL"),
+		/** The uploader's file name, for display only; the object key is the content hash. */
+		fileName: text("file_name"),
+		description: text("description"),
 		uploadedBy: text("uploaded_by").notNull(),
+		reviewNote: text("review_note"),
+		reviewedBy: text("reviewed_by"),
+		reviewedAt: at("reviewed_at"),
 		createdAt: createdAt(),
 		updatedAt: updatedAt(),
 	},
@@ -1086,6 +1094,10 @@ export const geoKnowledgeAssertions = pgTable(
 		searchTokens: text("search_tokens").notNull().default(""),
 		/** Null when a crawl extracted it; otherwise who entered it, who may not then approve it. */
 		authorId: text("author_id"),
+		/** A reviewer's hold on a doubtful fact: no approval and no draft while set. */
+		frozenAt: at("frozen_at"),
+		frozenBy: text("frozen_by"),
+		frozenReason: text("frozen_reason"),
 		createdAt: createdAt(),
 		updatedAt: updatedAt(),
 	},
@@ -1344,6 +1356,31 @@ export const geoContentVersions = pgTable(
 		createdAt: createdAt(),
 	},
 	(table) => [uniqueIndex("geo_content_versions_item_version_idx").on(table.itemId, table.version)],
+).enableRLS();
+
+/** Append-only: every submission, review decision and revision of a content item. */
+export const geoContentReviews = pgTable(
+	"geo_content_reviews",
+	{
+		id: pk(),
+		organizationId: org(),
+		itemId: uuid("item_id")
+			.notNull()
+			.references(() => geoContentItems.id),
+		version: integer("version").notNull(),
+		action: text("action").$type<GeoContentAction>().notNull(),
+		fromState: text("from_state").$type<GeoContentApprovalState>().notNull(),
+		toState: text("to_state").$type<GeoContentApprovalState>().notNull(),
+		actorId: text("actor_id").notNull(),
+		comment: text("comment"),
+		createdAt: createdAt(),
+	},
+	(table) => [
+		index("geo_content_reviews_item_created_idx").on(table.itemId, table.createdAt),
+		oneOf("geo_content_reviews_action_check", table.action, GEO_CONTENT_ACTIONS),
+		oneOf("geo_content_reviews_from_state_check", table.fromState, GEO_CONTENT_APPROVAL_STATES),
+		oneOf("geo_content_reviews_to_state_check", table.toState, GEO_CONTENT_APPROVAL_STATES),
+	],
 ).enableRLS();
 
 export const geoPublicationRecords = pgTable(
