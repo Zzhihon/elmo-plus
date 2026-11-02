@@ -20,6 +20,11 @@ COPY packages/lib/package.json ./packages/lib/
 COPY packages/deployment/package.json ./packages/deployment/
 COPY packages/og/package.json ./packages/og/
 COPY packages/api-spec/package.json ./packages/api-spec/
+COPY packages/geo-domain/package.json ./packages/geo-domain/
+COPY packages/geo-evidence/package.json ./packages/geo-evidence/
+COPY packages/geo-site-ingestion/package.json ./packages/geo-site-ingestion/
+COPY packages/geo-cn-providers/package.json ./packages/geo-cn-providers/
+COPY packages/geo-reports/package.json ./packages/geo-reports/
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
@@ -37,6 +42,11 @@ COPY --from=deps /app/packages/config/node_modules ./packages/config/node_module
 COPY --from=deps /app/packages/lib/node_modules ./packages/lib/node_modules
 COPY --from=deps /app/packages/deployment/node_modules ./packages/deployment/node_modules
 COPY --from=deps /app/packages/og/node_modules ./packages/og/node_modules
+COPY --from=deps /app/packages/geo-domain/node_modules ./packages/geo-domain/node_modules
+COPY --from=deps /app/packages/geo-evidence/node_modules ./packages/geo-evidence/node_modules
+COPY --from=deps /app/packages/geo-site-ingestion/node_modules ./packages/geo-site-ingestion/node_modules
+COPY --from=deps /app/packages/geo-cn-providers/node_modules ./packages/geo-cn-providers/node_modules
+COPY --from=deps /app/packages/geo-reports/node_modules ./packages/geo-reports/node_modules
 
 # Copy source code
 COPY . .
@@ -64,6 +74,11 @@ FROM base AS web
 WORKDIR /app
 
 ENV NODE_ENV=production
+
+# GEO reports render Chinese PDFs; without a CJK font the job fails instead of
+# producing unreadable output.
+RUN apk add --no-cache font-noto-cjk
+ENV GEO_PDF_FONT_PATH=/usr/share/fonts/noto/NotoSansCJK-Regular.ttc
 
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs
@@ -98,6 +113,11 @@ FROM base AS worker
 WORKDIR /app
 
 ENV NODE_ENV=production
+
+# GEO reports render Chinese PDFs; without a CJK font the job fails instead of
+# producing unreadable output.
+RUN apk add --no-cache font-noto-cjk
+ENV GEO_PDF_FONT_PATH=/usr/share/fonts/noto/NotoSansCJK-Regular.ttc
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 worker
