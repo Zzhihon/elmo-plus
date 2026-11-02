@@ -2,7 +2,7 @@ import type { BrandWithPrompts } from "@workspace/lib/db/schema";
 import type { OrganizationSummary } from "@/lib/organizations/types";
 import { routeSubjects } from "@/lib/route-subject";
 
-export type ShellSection = "brand" | "organization" | "admin" | "account";
+export type ShellSection = "brand" | "organization" | "geo" | "admin" | "account";
 
 declare module "@tanstack/react-router" {
 	interface StaticDataRouteOption {

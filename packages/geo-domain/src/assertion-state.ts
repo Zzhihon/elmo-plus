@@ -1,5 +1,5 @@
 import type { GeoAssertionStatus, GeoPublicationScope, GeoRiskLevel } from "./enums";
-import { fail, type GeoTransitionActor, type GeoTransitionResult, hasText, actorHolds } from "./transition";
+import { actorHolds, fail, type GeoTransitionActor, type GeoTransitionResult, hasText } from "./transition";
 
 export const GEO_ASSERTION_ACTIONS = [
 	"PARSE",

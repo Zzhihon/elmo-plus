@@ -1,6 +1,6 @@
 import type { GeoPromptSetStatus, GeoPromptStatus } from "./enums";
 import type { GeoPermission } from "./permissions";
-import { fail, type GeoTransitionActor, type GeoTransitionResult, hasText, actorHolds } from "./transition";
+import { actorHolds, fail, type GeoTransitionActor, type GeoTransitionResult, hasText } from "./transition";
 
 export const GEO_PROMPT_ACTIONS = ["SUBMIT", "APPROVE", "REJECT", "FREEZE", "REVISE"] as const;
 export type GeoPromptAction = (typeof GEO_PROMPT_ACTIONS)[number];

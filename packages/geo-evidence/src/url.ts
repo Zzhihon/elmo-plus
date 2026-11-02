@@ -17,8 +17,8 @@ const UNRESERVED_ENCODED = /%(2[DE]|5F|7E|3[0-9]|[46][1-9A-F]|[57][0-9A])/gi;
 
 function normalizePercentEncoding(value: string): string {
 	return value
-		.replace(/%[0-9a-f]{2}/gi, (escape) => escape.toUpperCase())
-		.replace(UNRESERVED_ENCODED, (escape) => String.fromCharCode(Number.parseInt(escape.slice(1), 16)));
+		.replace(/%[0-9a-f]{2}/gi, (encoded) => encoded.toUpperCase())
+		.replace(UNRESERVED_ENCODED, (encoded) => String.fromCharCode(Number.parseInt(encoded.slice(1), 16)));
 }
 
 function isTracking(name: string): boolean {

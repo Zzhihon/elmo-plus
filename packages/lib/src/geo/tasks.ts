@@ -159,6 +159,50 @@ async function findOpenTaskForSource(
 	return row;
 }
 
+async function recordNewTask(
+	tx: DbConnection,
+	principal: GeoPrincipal,
+	task: GeoOptimizationTask,
+	input: CreateOptimizationTaskInput,
+): Promise<void> {
+	const { organizationId } = principal;
+	const evidence = evidenceRows(organizationId, task.id, input);
+	if (evidence.length > 0) await tx.insert(geoTaskEvidence).values(evidence);
+
+	const findingIds = input.evidence?.findingIds ?? [];
+	if (findingIds.length > 0) {
+		await tx
+			.update(geoSiteAuditFindings)
+			.set({ status: "TASKED", taskId: task.id })
+			.where(
+				and(
+					eq(geoSiteAuditFindings.organizationId, organizationId),
+					inArray(geoSiteAuditFindings.id, findingIds),
+					eq(geoSiteAuditFindings.status, "OPEN"),
+				),
+			);
+	}
+
+	await tx.insert(geoTaskEvents).values({
+		organizationId,
+		taskId: task.id,
+		fromState: null,
+		toState: INITIAL_STATE,
+		action: "CREATE",
+		actorId: principal.actorId,
+		comment: input.comment ?? null,
+	});
+
+	await writeGeoAudit(tx, {
+		principal,
+		action: "task.create",
+		entityType: "geo_optimization_task",
+		entityId: task.id,
+		after: task,
+		metadata: { sourceKind: input.sourceKind, sourceRef: task.sourceRef, evidenceCount: evidence.length },
+	});
+}
+
 /**
  * Every task starts here, whichever slice raised it, so each one begins with its
  * evidence, a first event and an audit row. A principal that is `system` skips the
@@ -206,41 +250,6 @@ export async function createOptimizationTask(
 		return { task: existing, created: false };
 	}
 
-	const evidence = evidenceRows(organizationId, task.id, input);
-	if (evidence.length > 0) await tx.insert(geoTaskEvidence).values(evidence);
-
-	const findingIds = input.evidence?.findingIds ?? [];
-	if (findingIds.length > 0) {
-		await tx
-			.update(geoSiteAuditFindings)
-			.set({ status: "TASKED", taskId: task.id })
-			.where(
-				and(
-					eq(geoSiteAuditFindings.organizationId, organizationId),
-					inArray(geoSiteAuditFindings.id, findingIds),
-					eq(geoSiteAuditFindings.status, "OPEN"),
-				),
-			);
-	}
-
-	await tx.insert(geoTaskEvents).values({
-		organizationId,
-		taskId: task.id,
-		fromState: null,
-		toState: INITIAL_STATE,
-		action: "CREATE",
-		actorId: principal.actorId,
-		comment: input.comment ?? null,
-	});
-
-	await writeGeoAudit(tx, {
-		principal,
-		action: "task.create",
-		entityType: "geo_optimization_task",
-		entityId: task.id,
-		after: task,
-		metadata: { sourceKind: input.sourceKind, sourceRef, evidenceCount: evidence.length },
-	});
-
+	await recordNewTask(tx, principal, task, input);
 	return { task, created: true };
 }

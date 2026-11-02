@@ -1,13 +1,8 @@
 {
 	"compilerOptions": {
 		"target": "ES2022",
-		"lib": [
-			"esnext",
-			"dom"
-		],
-		"types": [
-			"node"
-		],
+		"lib": ["esnext", "dom"],
+		"types": ["node"],
 		"allowJs": true,
 		"skipLibCheck": true,
 		"strict": true,
@@ -19,10 +14,6 @@
 		"isolatedModules": true,
 		"incremental": true
 	},
-	"include": [
-		"src/**/*.ts"
-	],
-	"exclude": [
-		"node_modules"
-	]
+	"include": ["src/**/*.ts"],
+	"exclude": ["node_modules"]
 }

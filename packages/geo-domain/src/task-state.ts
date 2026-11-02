@@ -1,6 +1,6 @@
 import type { GeoRiskLevel, GeoTaskKind, GeoTaskState } from "./enums";
 import type { GeoPermission } from "./permissions";
-import { fail, type GeoTransitionActor, type GeoTransitionResult, hasText, actorHolds } from "./transition";
+import { actorHolds, fail, type GeoTransitionActor, type GeoTransitionResult, hasText } from "./transition";
 
 export const GEO_TASK_ACTIONS = [
 	"TRIAGE",
@@ -114,6 +114,20 @@ function isAuthorOrOwner(task: GeoTaskFacts, actor: GeoTransitionActor): boolean
 
 const APPROVALS: readonly GeoTaskAction[] = ["APPROVE_TECH", "APPROVE_MARKETING"];
 
+function publishProblem(
+	task: GeoTaskFacts,
+	payload: GeoTaskTransitionPayload,
+): GeoTransitionResult<GeoTaskState> | null {
+	if (!hasText(payload.publishedUrl)) return fail("EVIDENCE_REQUIRED", "发布必须登记实际发布 URL");
+	if (payload.proof === undefined || payload.proof === null) {
+		return fail("EVIDENCE_REQUIRED", "发布必须录入可验证凭证");
+	}
+	if (task.kind === "SITE_REVISION" && task.riskLevel === "HIGH" && !hasText(payload.rollbackPlan)) {
+		return fail("EVIDENCE_REQUIRED", "高风险官网改造必须提供上线审批、备份与回滚计划");
+	}
+	return null;
+}
+
 function payloadProblem(input: GeoTaskTransitionInput): GeoTransitionResult<GeoTaskState> | null {
 	const { action, task, payload = {} } = input;
 	switch (action) {
@@ -125,14 +139,7 @@ function payloadProblem(input: GeoTaskTransitionInput): GeoTransitionResult<GeoT
 		case "REOPEN":
 			return hasText(payload.comment) ? null : fail("VALIDATION_ERROR", "此操作必须填写意见");
 		case "PUBLISH":
-			if (!hasText(payload.publishedUrl)) return fail("EVIDENCE_REQUIRED", "发布必须登记实际发布 URL");
-			if (payload.proof === undefined || payload.proof === null) {
-				return fail("EVIDENCE_REQUIRED", "发布必须录入可验证凭证");
-			}
-			if (task.kind === "SITE_REVISION" && task.riskLevel === "HIGH" && !hasText(payload.rollbackPlan)) {
-				return fail("EVIDENCE_REQUIRED", "高风险官网改造必须提供上线审批、备份与回滚计划");
-			}
-			return null;
+			return publishProblem(task, payload);
 		case "VERIFY":
 			return hasText(payload.beforeBatchId) && hasText(payload.afterBatchId)
 				? null

@@ -2,7 +2,13 @@ import { mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { assertSafeObjectKey, createObjectStoreFromEnv, FsObjectStore, geoObjectKey, S3ObjectStore } from "./object-store";
+import {
+	assertSafeObjectKey,
+	createObjectStoreFromEnv,
+	FsObjectStore,
+	geoObjectKey,
+	S3ObjectStore,
+} from "./object-store";
 
 describe("object keys", () => {
 	it("rejects traversal and anything else that is not a plain relative path", () => {

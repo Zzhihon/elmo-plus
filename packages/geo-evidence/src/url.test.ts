@@ -27,14 +27,22 @@ describe("normalizeUrl", () => {
 	});
 
 	it("collapses dot segments and decodes only what never needed encoding", () => {
-		expect(normalizeUrl("http://www.example-electric.test/a/%2e%2e/b/./c")).toBe("http://www.example-electric.test/b/c");
+		expect(normalizeUrl("http://www.example-electric.test/a/%2e%2e/b/./c")).toBe(
+			"http://www.example-electric.test/b/c",
+		);
 		expect(normalizeUrl("http://www.example-electric.test/%7Euser/%e5%bc%80%2F")).toBe(
 			"http://www.example-electric.test/~user/%E5%BC%80%2F",
 		);
 	});
 
 	it("refuses anything that is not a web URL", () => {
-		for (const input of ["javascript:alert(1)", "file:///etc/passwd", "ftp://example-electric.test/", "not a url", ""]) {
+		for (const input of [
+			"javascript:alert(1)",
+			"file:///etc/passwd",
+			"ftp://example-electric.test/",
+			"not a url",
+			"",
+		]) {
 			expect(normalizeUrl(input), input).toBeNull();
 		}
 	});

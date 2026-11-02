@@ -3,21 +3,29 @@ import {
 	IconBuilding,
 	IconBuildings,
 	IconChartBar,
+	IconChecklist,
 	IconCode,
 	IconCpu,
 	IconCreditCard,
 	IconDashboard,
+	IconDatabaseSearch,
+	IconFileAnalytics,
+	IconFileSearch,
 	IconKey,
 	IconLink,
 	IconListDetails,
 	IconMessages,
 	IconMoodSmile,
 	IconPlugConnected,
+	IconRadar,
 	IconSchool,
+	IconSettings,
+	IconShieldCheck,
 	IconSitemap,
 	IconSpeakerphone,
 	IconTarget,
 	IconUsers,
+	IconWorld,
 } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
 import type { DeploymentMode, FeaturesConfig } from "@workspace/config/types";
@@ -131,11 +139,67 @@ function brandGroups(organization: OrganizationSummary, brand: BrandWithPrompts)
 	return groups;
 }
 
+const GEO_GROUP_LABEL = "GEO 工作台";
+
+function geoGroup(organization: OrganizationSummary): NavGroup {
+	const params = orgLinkParams(organization);
+	return {
+		label: GEO_GROUP_LABEL,
+		items: [
+			{ title: "总览", link: { to: "/app/org/$org/geo/overview", params }, icon: IconDashboard },
+			{ title: "品牌与竞品", link: { to: "/app/org/$org/geo/brands", params }, icon: IconBuildings },
+			{ title: "问法库", link: { to: "/app/org/$org/geo/questions", params }, icon: IconListDetails },
+			{ title: "采样中心", link: { to: "/app/org/$org/geo/sampling", params }, icon: IconRadar },
+			{ title: "证据库", link: { to: "/app/org/$org/geo/observations", params }, icon: IconFileSearch },
+			{ title: "诊断分析", link: { to: "/app/org/$org/geo/insights", params }, icon: IconChartBar },
+			{ title: "可信知识", link: { to: "/app/org/$org/geo/knowledge", params }, icon: IconShieldCheck },
+			{ title: "优化工单", link: { to: "/app/org/$org/geo/tasks", params }, icon: IconChecklist },
+			{ title: "报告", link: { to: "/app/org/$org/geo/reports", params }, icon: IconFileAnalytics },
+			{ title: "官网来源", link: { to: "/app/org/$org/geo/sources", params }, icon: IconWorld },
+			{ title: "官网页面", link: { to: "/app/org/$org/geo/site-pages", params }, icon: IconDatabaseSearch },
+			{ title: "站点审计", link: { to: "/app/org/$org/geo/site-audit", params }, icon: IconSitemap },
+			{ title: "工作台设置", link: { to: "/app/org/$org/geo/settings", params }, icon: IconSettings },
+		],
+	};
+}
+
+/** The way in from the rest of the app, without the whole workspace's navigation beside a brand's. */
+function geoEntryGroup(organization: OrganizationSummary): NavGroup {
+	return {
+		label: GEO_GROUP_LABEL,
+		items: [
+			{
+				title: "进入工作台",
+				link: { to: "/app/org/$org/geo/overview", params: orgLinkParams(organization) },
+				icon: IconRadar,
+			},
+		],
+	};
+}
+
+function geoGroups(section: ShellScope["section"], organization: OrganizationSummary): NavGroup[] {
+	if (section === "geo") return [geoGroup(organization)];
+	if (section === "brand" || section === "organization") return [geoEntryGroup(organization)];
+	return [];
+}
+
+function sectionGroups(
+	{ section, organization, brand }: ShellScope,
+	features?: FeaturesConfig,
+	mode?: DeploymentMode,
+): NavGroup[] {
+	if (section === "brand" && organization && brand) return brandGroups(organization, brand);
+	if (section === "organization" && organization) return organizationGroups(organization, features, mode);
+	return [];
+}
+
 export function AppSidebar({ section, organization, brand }: AppSidebarProps) {
 	const { setOpenMobile } = useSidebar();
 	const { isAdmin, hasReportAccess } = useViewer();
 	const features = useDeploymentFeatures();
-	const mode = useLooseRouteContext().clientConfig?.mode;
+	const { clientConfig } = useLooseRouteContext();
+	const mode = clientConfig?.mode;
+	const geoEnabled = clientConfig?.geoWorkspaceEnabled ?? false;
 	// Reports are disabled entirely in cloud; hide the nav entry there.
 	const reportsEnabled = features?.reportGeneration ?? true;
 
@@ -144,8 +208,8 @@ export function AppSidebar({ section, organization, brand }: AppSidebarProps) {
 	const adminItems = section === "account" ? [] : adminNavItems({ isAdmin, hasReportAccess, reportsEnabled });
 
 	const groups: NavGroup[] = [
-		...(section === "brand" && organization && brand ? brandGroups(organization, brand) : []),
-		...(section === "organization" && organization ? organizationGroups(organization, features, mode) : []),
+		...sectionGroups({ section, organization, brand }, features, mode),
+		...(organization && geoEnabled ? geoGroups(section, organization) : []),
 		...(section === "admin" && adminItems.length > 0 ? [{ label: "Admin", items: adminItems }] : []),
 	];
 	const brandmark = (
