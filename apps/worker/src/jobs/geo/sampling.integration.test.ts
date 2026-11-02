@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -13,6 +14,7 @@ import {
 	geoBuyerRoles,
 	geoDictionaryVersions,
 	geoEvaluations,
+	geoGeneratedReports,
 	geoObservationCitations,
 	geoObservations,
 	geoPromptSetItems,
@@ -31,6 +33,7 @@ import { encryptSecret, getKeyring } from "@workspace/lib/secrets";
 import { and, eq, inArray } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { evaluateObservation } from "./evaluation-run";
+import { generateReport } from "./reports-generate";
 import { applyGeoBootstrapTargets } from "./sampling-bootstrap";
 import { processCaptureJob } from "./sampling-capture";
 import { dispatchBatch } from "./sampling-dispatch";
@@ -510,5 +513,73 @@ describe("sampling a frozen set through a model API", () => {
 			]);
 			expect(evaluation.dictionaryVersionId).not.toBeNull();
 		}
+	});
+	describe("the report on those answers", () => {
+		const LOCAL_CJK_FONTS = [
+			"/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+			"/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+			"/System/Library/Fonts/STHeiti Medium.ttc#STHeitiSC-Medium",
+		];
+		const localFont = LOCAL_CJK_FONTS.find((candidate) => existsSync(candidate.split("#")[0] as string));
+
+		async function queueReport() {
+			const [batch] = await db.select().from(geoSamplingBatches).where(eq(geoSamplingBatches.id, batchId));
+			const [report] = await db
+				.insert(geoGeneratedReports)
+				.values({
+					organizationId,
+					periodStart: new Date(Date.now() - 7 * 86_400_000),
+					periodEnd: new Date(Date.now() + 3_600_000),
+					metricVersion: "pending",
+					filters: {
+						kind: "ADHOC",
+						periodLabel: "测试周期",
+						promptSetId: batch?.promptSetId ?? null,
+						notes: null,
+						nextPlan: null,
+					},
+					title: "GEO 报告 · 测试周期",
+					generatedBy: "user-op",
+				})
+				.returning();
+			return report;
+		}
+
+		it("fails plainly, with no files, when no Chinese font is available", async () => {
+			vi.stubEnv("GEO_PDF_FONT_PATH", path.join(objectRoot, "missing-font.ttc"));
+			try {
+				const report = await queueReport();
+				expect(await generateReport(organizationId, report.id)).toEqual({ status: "FAILED", reason: "font" });
+				const [row] = await db.select().from(geoGeneratedReports).where(eq(geoGeneratedReports.id, report.id));
+				expect(row).toMatchObject({ status: "FAILED", pdfObjectKey: null, csvObjectKey: null, snapshot: null });
+				expect(row?.errorSummary).toMatch(/GEO_PDF_FONT_PATH/);
+			} finally {
+				vi.unstubAllEnvs();
+			}
+		});
+
+		it.runIf(localFont)("stores a snapshot, CSV and PDF built from the evaluated answers", async () => {
+			vi.stubEnv("GEO_PDF_FONT_PATH", localFont as string);
+			try {
+				const report = await queueReport();
+				expect(await generateReport(organizationId, report.id)).toEqual({ status: "SUCCEEDED" });
+				expect(await generateReport(organizationId, report.id)).toEqual({ status: "SKIPPED", reason: "not-pending" });
+				const [row] = await db.select().from(geoGeneratedReports).where(eq(geoGeneratedReports.id, report.id));
+				expect(row?.status).toBe("SUCCEEDED");
+				const snapshot = row?.snapshot as {
+					insights: { totals: { valid: number; evaluated: number; planned: number } };
+					evaluationRefs: unknown[];
+				};
+				expect(snapshot.insights.totals).toMatchObject({ planned: 10, valid: 5, evaluated: 5 });
+				expect(snapshot.evaluationRefs).toHaveLength(5);
+				const csv = await readFile(path.join(objectRoot, row?.csvObjectKey as string), "utf8");
+				expect(csv.charCodeAt(0)).toBe(0xfeff);
+				expect(csv).toContain("DeepSeek");
+				const pdf = await readFile(path.join(objectRoot, row?.pdfObjectKey as string));
+				expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
+			} finally {
+				vi.unstubAllEnvs();
+			}
+		});
 	});
 });
