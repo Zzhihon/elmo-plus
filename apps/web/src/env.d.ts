@@ -98,6 +98,7 @@ declare global {
 			readonly GEO_CLAMD_HOST?: string;
 			readonly GEO_CLAMD_PORT?: string;
 			readonly GEO_BOOTSTRAP_PATH?: string;
+			readonly GEO_SAMPLING_PLATFORMS?: string;
 		}
 	}
 }
