@@ -525,6 +525,13 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		requiredBy: "optional",
 		description: "Path to a deployment-specific GEO bootstrap file, kept outside the repository.",
 	},
+	{
+		name: "GEO_SAMPLING_PLATFORMS",
+		scope: "server",
+		requiredBy: "optional",
+		description:
+			"Comma-separated GEO platforms (doubao, deepseek, yuanbao, qwen) the worker may sample automatically, or none. Unset allows all; manual evidence import is unaffected.",
+	},
 ];
 
 /**

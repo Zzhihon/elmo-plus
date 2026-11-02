@@ -75,7 +75,8 @@
     "GEO_PDF_FONT_PATH",
     "GEO_CLAMD_HOST",
     "GEO_CLAMD_PORT",
-    "GEO_BOOTSTRAP_PATH"
+    "GEO_BOOTSTRAP_PATH",
+    "GEO_SAMPLING_PLATFORMS"
   ],
   "tasks": {
     "//#format": {
