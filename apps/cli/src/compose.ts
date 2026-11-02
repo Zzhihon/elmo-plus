@@ -27,6 +27,7 @@ export function buildComposeYaml(options: {
 	dockerDir?: string;
 	port: number;
 	version: string;
+	geo?: GeoComposeOptions;
 }): string {
 	const services: string[] = [];
 	const volumes = new Set<string>();
@@ -37,6 +38,10 @@ export function buildComposeYaml(options: {
 	const dependencyConditions: Record<string, string> = {
 		postgres: "service_healthy",
 		"db-migrate": "service_completed_successfully",
+		[GEO_OBJECT_STORE_SERVICE]: "service_healthy",
+		[GEO_OBJECT_STORE_INIT_SERVICE]: "service_completed_successfully",
+		// Signatures download on first start; uploads fail closed until clamd answers.
+		[GEO_CLAMAV_SERVICE]: "service_started",
 	};
 
 	const dockerfilePath = options.dockerDir
@@ -56,6 +61,19 @@ export function buildComposeYaml(options: {
 		dependsOnWeb.push("db-migrate");
 		dependsOnWorker.push("db-migrate");
 		volumes.add("postgres_data");
+	}
+
+	if (options.geo) {
+		services.push(buildGeoObjectStoreService(), buildGeoObjectStoreInitService());
+		volumes.add("geo_objects");
+		const geoDependencies = [GEO_OBJECT_STORE_INIT_SERVICE];
+		if (options.geo.clamav) {
+			services.push(buildClamavService());
+			volumes.add("clamav_db");
+			geoDependencies.push(GEO_CLAMAV_SERVICE);
+		}
+		dependsOnWeb.push(...geoDependencies);
+		dependsOnWorker.push(...geoDependencies);
 	}
 
 	services.push(
@@ -91,6 +109,102 @@ export function buildComposeYaml(options: {
 	}
 
 	return `${lines.join("\n")}\n`;
+}
+
+export interface GeoComposeOptions {
+	clamav: boolean;
+}
+
+// Pinned on purpose: `elmo upgrade` re-pins only elmohq images, so these move
+// only when someone edits them here.
+export const GEO_OBJECT_STORE_IMAGE = "chrislusf/seaweedfs:3.80";
+export const GEO_OBJECT_STORE_INIT_IMAGE = "rclone/rclone:1.68.2";
+export const GEO_CLAMAV_IMAGE = "clamav/clamav:1.4.1";
+
+export const GEO_OBJECT_STORE_SERVICE = "geo-objectstore";
+export const GEO_OBJECT_STORE_INIT_SERVICE = "geo-objectstore-init";
+export const GEO_CLAMAV_SERVICE = "clamav";
+export const GEO_BUCKET = "elmo-geo";
+
+/** The GEO variables `elmo init --geo` writes; the keys are fresh for every install. */
+export function buildGeoEnv(options: GeoComposeOptions, randomSecret: () => string): Record<string, string> {
+	const env: Record<string, string> = {
+		GEO_WORKSPACE_ENABLED: "1",
+		GEO_OBJECT_STORE_URL: `http://${GEO_OBJECT_STORE_SERVICE}:8333/${GEO_BUCKET}`,
+		GEO_OBJECT_STORE_ACCESS_KEY: randomSecret(),
+		GEO_OBJECT_STORE_SECRET_KEY: randomSecret(),
+		GEO_OBJECT_STORE_REGION: "us-east-1",
+	};
+	if (options.clamav) {
+		env.GEO_CLAMD_HOST = GEO_CLAMAV_SERVICE;
+		env.GEO_CLAMD_PORT = "3310";
+	}
+	return env;
+}
+
+/**
+ * The S3 identity is written from the environment at start, so the keys live
+ * only in `.env`. With no anonymous identity configured every bucket is private.
+ */
+function buildGeoObjectStoreService(): string {
+	return [
+		`${GEO_OBJECT_STORE_SERVICE}:`,
+		`  image: ${GEO_OBJECT_STORE_IMAGE}`,
+		"  env_file:",
+		"    - path: .env",
+		"      required: true",
+		'  entrypoint: ["/bin/sh", "-c"]',
+		"  command:",
+		"    - >-",
+		`      printf '{"identities":[{"name":"elmo","credentials":[{"accessKey":"%s","secretKey":"%s"}],"actions":["Admin","Read","List","Tagging","Write"]}]}'`,
+		'      "$$GEO_OBJECT_STORE_ACCESS_KEY" "$$GEO_OBJECT_STORE_SECRET_KEY" > /tmp/s3.json',
+		"      && exec weed server -dir=/data -s3 -s3.port=8333 -s3.config=/tmp/s3.json",
+		"  volumes:",
+		"    - geo_objects:/data",
+		"  healthcheck:",
+		'    test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9333/cluster/status || exit 1"]',
+		"    interval: 10s",
+		"    timeout: 5s",
+		"    retries: 6",
+		"    start_period: 20s",
+	].join("\n");
+}
+
+/** Creating an existing bucket is a no-op for rclone, so this is safe on every start. */
+function buildGeoObjectStoreInitService(): string {
+	return [
+		`${GEO_OBJECT_STORE_INIT_SERVICE}:`,
+		`  image: ${GEO_OBJECT_STORE_INIT_IMAGE}`,
+		"  env_file:",
+		"    - path: .env",
+		"      required: true",
+		'  entrypoint: ["/bin/sh", "-c"]',
+		"  command:",
+		"    - >-",
+		"      RCLONE_CONFIG_GEO_TYPE=s3 RCLONE_CONFIG_GEO_PROVIDER=SeaweedFS",
+		`      RCLONE_CONFIG_GEO_ENDPOINT=http://${GEO_OBJECT_STORE_SERVICE}:8333`,
+		'      RCLONE_CONFIG_GEO_ACCESS_KEY_ID="$$GEO_OBJECT_STORE_ACCESS_KEY"',
+		'      RCLONE_CONFIG_GEO_SECRET_ACCESS_KEY="$$GEO_OBJECT_STORE_SECRET_KEY"',
+		`      rclone mkdir geo:${GEO_BUCKET}`,
+		"  depends_on:",
+		`    ${GEO_OBJECT_STORE_SERVICE}:`,
+		"      condition: service_healthy",
+	].join("\n");
+}
+
+function buildClamavService(): string {
+	return [
+		`${GEO_CLAMAV_SERVICE}:`,
+		`  image: ${GEO_CLAMAV_IMAGE}`,
+		"  volumes:",
+		"    - clamav_db:/var/lib/clamav",
+		"  healthcheck:",
+		'    test: ["CMD", "clamdcheck.sh"]',
+		"    interval: 60s",
+		"    timeout: 10s",
+		"    retries: 3",
+		"    start_period: 300s",
+	].join("\n");
 }
 
 function buildPostgresService(): string {

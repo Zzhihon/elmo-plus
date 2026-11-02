@@ -7,7 +7,7 @@ import { cloudPricingUrl } from "@workspace/config/referrals";
 import { formatScrapeTarget } from "@workspace/config/scrape-targets";
 import { parse as parseDotenv } from "dotenv";
 import pc from "picocolors";
-import { buildComposeYaml } from "../compose.js";
+import { buildComposeYaml, buildGeoEnv, type GeoComposeOptions } from "../compose.js";
 import { CONFIG_HOME, type EnvMap, ensureDir, fileExists, type PostgresMode, writeConfigFiles } from "../config.js";
 import { assertDockerRunning, runDockerCompose, waitForHealthy } from "../docker.js";
 import { collectJudgeKey } from "../judge.js";
@@ -27,6 +27,7 @@ import { assertNotCancelled, generateSecret, link, log, printBanner } from "../u
 
 export type InitOptions = {
 	dev?: boolean;
+	geo?: boolean;
 	dir?: string;
 	dockerDir?: string;
 };
@@ -110,6 +111,21 @@ async function resolveDockerLocation(
 		process.exit(1);
 	}
 	return { dockerDir, repoRoot: path.resolve(dockerDir, "..") };
+}
+
+async function configureGeo(options: InitOptions, env: EnvMap): Promise<GeoComposeOptions | undefined> {
+	if (!options.geo) return undefined;
+	const clamav = await p.confirm({
+		message: "Run ClamAV to scan GEO uploads? (about 1 GiB of RAM; without it uploads are marked unscanned)",
+		initialValue: true,
+	});
+	assertNotCancelled(clamav);
+	const geo = { clamav };
+	Object.assign(
+		env,
+		buildGeoEnv(geo, () => generateSecret(24, "hex")),
+	);
+	return geo;
 }
 
 function validatePort(value: string | undefined): string | undefined {
@@ -437,6 +453,8 @@ export async function runInit(options: InitOptions, version: string): Promise<vo
 	env.APP_URL = publicUrl?.origin ?? `http://localhost:${port}`;
 	env.VITE_APP_URL = env.APP_URL;
 
+	const geo = await configureGeo(options, env);
+
 	// ── Write config ─────────────────────────────────────────────────────
 	const composeYaml = buildComposeYaml({
 		dev: Boolean(options.dev),
@@ -445,6 +463,7 @@ export async function runInit(options: InitOptions, version: string): Promise<vo
 		dockerDir,
 		port,
 		version,
+		geo,
 	});
 
 	await ensureDir(configDir);
