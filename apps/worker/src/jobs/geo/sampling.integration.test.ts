@@ -32,11 +32,11 @@ import { runGeoBootstrap } from "@workspace/lib/geo/bootstrap";
 import { encryptSecret, getKeyring } from "@workspace/lib/secrets";
 import { and, eq, inArray } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { evaluateObservation } from "./evaluation-run";
-import { generateReport } from "./reports-generate";
+import { evaluateObservation, sweepUnevaluated } from "./evaluation-run";
+import { generateReport, reportTick } from "./reports-generate";
 import { applyGeoBootstrapTargets } from "./sampling-bootstrap";
 import { processCaptureJob } from "./sampling-capture";
-import { dispatchBatch } from "./sampling-dispatch";
+import { dispatchBatch, sweepSampling } from "./sampling-dispatch";
 
 const sent = vi.hoisted(() => {
 	process.env.ELMO_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
@@ -514,6 +514,37 @@ describe("sampling a frozen set through a model API", () => {
 			expect(evaluation.dictionaryVersionId).not.toBeNull();
 		}
 	});
+	it("leaves nothing for the recovery sweeps once every run and answer is settled", async () => {
+		sent.splice(0);
+		const later = new Date(Date.now() + 60 * 60_000);
+		await sweepSampling(later);
+		await sweepUnevaluated();
+		const queued = sent.splice(0);
+		const ours = queued.filter((job) => job.data.organizationId === organizationId);
+		expect(ours).toEqual([]);
+	});
+
+	it("creates the monthly report once per organization that sampled in the month", async () => {
+		// Two hours and a minute after the month of these samples ends, China time.
+		const sampledMonth = new Date(Date.now() + 8 * 3_600_000);
+		const nextMonth = Date.UTC(sampledMonth.getUTCFullYear(), sampledMonth.getUTCMonth() + 1, 1) - 8 * 3_600_000;
+		const tick = new Date(nextMonth + 2 * 3_600_000 + 60_000);
+		const first = await reportTick(tick);
+		expect(first.created).toBeGreaterThanOrEqual(1);
+		const reports = await db
+			.select()
+			.from(geoGeneratedReports)
+			.where(
+				and(
+					eq(geoGeneratedReports.organizationId, organizationId),
+					eq(geoGeneratedReports.generatedBy, "system:monthly-report"),
+				),
+			);
+		expect(reports).toHaveLength(1);
+		expect((await reportTick(tick)).created).toBe(0);
+		sent.splice(0);
+	});
+
 	describe("the report on those answers", () => {
 		const LOCAL_CJK_FONTS = [
 			"/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
