@@ -61,6 +61,7 @@ import {
 	type GeoDictionaryEntityChange,
 	type GeoDictionarySnapshot,
 	type GeoPromptLabels,
+	type GeoPromptRevisionSnapshot,
 	type GeoBrandKind,
 	type GeoBreakerState,
 	type GeoClaimVerdict,
@@ -330,7 +331,7 @@ export const geoPromptRevisions = pgTable(
 			.notNull()
 			.references(() => geoPrompts.id),
 		revision: integer("revision").notNull(),
-		snapshot: jsonb("snapshot").notNull(),
+		snapshot: jsonb("snapshot").$type<GeoPromptRevisionSnapshot>().notNull(),
 		editorId: text("editor_id").notNull(),
 		createdAt: createdAt(),
 	},

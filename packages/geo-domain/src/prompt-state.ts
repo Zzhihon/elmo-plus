@@ -16,6 +16,11 @@ export interface GeoPromptLabels {
 	ownerId: string | null;
 }
 
+export interface GeoPromptRevisionSnapshot extends GeoPromptLabels {
+	question: string;
+	sourceNote: string | null;
+}
+
 /** Null when the prompt carries every label a business review needs. */
 export function promptLabelsProblem(labels: {
 	buyerRoleId: string | null;

@@ -241,7 +241,7 @@ export async function applyGeoBootstrapPrompts(
 				organizationId,
 				promptId: row.id,
 				revision: 1,
-				snapshot: { question: row.question, ...labels },
+				snapshot: { question: row.question, sourceNote: row.sourceNote, ...labels },
 				editorId: principal.actorId,
 			});
 			await writeGeoAudit(tx, {
