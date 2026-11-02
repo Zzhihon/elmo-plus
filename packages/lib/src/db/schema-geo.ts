@@ -473,6 +473,8 @@ export const geoSamplingBatches = pgTable(
 			.notNull()
 			.references(() => geoPromptSets.id),
 		repeatCount: integer("repeat_count").notNull().default(3),
+		/** Extended questions are sampled only when someone asks for them; the batch records that they did. */
+		includesExtended: boolean("includes_extended").notNull().default(false),
 		status: text("status").$type<GeoBatchStatus>().notNull().default("PLANNED"),
 		plannedCount: integer("planned_count").notNull().default(0),
 		validCount: integer("valid_count").notNull().default(0),
@@ -607,6 +609,31 @@ export const geoObservations = pgTable(
 		oneOf("geo_observations_platform_check", table.platform, GEO_PLATFORMS),
 		oneOf("geo_observations_surface_mode_check", table.surfaceMode, GEO_SURFACE_MODES),
 		oneOf("geo_observations_status_check", table.status, GEO_OBSERVATION_STATUSES),
+	],
+).enableRLS();
+
+/**
+ * Who uploaded which evidence file, and which import used it. A manual import may only
+ * point at an upload of its own, so an observation can never be aimed at another object.
+ */
+export const geoEvidenceUploads = pgTable(
+	"geo_evidence_uploads",
+	{
+		id: pk(),
+		organizationId: org(),
+		objectKey: text("object_key").notNull(),
+		sha256: text("sha256").notNull(),
+		contentType: text("content_type").notNull(),
+		sizeBytes: integer("size_bytes").notNull(),
+		uploadedBy: text("uploaded_by").notNull(),
+		importBatchId: uuid("import_batch_id"),
+		createdAt: createdAt(),
+	},
+	(table) => [
+		index("geo_evidence_uploads_org_key_idx").on(table.organizationId, table.objectKey),
+		index("geo_evidence_uploads_org_pending_idx")
+			.on(table.organizationId, table.createdAt)
+			.where(sql`import_batch_id is null`),
 	],
 ).enableRLS();
 
@@ -1501,6 +1528,10 @@ export const geoGeneratedReports = pgTable(
 		snapshot: jsonb("snapshot"),
 		pdfObjectKey: text("pdf_object_key"),
 		csvObjectKey: text("csv_object_key"),
+		/** Why a finished report has no PDF; its snapshot and CSV are still good. */
+		pdfUnavailableReason: text("pdf_unavailable_reason"),
+		/** Identifies the worker that holds a RUNNING report, so one that was given up on cannot write late. */
+		claimToken: text("claim_token"),
 		status: text("status").$type<GeoReportStatus>().notNull().default("QUEUED"),
 		errorSummary: text("error_summary"),
 		generatedBy: text("generated_by").notNull(),
