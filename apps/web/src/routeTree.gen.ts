@@ -67,14 +67,20 @@ import { Route as AuthedAppOrgOrgIndexRouteImport } from './routes/_authed/app/o
 import { Route as AuthedAppOrgOrgGeoRouteImport } from './routes/_authed/app/org/$org/geo'
 import { Route as AuthedAppOrgOrgNewRouteImport } from './routes/_authed/app/org/$org/new'
 import { Route as AuthedAppOrgOrgSettingsRouteImport } from './routes/_authed/app/org/$org/settings'
+import { Route as ApiGeoOrgKnowledgeAssetsIndexRouteImport } from './routes/api/geo/$org/knowledge-assets/index'
 import { Route as ApiPlausibleJsScriptIndexRouteImport } from './routes/api/plausible/js/script/index'
 import { Route as ApiV1BrandsBrandIdAnalyticsRouteImport } from './routes/api/v1/brands/$brandId/analytics'
 import { Route as ApiV1BrandsBrandIdOpportunitiesRouteImport } from './routes/api/v1/brands/$brandId/opportunities'
 import { Route as ApiV1BrandsBrandIdPromptPerformanceRouteImport } from './routes/api/v1/brands/$brandId/prompt-performance'
 import { Route as ApiV1BrandsBrandIdQueryFanoutRouteImport } from './routes/api/v1/brands/$brandId/query-fanout'
 import { Route as ApiV1GeoBrandsIndexRouteImport } from './routes/api/v1/geo/brands/index'
+import { Route as ApiV1GeoDraftsIndexRouteImport } from './routes/api/v1/geo/drafts/index'
+import { Route as ApiV1GeoKnowledgeAssetsIndexRouteImport } from './routes/api/v1/geo/knowledge-assets/index'
+import { Route as ApiV1GeoKnowledgeClaimsIndexRouteImport } from './routes/api/v1/geo/knowledge-claims/index'
 import { Route as ApiV1GeoManualObservationsEvidenceRouteImport } from './routes/api/v1/geo/manual-observations/evidence'
 import { Route as ApiV1GeoManualObservationsImportRouteImport } from './routes/api/v1/geo/manual-observations/import'
+import { Route as ApiV1GeoMetricsIndexRouteImport } from './routes/api/v1/geo/metrics/index'
+import { Route as ApiV1GeoMetricsBatchComparisonRouteImport } from './routes/api/v1/geo/metrics/batch-comparison'
 import { Route as ApiV1GeoObservationsIndexRouteImport } from './routes/api/v1/geo/observations/index'
 import { Route as ApiV1GeoObservationsIdRouteImport } from './routes/api/v1/geo/observations/$id'
 import { Route as ApiV1GeoPromptSetsIndexRouteImport } from './routes/api/v1/geo/prompt-sets/index'
@@ -82,6 +88,7 @@ import { Route as ApiV1GeoPromptsIndexRouteImport } from './routes/api/v1/geo/pr
 import { Route as ApiV1GeoPromptsBuyerRolesRouteImport } from './routes/api/v1/geo/prompts/buyer-roles'
 import { Route as ApiV1GeoPromptsExportRouteImport } from './routes/api/v1/geo/prompts/export'
 import { Route as ApiV1GeoPromptsImportRouteImport } from './routes/api/v1/geo/prompts/import'
+import { Route as ApiV1GeoReportsIndexRouteImport } from './routes/api/v1/geo/reports/index'
 import { Route as ApiV1GeoSamplingRunsIndexRouteImport } from './routes/api/v1/geo/sampling-runs/index'
 import { Route as ApiV1GeoSamplingRunsIdRouteImport } from './routes/api/v1/geo/sampling-runs/$id'
 import { Route as ApiV1GeoSitePagesIndexRouteImport } from './routes/api/v1/geo/site-pages/index'
@@ -108,19 +115,43 @@ import { Route as AuthedAppOrgOrgSettingsBrandsRouteImport } from './routes/_aut
 import { Route as AuthedAppOrgOrgSettingsMcpRouteImport } from './routes/_authed/app/org/$org/settings/mcp'
 import { Route as AuthedAppOrgOrgSettingsMembersRouteImport } from './routes/_authed/app/org/$org/settings/members'
 import { Route as AuthedAppOrgOrgSettingsSkillRouteImport } from './routes/_authed/app/org/$org/settings/skill'
+import { Route as ApiGeoOrgDraftsDraftIdExportRouteImport } from './routes/api/geo/$org/drafts/$draftId/export'
+import { Route as ApiGeoOrgKnowledgeAssetsAssetIdFileRouteImport } from './routes/api/geo/$org/knowledge-assets/$assetId/file'
 import { Route as ApiGeoOrgObservationsIdEvidenceRouteImport } from './routes/api/geo/$org/observations/$id/evidence'
 import { Route as ApiGeoOrgObservationsIdExportRouteImport } from './routes/api/geo/$org/observations/$id/export'
+import { Route as ApiGeoOrgReportsIdFormatRouteImport } from './routes/api/geo/$org/reports/$id/$format'
 import { Route as ApiV1BrandsBrandIdCitationsDomainsRouteImport } from './routes/api/v1/brands/$brandId/citations/domains'
 import { Route as ApiV1BrandsBrandIdCitationsUrlsRouteImport } from './routes/api/v1/brands/$brandId/citations/urls'
 import { Route as ApiV1BrandsBrandIdTagsIndexRouteImport } from './routes/api/v1/brands/$brandId/tags/index'
 import { Route as ApiV1GeoBrandsIdIndexRouteImport } from './routes/api/v1/geo/brands/$id/index'
 import { Route as ApiV1GeoBrandsDictionaryVersionsIndexRouteImport } from './routes/api/v1/geo/brands/dictionary-versions/index'
 import { Route as ApiV1GeoBrandsDictionaryVersionsVersionRouteImport } from './routes/api/v1/geo/brands/dictionary-versions/$version'
+import { Route as ApiV1GeoDraftsDraftIdIndexRouteImport } from './routes/api/v1/geo/drafts/$draftId/index'
+import { Route as ApiV1GeoDraftsDraftIdExportRouteImport } from './routes/api/v1/geo/drafts/$draftId/export'
+import { Route as ApiV1GeoDraftsDraftIdPublicationsRouteImport } from './routes/api/v1/geo/drafts/$draftId/publications'
+import { Route as ApiV1GeoDraftsDraftIdTransitionsRouteImport } from './routes/api/v1/geo/drafts/$draftId/transitions'
+import { Route as ApiV1GeoDraftsDraftIdVersionsRouteImport } from './routes/api/v1/geo/drafts/$draftId/versions'
+import { Route as ApiV1GeoKnowledgeAssetsAssetIdIndexRouteImport } from './routes/api/v1/geo/knowledge-assets/$assetId/index'
+import { Route as ApiV1GeoKnowledgeAssetsAssetIdClaimsRouteImport } from './routes/api/v1/geo/knowledge-assets/$assetId/claims'
+import { Route as ApiV1GeoKnowledgeAssetsAssetIdFileRouteImport } from './routes/api/v1/geo/knowledge-assets/$assetId/file'
+import { Route as ApiV1GeoKnowledgeAssetsAssetIdReviewsRouteImport } from './routes/api/v1/geo/knowledge-assets/$assetId/reviews'
+import { Route as ApiV1GeoKnowledgeClaimsClaimIdIndexRouteImport } from './routes/api/v1/geo/knowledge-claims/$claimId/index'
+import { Route as ApiV1GeoKnowledgeClaimsClaimIdReviewsRouteImport } from './routes/api/v1/geo/knowledge-claims/$claimId/reviews'
+import { Route as ApiV1GeoKnowledgeClaimsClaimIdSourcesRouteImport } from './routes/api/v1/geo/knowledge-claims/$claimId/sources'
+import { Route as ApiV1GeoKnowledgeClaimsConflictsIndexRouteImport } from './routes/api/v1/geo/knowledge-claims/conflicts/index'
+import { Route as ApiV1GeoObservationsIdReviewsRouteImport } from './routes/api/v1/geo/observations/$id/reviews'
 import { Route as ApiV1GeoPromptSetsIdIndexRouteImport } from './routes/api/v1/geo/prompt-sets/$id/index'
 import { Route as ApiV1GeoPromptSetsIdFreezeRouteImport } from './routes/api/v1/geo/prompt-sets/$id/freeze'
 import { Route as ApiV1GeoPromptSetsIdVersionsRouteImport } from './routes/api/v1/geo/prompt-sets/$id/versions'
 import { Route as ApiV1GeoPromptsIdIndexRouteImport } from './routes/api/v1/geo/prompts/$id/index'
 import { Route as ApiV1GeoPromptsIdTransitionsRouteImport } from './routes/api/v1/geo/prompts/$id/transitions'
+import { Route as ApiV1GeoReportsIdIndexRouteImport } from './routes/api/v1/geo/reports/$id/index'
+import { Route as ApiV1GeoReportsIdExportRouteImport } from './routes/api/v1/geo/reports/$id/export'
+import { Route as ApiV1GeoReportsIdReviewsRouteImport } from './routes/api/v1/geo/reports/$id/reviews'
+import { Route as ApiV1GeoSiteAuditFindingsIndexRouteImport } from './routes/api/v1/geo/site-audit/findings/index'
+import { Route as ApiV1GeoSiteAuditFindingsTasksRouteImport } from './routes/api/v1/geo/site-audit/findings/tasks'
+import { Route as ApiV1GeoSiteAuditRunsIndexRouteImport } from './routes/api/v1/geo/site-audit/runs/index'
+import { Route as ApiV1GeoSiteAuditRunsRunIdRouteImport } from './routes/api/v1/geo/site-audit/runs/$runId'
 import { Route as ApiV1GeoSitePagesPageIdIndexRouteImport } from './routes/api/v1/geo/site-pages/$pageId/index'
 import { Route as ApiV1GeoSitePagesPageIdReparseRouteImport } from './routes/api/v1/geo/site-pages/$pageId/reparse'
 import { Route as ApiV1GeoSitesSiteIdIndexRouteImport } from './routes/api/v1/geo/sites/$siteId/index'
@@ -149,6 +180,8 @@ import { Route as AuthedAppOrgOrgGeoTasksIndexRouteImport } from './routes/_auth
 import { Route as AuthedAppOrgOrgGeoTasksIdRouteImport } from './routes/_authed/app/org/$org/geo/tasks/$id'
 import { Route as ApiV1GeoBrandsIdProductsIndexRouteImport } from './routes/api/v1/geo/brands/$id/products/index'
 import { Route as ApiV1GeoBrandsIdProductsProductIdRouteImport } from './routes/api/v1/geo/brands/$id/products/$productId'
+import { Route as ApiV1GeoKnowledgeClaimsConflictsConflictIdResolutionRouteImport } from './routes/api/v1/geo/knowledge-claims/conflicts/$conflictId/resolution'
+import { Route as ApiV1GeoSiteAuditFindingsFindingIdIndexRouteImport } from './routes/api/v1/geo/site-audit/findings/$findingId/index'
 import { Route as ApiV1GeoSitePagesPageIdVersionsIndexRouteImport } from './routes/api/v1/geo/site-pages/$pageId/versions/index'
 import { Route as ApiV1GeoSitesSiteIdCrawlRunsIndexRouteImport } from './routes/api/v1/geo/sites/$siteId/crawl-runs/index'
 import { Route as AuthedAppOrgOrgBrandBrandPromptsIndexRouteImport } from './routes/_authed/app/org/$org/brand/$brand/prompts/index'
@@ -159,6 +192,8 @@ import { Route as AuthedAppOrgOrgBrandBrandSettingsBrandRouteImport } from './ro
 import { Route as AuthedAppOrgOrgBrandBrandSettingsCompetitorsRouteImport } from './routes/_authed/app/org/$org/brand/$brand/settings/competitors'
 import { Route as AuthedAppOrgOrgBrandBrandSettingsLlmsRouteImport } from './routes/_authed/app/org/$org/brand/$brand/settings/llms'
 import { Route as AuthedAppOrgOrgBrandBrandSettingsPromptsRouteImport } from './routes/_authed/app/org/$org/brand/$brand/settings/prompts'
+import { Route as AuthedAppOrgOrgGeoKnowledgeAssetsAssetIdRouteImport } from './routes/_authed/app/org/$org/geo/knowledge/assets/$assetId'
+import { Route as AuthedAppOrgOrgGeoKnowledgeDraftsDraftIdRouteImport } from './routes/_authed/app/org/$org/geo/knowledge/drafts/$draftId'
 import { Route as ApiV1GeoSitePagesPageIdVersionsVersionIdSnapshotRouteImport } from './routes/api/v1/geo/site-pages/$pageId/versions/$versionId/snapshot'
 import { Route as ApiV1GeoSitesSiteIdCrawlRunsRunIdIndexRouteImport } from './routes/api/v1/geo/sites/$siteId/crawl-runs/$runId/index'
 import { Route as ApiV1GeoSitesSiteIdCrawlRunsRunIdPauseRouteImport } from './routes/api/v1/geo/sites/$siteId/crawl-runs/$runId/pause'
@@ -463,6 +498,12 @@ const AuthedAppOrgOrgSettingsRoute = AuthedAppOrgOrgSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthedAppOrgOrgRoute,
 } as any)
+const ApiGeoOrgKnowledgeAssetsIndexRoute =
+  ApiGeoOrgKnowledgeAssetsIndexRouteImport.update({
+    id: '/api/geo/$org/knowledge-assets/',
+    path: '/api/geo/$org/knowledge-assets/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPlausibleJsScriptIndexRoute =
   ApiPlausibleJsScriptIndexRouteImport.update({
     id: '/api/plausible/js/script/',
@@ -498,6 +539,23 @@ const ApiV1GeoBrandsIndexRoute = ApiV1GeoBrandsIndexRouteImport.update({
   path: '/api/v1/geo/brands/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1GeoDraftsIndexRoute = ApiV1GeoDraftsIndexRouteImport.update({
+  id: '/api/v1/geo/drafts/',
+  path: '/api/v1/geo/drafts/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1GeoKnowledgeAssetsIndexRoute =
+  ApiV1GeoKnowledgeAssetsIndexRouteImport.update({
+    id: '/api/v1/geo/knowledge-assets/',
+    path: '/api/v1/geo/knowledge-assets/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1GeoKnowledgeClaimsIndexRoute =
+  ApiV1GeoKnowledgeClaimsIndexRouteImport.update({
+    id: '/api/v1/geo/knowledge-claims/',
+    path: '/api/v1/geo/knowledge-claims/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiV1GeoManualObservationsEvidenceRoute =
   ApiV1GeoManualObservationsEvidenceRouteImport.update({
     id: '/api/v1/geo/manual-observations/evidence',
@@ -508,6 +566,17 @@ const ApiV1GeoManualObservationsImportRoute =
   ApiV1GeoManualObservationsImportRouteImport.update({
     id: '/api/v1/geo/manual-observations/import',
     path: '/api/v1/geo/manual-observations/import',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1GeoMetricsIndexRoute = ApiV1GeoMetricsIndexRouteImport.update({
+  id: '/api/v1/geo/metrics/',
+  path: '/api/v1/geo/metrics/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1GeoMetricsBatchComparisonRoute =
+  ApiV1GeoMetricsBatchComparisonRouteImport.update({
+    id: '/api/v1/geo/metrics/batch-comparison',
+    path: '/api/v1/geo/metrics/batch-comparison',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiV1GeoObservationsIndexRoute =
@@ -545,6 +614,11 @@ const ApiV1GeoPromptsExportRoute = ApiV1GeoPromptsExportRouteImport.update({
 const ApiV1GeoPromptsImportRoute = ApiV1GeoPromptsImportRouteImport.update({
   id: '/api/v1/geo/prompts/import',
   path: '/api/v1/geo/prompts/import',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1GeoReportsIndexRoute = ApiV1GeoReportsIndexRouteImport.update({
+  id: '/api/v1/geo/reports/',
+  path: '/api/v1/geo/reports/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiV1GeoSamplingRunsIndexRoute =
@@ -697,6 +771,18 @@ const AuthedAppOrgOrgSettingsSkillRoute =
     path: '/skill',
     getParentRoute: () => AuthedAppOrgOrgSettingsRoute,
   } as any)
+const ApiGeoOrgDraftsDraftIdExportRoute =
+  ApiGeoOrgDraftsDraftIdExportRouteImport.update({
+    id: '/api/geo/$org/drafts/$draftId/export',
+    path: '/api/geo/$org/drafts/$draftId/export',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiGeoOrgKnowledgeAssetsAssetIdFileRoute =
+  ApiGeoOrgKnowledgeAssetsAssetIdFileRouteImport.update({
+    id: '/api/geo/$org/knowledge-assets/$assetId/file',
+    path: '/api/geo/$org/knowledge-assets/$assetId/file',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiGeoOrgObservationsIdEvidenceRoute =
   ApiGeoOrgObservationsIdEvidenceRouteImport.update({
     id: '/api/geo/$org/observations/$id/evidence',
@@ -707,6 +793,12 @@ const ApiGeoOrgObservationsIdExportRoute =
   ApiGeoOrgObservationsIdExportRouteImport.update({
     id: '/api/geo/$org/observations/$id/export',
     path: '/api/geo/$org/observations/$id/export',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiGeoOrgReportsIdFormatRoute =
+  ApiGeoOrgReportsIdFormatRouteImport.update({
+    id: '/api/geo/$org/reports/$id/$format',
+    path: '/api/geo/$org/reports/$id/$format',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiV1BrandsBrandIdCitationsDomainsRoute =
@@ -744,6 +836,90 @@ const ApiV1GeoBrandsDictionaryVersionsVersionRoute =
     path: '/api/v1/geo/brands/dictionary-versions/$version',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiV1GeoDraftsDraftIdIndexRoute =
+  ApiV1GeoDraftsDraftIdIndexRouteImport.update({
+    id: '/api/v1/geo/drafts/$draftId/',
+    path: '/api/v1/geo/drafts/$draftId/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1GeoDraftsDraftIdExportRoute =
+  ApiV1GeoDraftsDraftIdExportRouteImport.update({
+    id: '/api/v1/geo/drafts/$draftId/export',
+    path: '/api/v1/geo/drafts/$draftId/export',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1GeoDraftsDraftIdPublicationsRoute =
+  ApiV1GeoDraftsDraftIdPublicationsRouteImport.update({
+    id: '/api/v1/geo/drafts/$draftId/publications',
+    path: '/api/v1/geo/drafts/$draftId/publications',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1GeoDraftsDraftIdTransitionsRoute =
+  ApiV1GeoDraftsDraftIdTransitionsRouteImport.update({
+    id: '/api/v1/geo/drafts/$draftId/transitions',
+    path: '/api/v1/geo/drafts/$draftId/transitions',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1GeoDraftsDraftIdVersionsRoute =
+  ApiV1GeoDraftsDraftIdVersionsRouteImport.update({
+    id: '/api/v1/geo/drafts/$draftId/versions',
+    path: '/api/v1/geo/drafts/$draftId/versions',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1GeoKnowledgeAssetsAssetIdIndexRoute =
+  ApiV1GeoKnowledgeAssetsAssetIdIndexRouteImport.update({
+    id: '/api/v1/geo/knowledge-assets/$assetId/',
+    path: '/api/v1/geo/knowledge-assets/$assetId/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1GeoKnowledgeAssetsAssetIdClaimsRoute =
+  ApiV1GeoKnowledgeAssetsAssetIdClaimsRouteImport.update({
+    id: '/api/v1/geo/knowledge-assets/$assetId/claims',
+    path: '/api/v1/geo/knowledge-assets/$assetId/claims',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1GeoKnowledgeAssetsAssetIdFileRoute =
+  ApiV1GeoKnowledgeAssetsAssetIdFileRouteImport.update({
+    id: '/api/v1/geo/knowledge-assets/$assetId/file',
+    path: '/api/v1/geo/knowledge-assets/$assetId/file',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1GeoKnowledgeAssetsAssetIdReviewsRoute =
+  ApiV1GeoKnowledgeAssetsAssetIdReviewsRouteImport.update({
+    id: '/api/v1/geo/knowledge-assets/$assetId/reviews',
+    path: '/api/v1/geo/knowledge-assets/$assetId/reviews',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1GeoKnowledgeClaimsClaimIdIndexRoute =
+  ApiV1GeoKnowledgeClaimsClaimIdIndexRouteImport.update({
+    id: '/api/v1/geo/knowledge-claims/$claimId/',
+    path: '/api/v1/geo/knowledge-claims/$claimId/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1GeoKnowledgeClaimsClaimIdReviewsRoute =
+  ApiV1GeoKnowledgeClaimsClaimIdReviewsRouteImport.update({
+    id: '/api/v1/geo/knowledge-claims/$claimId/reviews',
+    path: '/api/v1/geo/knowledge-claims/$claimId/reviews',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1GeoKnowledgeClaimsClaimIdSourcesRoute =
+  ApiV1GeoKnowledgeClaimsClaimIdSourcesRouteImport.update({
+    id: '/api/v1/geo/knowledge-claims/$claimId/sources',
+    path: '/api/v1/geo/knowledge-claims/$claimId/sources',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1GeoKnowledgeClaimsConflictsIndexRoute =
+  ApiV1GeoKnowledgeClaimsConflictsIndexRouteImport.update({
+    id: '/api/v1/geo/knowledge-claims/conflicts/',
+    path: '/api/v1/geo/knowledge-claims/conflicts/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1GeoObservationsIdReviewsRoute =
+  ApiV1GeoObservationsIdReviewsRouteImport.update({
+    id: '/reviews',
+    path: '/reviews',
+    getParentRoute: () => ApiV1GeoObservationsIdRoute,
+  } as any)
 const ApiV1GeoPromptSetsIdIndexRoute =
   ApiV1GeoPromptSetsIdIndexRouteImport.update({
     id: '/api/v1/geo/prompt-sets/$id/',
@@ -771,6 +947,46 @@ const ApiV1GeoPromptsIdTransitionsRoute =
   ApiV1GeoPromptsIdTransitionsRouteImport.update({
     id: '/api/v1/geo/prompts/$id/transitions',
     path: '/api/v1/geo/prompts/$id/transitions',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1GeoReportsIdIndexRoute = ApiV1GeoReportsIdIndexRouteImport.update({
+  id: '/api/v1/geo/reports/$id/',
+  path: '/api/v1/geo/reports/$id/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1GeoReportsIdExportRoute = ApiV1GeoReportsIdExportRouteImport.update({
+  id: '/api/v1/geo/reports/$id/export',
+  path: '/api/v1/geo/reports/$id/export',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1GeoReportsIdReviewsRoute =
+  ApiV1GeoReportsIdReviewsRouteImport.update({
+    id: '/api/v1/geo/reports/$id/reviews',
+    path: '/api/v1/geo/reports/$id/reviews',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1GeoSiteAuditFindingsIndexRoute =
+  ApiV1GeoSiteAuditFindingsIndexRouteImport.update({
+    id: '/api/v1/geo/site-audit/findings/',
+    path: '/api/v1/geo/site-audit/findings/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1GeoSiteAuditFindingsTasksRoute =
+  ApiV1GeoSiteAuditFindingsTasksRouteImport.update({
+    id: '/api/v1/geo/site-audit/findings/tasks',
+    path: '/api/v1/geo/site-audit/findings/tasks',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1GeoSiteAuditRunsIndexRoute =
+  ApiV1GeoSiteAuditRunsIndexRouteImport.update({
+    id: '/api/v1/geo/site-audit/runs/',
+    path: '/api/v1/geo/site-audit/runs/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1GeoSiteAuditRunsRunIdRoute =
+  ApiV1GeoSiteAuditRunsRunIdRouteImport.update({
+    id: '/api/v1/geo/site-audit/runs/$runId',
+    path: '/api/v1/geo/site-audit/runs/$runId',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiV1GeoSitePagesPageIdIndexRoute =
@@ -940,6 +1156,18 @@ const ApiV1GeoBrandsIdProductsProductIdRoute =
     path: '/api/v1/geo/brands/$id/products/$productId',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiV1GeoKnowledgeClaimsConflictsConflictIdResolutionRoute =
+  ApiV1GeoKnowledgeClaimsConflictsConflictIdResolutionRouteImport.update({
+    id: '/api/v1/geo/knowledge-claims/conflicts/$conflictId/resolution',
+    path: '/api/v1/geo/knowledge-claims/conflicts/$conflictId/resolution',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1GeoSiteAuditFindingsFindingIdIndexRoute =
+  ApiV1GeoSiteAuditFindingsFindingIdIndexRouteImport.update({
+    id: '/api/v1/geo/site-audit/findings/$findingId/',
+    path: '/api/v1/geo/site-audit/findings/$findingId/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiV1GeoSitePagesPageIdVersionsIndexRoute =
   ApiV1GeoSitePagesPageIdVersionsIndexRouteImport.update({
     id: '/api/v1/geo/site-pages/$pageId/versions/',
@@ -999,6 +1227,18 @@ const AuthedAppOrgOrgBrandBrandSettingsPromptsRoute =
     id: '/settings/prompts',
     path: '/settings/prompts',
     getParentRoute: () => AuthedAppOrgOrgBrandBrandRoute,
+  } as any)
+const AuthedAppOrgOrgGeoKnowledgeAssetsAssetIdRoute =
+  AuthedAppOrgOrgGeoKnowledgeAssetsAssetIdRouteImport.update({
+    id: '/knowledge/assets/$assetId',
+    path: '/knowledge/assets/$assetId',
+    getParentRoute: () => AuthedAppOrgOrgGeoRoute,
+  } as any)
+const AuthedAppOrgOrgGeoKnowledgeDraftsDraftIdRoute =
+  AuthedAppOrgOrgGeoKnowledgeDraftsDraftIdRouteImport.update({
+    id: '/knowledge/drafts/$draftId',
+    path: '/knowledge/drafts/$draftId',
+    getParentRoute: () => AuthedAppOrgOrgGeoRoute,
   } as any)
 const ApiV1GeoSitePagesPageIdVersionsVersionIdSnapshotRoute =
   ApiV1GeoSitePagesPageIdVersionsVersionIdSnapshotRouteImport.update({
@@ -1088,7 +1328,8 @@ export interface FileRoutesByFullPath {
   '/api/v1/brands/$brandId/query-fanout': typeof ApiV1BrandsBrandIdQueryFanoutRoute
   '/api/v1/geo/manual-observations/evidence': typeof ApiV1GeoManualObservationsEvidenceRoute
   '/api/v1/geo/manual-observations/import': typeof ApiV1GeoManualObservationsImportRoute
-  '/api/v1/geo/observations/$id': typeof ApiV1GeoObservationsIdRoute
+  '/api/v1/geo/metrics/batch-comparison': typeof ApiV1GeoMetricsBatchComparisonRoute
+  '/api/v1/geo/observations/$id': typeof ApiV1GeoObservationsIdRouteWithChildren
   '/api/v1/geo/prompts/buyer-roles': typeof ApiV1GeoPromptsBuyerRolesRoute
   '/api/v1/geo/prompts/export': typeof ApiV1GeoPromptsExportRoute
   '/api/v1/geo/prompts/import': typeof ApiV1GeoPromptsImportRoute
@@ -1096,11 +1337,17 @@ export interface FileRoutesByFullPath {
   '/api/v1/organizations/$organizationId/billing': typeof ApiV1OrganizationsOrganizationIdBillingRoute
   '/api/v1/prompts/$promptId/snapshot': typeof ApiV1PromptsPromptIdSnapshotRoute
   '/app/org/$org/': typeof AuthedAppOrgOrgIndexRoute
+  '/api/geo/$org/knowledge-assets/': typeof ApiGeoOrgKnowledgeAssetsIndexRoute
   '/api/plausible/js/script/': typeof ApiPlausibleJsScriptIndexRoute
   '/api/v1/geo/brands/': typeof ApiV1GeoBrandsIndexRoute
+  '/api/v1/geo/drafts/': typeof ApiV1GeoDraftsIndexRoute
+  '/api/v1/geo/knowledge-assets/': typeof ApiV1GeoKnowledgeAssetsIndexRoute
+  '/api/v1/geo/knowledge-claims/': typeof ApiV1GeoKnowledgeClaimsIndexRoute
+  '/api/v1/geo/metrics/': typeof ApiV1GeoMetricsIndexRoute
   '/api/v1/geo/observations/': typeof ApiV1GeoObservationsIndexRoute
   '/api/v1/geo/prompt-sets/': typeof ApiV1GeoPromptSetsIndexRoute
   '/api/v1/geo/prompts/': typeof ApiV1GeoPromptsIndexRoute
+  '/api/v1/geo/reports/': typeof ApiV1GeoReportsIndexRoute
   '/api/v1/geo/sampling-runs/': typeof ApiV1GeoSamplingRunsIndexRoute
   '/api/v1/geo/site-pages/': typeof ApiV1GeoSitePagesIndexRoute
   '/api/v1/geo/sites/': typeof ApiV1GeoSitesIndexRoute
@@ -1122,14 +1369,31 @@ export interface FileRoutesByFullPath {
   '/app/org/$org/settings/mcp': typeof AuthedAppOrgOrgSettingsMcpRoute
   '/app/org/$org/settings/members': typeof AuthedAppOrgOrgSettingsMembersRoute
   '/app/org/$org/settings/skill': typeof AuthedAppOrgOrgSettingsSkillRoute
+  '/api/geo/$org/drafts/$draftId/export': typeof ApiGeoOrgDraftsDraftIdExportRoute
+  '/api/geo/$org/knowledge-assets/$assetId/file': typeof ApiGeoOrgKnowledgeAssetsAssetIdFileRoute
   '/api/geo/$org/observations/$id/evidence': typeof ApiGeoOrgObservationsIdEvidenceRoute
   '/api/geo/$org/observations/$id/export': typeof ApiGeoOrgObservationsIdExportRoute
+  '/api/geo/$org/reports/$id/$format': typeof ApiGeoOrgReportsIdFormatRoute
   '/api/v1/brands/$brandId/citations/domains': typeof ApiV1BrandsBrandIdCitationsDomainsRoute
   '/api/v1/brands/$brandId/citations/urls': typeof ApiV1BrandsBrandIdCitationsUrlsRoute
   '/api/v1/geo/brands/dictionary-versions/$version': typeof ApiV1GeoBrandsDictionaryVersionsVersionRoute
+  '/api/v1/geo/drafts/$draftId/export': typeof ApiV1GeoDraftsDraftIdExportRoute
+  '/api/v1/geo/drafts/$draftId/publications': typeof ApiV1GeoDraftsDraftIdPublicationsRoute
+  '/api/v1/geo/drafts/$draftId/transitions': typeof ApiV1GeoDraftsDraftIdTransitionsRoute
+  '/api/v1/geo/drafts/$draftId/versions': typeof ApiV1GeoDraftsDraftIdVersionsRoute
+  '/api/v1/geo/knowledge-assets/$assetId/claims': typeof ApiV1GeoKnowledgeAssetsAssetIdClaimsRoute
+  '/api/v1/geo/knowledge-assets/$assetId/file': typeof ApiV1GeoKnowledgeAssetsAssetIdFileRoute
+  '/api/v1/geo/knowledge-assets/$assetId/reviews': typeof ApiV1GeoKnowledgeAssetsAssetIdReviewsRoute
+  '/api/v1/geo/knowledge-claims/$claimId/reviews': typeof ApiV1GeoKnowledgeClaimsClaimIdReviewsRoute
+  '/api/v1/geo/knowledge-claims/$claimId/sources': typeof ApiV1GeoKnowledgeClaimsClaimIdSourcesRoute
+  '/api/v1/geo/observations/$id/reviews': typeof ApiV1GeoObservationsIdReviewsRoute
   '/api/v1/geo/prompt-sets/$id/freeze': typeof ApiV1GeoPromptSetsIdFreezeRoute
   '/api/v1/geo/prompt-sets/$id/versions': typeof ApiV1GeoPromptSetsIdVersionsRoute
   '/api/v1/geo/prompts/$id/transitions': typeof ApiV1GeoPromptsIdTransitionsRoute
+  '/api/v1/geo/reports/$id/export': typeof ApiV1GeoReportsIdExportRoute
+  '/api/v1/geo/reports/$id/reviews': typeof ApiV1GeoReportsIdReviewsRoute
+  '/api/v1/geo/site-audit/findings/tasks': typeof ApiV1GeoSiteAuditFindingsTasksRoute
+  '/api/v1/geo/site-audit/runs/$runId': typeof ApiV1GeoSiteAuditRunsRunIdRoute
   '/api/v1/geo/site-pages/$pageId/reparse': typeof ApiV1GeoSitePagesPageIdReparseRoute
   '/api/v1/geo/tasks/$id/transitions': typeof ApiV1GeoTasksIdTransitionsRoute
   '/api/v1/prompts/$promptId/runs/$runId': typeof ApiV1PromptsPromptIdRunsRunIdRoute
@@ -1138,8 +1402,15 @@ export interface FileRoutesByFullPath {
   '/api/v1/brands/$brandId/tags/': typeof ApiV1BrandsBrandIdTagsIndexRoute
   '/api/v1/geo/brands/$id/': typeof ApiV1GeoBrandsIdIndexRoute
   '/api/v1/geo/brands/dictionary-versions/': typeof ApiV1GeoBrandsDictionaryVersionsIndexRoute
+  '/api/v1/geo/drafts/$draftId/': typeof ApiV1GeoDraftsDraftIdIndexRoute
+  '/api/v1/geo/knowledge-assets/$assetId/': typeof ApiV1GeoKnowledgeAssetsAssetIdIndexRoute
+  '/api/v1/geo/knowledge-claims/$claimId/': typeof ApiV1GeoKnowledgeClaimsClaimIdIndexRoute
+  '/api/v1/geo/knowledge-claims/conflicts/': typeof ApiV1GeoKnowledgeClaimsConflictsIndexRoute
   '/api/v1/geo/prompt-sets/$id/': typeof ApiV1GeoPromptSetsIdIndexRoute
   '/api/v1/geo/prompts/$id/': typeof ApiV1GeoPromptsIdIndexRoute
+  '/api/v1/geo/reports/$id/': typeof ApiV1GeoReportsIdIndexRoute
+  '/api/v1/geo/site-audit/findings/': typeof ApiV1GeoSiteAuditFindingsIndexRoute
+  '/api/v1/geo/site-audit/runs/': typeof ApiV1GeoSiteAuditRunsIndexRoute
   '/api/v1/geo/site-pages/$pageId/': typeof ApiV1GeoSitePagesPageIdIndexRoute
   '/api/v1/geo/sites/$siteId/': typeof ApiV1GeoSitesSiteIdIndexRoute
   '/api/v1/geo/tasks/$id/': typeof ApiV1GeoTasksIdIndexRoute
@@ -1158,6 +1429,7 @@ export interface FileRoutesByFullPath {
   '/app/org/$org/geo/site-pages/$id': typeof AuthedAppOrgOrgGeoSitePagesIdRoute
   '/app/org/$org/geo/tasks/$id': typeof AuthedAppOrgOrgGeoTasksIdRoute
   '/api/v1/geo/brands/$id/products/$productId': typeof ApiV1GeoBrandsIdProductsProductIdRoute
+  '/api/v1/geo/knowledge-claims/conflicts/$conflictId/resolution': typeof ApiV1GeoKnowledgeClaimsConflictsConflictIdResolutionRoute
   '/app/org/$org/brand/$brand/': typeof AuthedAppOrgOrgBrandBrandIndexRoute
   '/app/org/$org/geo/knowledge/': typeof AuthedAppOrgOrgGeoKnowledgeIndexRoute
   '/app/org/$org/geo/observations/': typeof AuthedAppOrgOrgGeoObservationsIndexRoute
@@ -1165,6 +1437,7 @@ export interface FileRoutesByFullPath {
   '/app/org/$org/geo/site-pages/': typeof AuthedAppOrgOrgGeoSitePagesIndexRoute
   '/app/org/$org/geo/tasks/': typeof AuthedAppOrgOrgGeoTasksIndexRoute
   '/api/v1/geo/brands/$id/products/': typeof ApiV1GeoBrandsIdProductsIndexRoute
+  '/api/v1/geo/site-audit/findings/$findingId/': typeof ApiV1GeoSiteAuditFindingsFindingIdIndexRoute
   '/api/v1/geo/site-pages/$pageId/versions/': typeof ApiV1GeoSitePagesPageIdVersionsIndexRoute
   '/api/v1/geo/sites/$siteId/crawl-runs/': typeof ApiV1GeoSitesSiteIdCrawlRunsIndexRoute
   '/app/org/$org/brand/$brand/prompts/$promptId': typeof AuthedAppOrgOrgBrandBrandPromptsPromptIdRoute
@@ -1173,6 +1446,8 @@ export interface FileRoutesByFullPath {
   '/app/org/$org/brand/$brand/settings/competitors': typeof AuthedAppOrgOrgBrandBrandSettingsCompetitorsRoute
   '/app/org/$org/brand/$brand/settings/llms': typeof AuthedAppOrgOrgBrandBrandSettingsLlmsRoute
   '/app/org/$org/brand/$brand/settings/prompts': typeof AuthedAppOrgOrgBrandBrandSettingsPromptsRoute
+  '/app/org/$org/geo/knowledge/assets/$assetId': typeof AuthedAppOrgOrgGeoKnowledgeAssetsAssetIdRoute
+  '/app/org/$org/geo/knowledge/drafts/$draftId': typeof AuthedAppOrgOrgGeoKnowledgeDraftsDraftIdRoute
   '/api/v1/geo/site-pages/$pageId/versions/$versionId/snapshot': typeof ApiV1GeoSitePagesPageIdVersionsVersionIdSnapshotRoute
   '/api/v1/geo/sites/$siteId/crawl-runs/$runId/pause': typeof ApiV1GeoSitesSiteIdCrawlRunsRunIdPauseRoute
   '/api/v1/geo/sites/$siteId/crawl-runs/$runId/resume': typeof ApiV1GeoSitesSiteIdCrawlRunsRunIdResumeRoute
@@ -1237,7 +1512,8 @@ export interface FileRoutesByTo {
   '/api/v1/brands/$brandId/query-fanout': typeof ApiV1BrandsBrandIdQueryFanoutRoute
   '/api/v1/geo/manual-observations/evidence': typeof ApiV1GeoManualObservationsEvidenceRoute
   '/api/v1/geo/manual-observations/import': typeof ApiV1GeoManualObservationsImportRoute
-  '/api/v1/geo/observations/$id': typeof ApiV1GeoObservationsIdRoute
+  '/api/v1/geo/metrics/batch-comparison': typeof ApiV1GeoMetricsBatchComparisonRoute
+  '/api/v1/geo/observations/$id': typeof ApiV1GeoObservationsIdRouteWithChildren
   '/api/v1/geo/prompts/buyer-roles': typeof ApiV1GeoPromptsBuyerRolesRoute
   '/api/v1/geo/prompts/export': typeof ApiV1GeoPromptsExportRoute
   '/api/v1/geo/prompts/import': typeof ApiV1GeoPromptsImportRoute
@@ -1245,11 +1521,17 @@ export interface FileRoutesByTo {
   '/api/v1/organizations/$organizationId/billing': typeof ApiV1OrganizationsOrganizationIdBillingRoute
   '/api/v1/prompts/$promptId/snapshot': typeof ApiV1PromptsPromptIdSnapshotRoute
   '/app/org/$org': typeof AuthedAppOrgOrgIndexRoute
+  '/api/geo/$org/knowledge-assets': typeof ApiGeoOrgKnowledgeAssetsIndexRoute
   '/api/plausible/js/script': typeof ApiPlausibleJsScriptIndexRoute
   '/api/v1/geo/brands': typeof ApiV1GeoBrandsIndexRoute
+  '/api/v1/geo/drafts': typeof ApiV1GeoDraftsIndexRoute
+  '/api/v1/geo/knowledge-assets': typeof ApiV1GeoKnowledgeAssetsIndexRoute
+  '/api/v1/geo/knowledge-claims': typeof ApiV1GeoKnowledgeClaimsIndexRoute
+  '/api/v1/geo/metrics': typeof ApiV1GeoMetricsIndexRoute
   '/api/v1/geo/observations': typeof ApiV1GeoObservationsIndexRoute
   '/api/v1/geo/prompt-sets': typeof ApiV1GeoPromptSetsIndexRoute
   '/api/v1/geo/prompts': typeof ApiV1GeoPromptsIndexRoute
+  '/api/v1/geo/reports': typeof ApiV1GeoReportsIndexRoute
   '/api/v1/geo/sampling-runs': typeof ApiV1GeoSamplingRunsIndexRoute
   '/api/v1/geo/site-pages': typeof ApiV1GeoSitePagesIndexRoute
   '/api/v1/geo/sites': typeof ApiV1GeoSitesIndexRoute
@@ -1270,14 +1552,31 @@ export interface FileRoutesByTo {
   '/app/org/$org/settings/mcp': typeof AuthedAppOrgOrgSettingsMcpRoute
   '/app/org/$org/settings/members': typeof AuthedAppOrgOrgSettingsMembersRoute
   '/app/org/$org/settings/skill': typeof AuthedAppOrgOrgSettingsSkillRoute
+  '/api/geo/$org/drafts/$draftId/export': typeof ApiGeoOrgDraftsDraftIdExportRoute
+  '/api/geo/$org/knowledge-assets/$assetId/file': typeof ApiGeoOrgKnowledgeAssetsAssetIdFileRoute
   '/api/geo/$org/observations/$id/evidence': typeof ApiGeoOrgObservationsIdEvidenceRoute
   '/api/geo/$org/observations/$id/export': typeof ApiGeoOrgObservationsIdExportRoute
+  '/api/geo/$org/reports/$id/$format': typeof ApiGeoOrgReportsIdFormatRoute
   '/api/v1/brands/$brandId/citations/domains': typeof ApiV1BrandsBrandIdCitationsDomainsRoute
   '/api/v1/brands/$brandId/citations/urls': typeof ApiV1BrandsBrandIdCitationsUrlsRoute
   '/api/v1/geo/brands/dictionary-versions/$version': typeof ApiV1GeoBrandsDictionaryVersionsVersionRoute
+  '/api/v1/geo/drafts/$draftId/export': typeof ApiV1GeoDraftsDraftIdExportRoute
+  '/api/v1/geo/drafts/$draftId/publications': typeof ApiV1GeoDraftsDraftIdPublicationsRoute
+  '/api/v1/geo/drafts/$draftId/transitions': typeof ApiV1GeoDraftsDraftIdTransitionsRoute
+  '/api/v1/geo/drafts/$draftId/versions': typeof ApiV1GeoDraftsDraftIdVersionsRoute
+  '/api/v1/geo/knowledge-assets/$assetId/claims': typeof ApiV1GeoKnowledgeAssetsAssetIdClaimsRoute
+  '/api/v1/geo/knowledge-assets/$assetId/file': typeof ApiV1GeoKnowledgeAssetsAssetIdFileRoute
+  '/api/v1/geo/knowledge-assets/$assetId/reviews': typeof ApiV1GeoKnowledgeAssetsAssetIdReviewsRoute
+  '/api/v1/geo/knowledge-claims/$claimId/reviews': typeof ApiV1GeoKnowledgeClaimsClaimIdReviewsRoute
+  '/api/v1/geo/knowledge-claims/$claimId/sources': typeof ApiV1GeoKnowledgeClaimsClaimIdSourcesRoute
+  '/api/v1/geo/observations/$id/reviews': typeof ApiV1GeoObservationsIdReviewsRoute
   '/api/v1/geo/prompt-sets/$id/freeze': typeof ApiV1GeoPromptSetsIdFreezeRoute
   '/api/v1/geo/prompt-sets/$id/versions': typeof ApiV1GeoPromptSetsIdVersionsRoute
   '/api/v1/geo/prompts/$id/transitions': typeof ApiV1GeoPromptsIdTransitionsRoute
+  '/api/v1/geo/reports/$id/export': typeof ApiV1GeoReportsIdExportRoute
+  '/api/v1/geo/reports/$id/reviews': typeof ApiV1GeoReportsIdReviewsRoute
+  '/api/v1/geo/site-audit/findings/tasks': typeof ApiV1GeoSiteAuditFindingsTasksRoute
+  '/api/v1/geo/site-audit/runs/$runId': typeof ApiV1GeoSiteAuditRunsRunIdRoute
   '/api/v1/geo/site-pages/$pageId/reparse': typeof ApiV1GeoSitePagesPageIdReparseRoute
   '/api/v1/geo/tasks/$id/transitions': typeof ApiV1GeoTasksIdTransitionsRoute
   '/api/v1/prompts/$promptId/runs/$runId': typeof ApiV1PromptsPromptIdRunsRunIdRoute
@@ -1286,8 +1585,15 @@ export interface FileRoutesByTo {
   '/api/v1/brands/$brandId/tags': typeof ApiV1BrandsBrandIdTagsIndexRoute
   '/api/v1/geo/brands/$id': typeof ApiV1GeoBrandsIdIndexRoute
   '/api/v1/geo/brands/dictionary-versions': typeof ApiV1GeoBrandsDictionaryVersionsIndexRoute
+  '/api/v1/geo/drafts/$draftId': typeof ApiV1GeoDraftsDraftIdIndexRoute
+  '/api/v1/geo/knowledge-assets/$assetId': typeof ApiV1GeoKnowledgeAssetsAssetIdIndexRoute
+  '/api/v1/geo/knowledge-claims/$claimId': typeof ApiV1GeoKnowledgeClaimsClaimIdIndexRoute
+  '/api/v1/geo/knowledge-claims/conflicts': typeof ApiV1GeoKnowledgeClaimsConflictsIndexRoute
   '/api/v1/geo/prompt-sets/$id': typeof ApiV1GeoPromptSetsIdIndexRoute
   '/api/v1/geo/prompts/$id': typeof ApiV1GeoPromptsIdIndexRoute
+  '/api/v1/geo/reports/$id': typeof ApiV1GeoReportsIdIndexRoute
+  '/api/v1/geo/site-audit/findings': typeof ApiV1GeoSiteAuditFindingsIndexRoute
+  '/api/v1/geo/site-audit/runs': typeof ApiV1GeoSiteAuditRunsIndexRoute
   '/api/v1/geo/site-pages/$pageId': typeof ApiV1GeoSitePagesPageIdIndexRoute
   '/api/v1/geo/sites/$siteId': typeof ApiV1GeoSitesSiteIdIndexRoute
   '/api/v1/geo/tasks/$id': typeof ApiV1GeoTasksIdIndexRoute
@@ -1306,6 +1612,7 @@ export interface FileRoutesByTo {
   '/app/org/$org/geo/site-pages/$id': typeof AuthedAppOrgOrgGeoSitePagesIdRoute
   '/app/org/$org/geo/tasks/$id': typeof AuthedAppOrgOrgGeoTasksIdRoute
   '/api/v1/geo/brands/$id/products/$productId': typeof ApiV1GeoBrandsIdProductsProductIdRoute
+  '/api/v1/geo/knowledge-claims/conflicts/$conflictId/resolution': typeof ApiV1GeoKnowledgeClaimsConflictsConflictIdResolutionRoute
   '/app/org/$org/brand/$brand': typeof AuthedAppOrgOrgBrandBrandIndexRoute
   '/app/org/$org/geo/knowledge': typeof AuthedAppOrgOrgGeoKnowledgeIndexRoute
   '/app/org/$org/geo/observations': typeof AuthedAppOrgOrgGeoObservationsIndexRoute
@@ -1313,6 +1620,7 @@ export interface FileRoutesByTo {
   '/app/org/$org/geo/site-pages': typeof AuthedAppOrgOrgGeoSitePagesIndexRoute
   '/app/org/$org/geo/tasks': typeof AuthedAppOrgOrgGeoTasksIndexRoute
   '/api/v1/geo/brands/$id/products': typeof ApiV1GeoBrandsIdProductsIndexRoute
+  '/api/v1/geo/site-audit/findings/$findingId': typeof ApiV1GeoSiteAuditFindingsFindingIdIndexRoute
   '/api/v1/geo/site-pages/$pageId/versions': typeof ApiV1GeoSitePagesPageIdVersionsIndexRoute
   '/api/v1/geo/sites/$siteId/crawl-runs': typeof ApiV1GeoSitesSiteIdCrawlRunsIndexRoute
   '/app/org/$org/brand/$brand/prompts/$promptId': typeof AuthedAppOrgOrgBrandBrandPromptsPromptIdRoute
@@ -1321,6 +1629,8 @@ export interface FileRoutesByTo {
   '/app/org/$org/brand/$brand/settings/competitors': typeof AuthedAppOrgOrgBrandBrandSettingsCompetitorsRoute
   '/app/org/$org/brand/$brand/settings/llms': typeof AuthedAppOrgOrgBrandBrandSettingsLlmsRoute
   '/app/org/$org/brand/$brand/settings/prompts': typeof AuthedAppOrgOrgBrandBrandSettingsPromptsRoute
+  '/app/org/$org/geo/knowledge/assets/$assetId': typeof AuthedAppOrgOrgGeoKnowledgeAssetsAssetIdRoute
+  '/app/org/$org/geo/knowledge/drafts/$draftId': typeof AuthedAppOrgOrgGeoKnowledgeDraftsDraftIdRoute
   '/api/v1/geo/site-pages/$pageId/versions/$versionId/snapshot': typeof ApiV1GeoSitePagesPageIdVersionsVersionIdSnapshotRoute
   '/api/v1/geo/sites/$siteId/crawl-runs/$runId/pause': typeof ApiV1GeoSitesSiteIdCrawlRunsRunIdPauseRoute
   '/api/v1/geo/sites/$siteId/crawl-runs/$runId/resume': typeof ApiV1GeoSitesSiteIdCrawlRunsRunIdResumeRoute
@@ -1393,7 +1703,8 @@ export interface FileRoutesById {
   '/api/v1/brands/$brandId/query-fanout': typeof ApiV1BrandsBrandIdQueryFanoutRoute
   '/api/v1/geo/manual-observations/evidence': typeof ApiV1GeoManualObservationsEvidenceRoute
   '/api/v1/geo/manual-observations/import': typeof ApiV1GeoManualObservationsImportRoute
-  '/api/v1/geo/observations/$id': typeof ApiV1GeoObservationsIdRoute
+  '/api/v1/geo/metrics/batch-comparison': typeof ApiV1GeoMetricsBatchComparisonRoute
+  '/api/v1/geo/observations/$id': typeof ApiV1GeoObservationsIdRouteWithChildren
   '/api/v1/geo/prompts/buyer-roles': typeof ApiV1GeoPromptsBuyerRolesRoute
   '/api/v1/geo/prompts/export': typeof ApiV1GeoPromptsExportRoute
   '/api/v1/geo/prompts/import': typeof ApiV1GeoPromptsImportRoute
@@ -1401,11 +1712,17 @@ export interface FileRoutesById {
   '/api/v1/organizations/$organizationId/billing': typeof ApiV1OrganizationsOrganizationIdBillingRoute
   '/api/v1/prompts/$promptId/snapshot': typeof ApiV1PromptsPromptIdSnapshotRoute
   '/_authed/app/org/$org/': typeof AuthedAppOrgOrgIndexRoute
+  '/api/geo/$org/knowledge-assets/': typeof ApiGeoOrgKnowledgeAssetsIndexRoute
   '/api/plausible/js/script/': typeof ApiPlausibleJsScriptIndexRoute
   '/api/v1/geo/brands/': typeof ApiV1GeoBrandsIndexRoute
+  '/api/v1/geo/drafts/': typeof ApiV1GeoDraftsIndexRoute
+  '/api/v1/geo/knowledge-assets/': typeof ApiV1GeoKnowledgeAssetsIndexRoute
+  '/api/v1/geo/knowledge-claims/': typeof ApiV1GeoKnowledgeClaimsIndexRoute
+  '/api/v1/geo/metrics/': typeof ApiV1GeoMetricsIndexRoute
   '/api/v1/geo/observations/': typeof ApiV1GeoObservationsIndexRoute
   '/api/v1/geo/prompt-sets/': typeof ApiV1GeoPromptSetsIndexRoute
   '/api/v1/geo/prompts/': typeof ApiV1GeoPromptsIndexRoute
+  '/api/v1/geo/reports/': typeof ApiV1GeoReportsIndexRoute
   '/api/v1/geo/sampling-runs/': typeof ApiV1GeoSamplingRunsIndexRoute
   '/api/v1/geo/site-pages/': typeof ApiV1GeoSitePagesIndexRoute
   '/api/v1/geo/sites/': typeof ApiV1GeoSitesIndexRoute
@@ -1427,14 +1744,31 @@ export interface FileRoutesById {
   '/_authed/app/org/$org/settings/mcp': typeof AuthedAppOrgOrgSettingsMcpRoute
   '/_authed/app/org/$org/settings/members': typeof AuthedAppOrgOrgSettingsMembersRoute
   '/_authed/app/org/$org/settings/skill': typeof AuthedAppOrgOrgSettingsSkillRoute
+  '/api/geo/$org/drafts/$draftId/export': typeof ApiGeoOrgDraftsDraftIdExportRoute
+  '/api/geo/$org/knowledge-assets/$assetId/file': typeof ApiGeoOrgKnowledgeAssetsAssetIdFileRoute
   '/api/geo/$org/observations/$id/evidence': typeof ApiGeoOrgObservationsIdEvidenceRoute
   '/api/geo/$org/observations/$id/export': typeof ApiGeoOrgObservationsIdExportRoute
+  '/api/geo/$org/reports/$id/$format': typeof ApiGeoOrgReportsIdFormatRoute
   '/api/v1/brands/$brandId/citations/domains': typeof ApiV1BrandsBrandIdCitationsDomainsRoute
   '/api/v1/brands/$brandId/citations/urls': typeof ApiV1BrandsBrandIdCitationsUrlsRoute
   '/api/v1/geo/brands/dictionary-versions/$version': typeof ApiV1GeoBrandsDictionaryVersionsVersionRoute
+  '/api/v1/geo/drafts/$draftId/export': typeof ApiV1GeoDraftsDraftIdExportRoute
+  '/api/v1/geo/drafts/$draftId/publications': typeof ApiV1GeoDraftsDraftIdPublicationsRoute
+  '/api/v1/geo/drafts/$draftId/transitions': typeof ApiV1GeoDraftsDraftIdTransitionsRoute
+  '/api/v1/geo/drafts/$draftId/versions': typeof ApiV1GeoDraftsDraftIdVersionsRoute
+  '/api/v1/geo/knowledge-assets/$assetId/claims': typeof ApiV1GeoKnowledgeAssetsAssetIdClaimsRoute
+  '/api/v1/geo/knowledge-assets/$assetId/file': typeof ApiV1GeoKnowledgeAssetsAssetIdFileRoute
+  '/api/v1/geo/knowledge-assets/$assetId/reviews': typeof ApiV1GeoKnowledgeAssetsAssetIdReviewsRoute
+  '/api/v1/geo/knowledge-claims/$claimId/reviews': typeof ApiV1GeoKnowledgeClaimsClaimIdReviewsRoute
+  '/api/v1/geo/knowledge-claims/$claimId/sources': typeof ApiV1GeoKnowledgeClaimsClaimIdSourcesRoute
+  '/api/v1/geo/observations/$id/reviews': typeof ApiV1GeoObservationsIdReviewsRoute
   '/api/v1/geo/prompt-sets/$id/freeze': typeof ApiV1GeoPromptSetsIdFreezeRoute
   '/api/v1/geo/prompt-sets/$id/versions': typeof ApiV1GeoPromptSetsIdVersionsRoute
   '/api/v1/geo/prompts/$id/transitions': typeof ApiV1GeoPromptsIdTransitionsRoute
+  '/api/v1/geo/reports/$id/export': typeof ApiV1GeoReportsIdExportRoute
+  '/api/v1/geo/reports/$id/reviews': typeof ApiV1GeoReportsIdReviewsRoute
+  '/api/v1/geo/site-audit/findings/tasks': typeof ApiV1GeoSiteAuditFindingsTasksRoute
+  '/api/v1/geo/site-audit/runs/$runId': typeof ApiV1GeoSiteAuditRunsRunIdRoute
   '/api/v1/geo/site-pages/$pageId/reparse': typeof ApiV1GeoSitePagesPageIdReparseRoute
   '/api/v1/geo/tasks/$id/transitions': typeof ApiV1GeoTasksIdTransitionsRoute
   '/api/v1/prompts/$promptId/runs/$runId': typeof ApiV1PromptsPromptIdRunsRunIdRoute
@@ -1443,8 +1777,15 @@ export interface FileRoutesById {
   '/api/v1/brands/$brandId/tags/': typeof ApiV1BrandsBrandIdTagsIndexRoute
   '/api/v1/geo/brands/$id/': typeof ApiV1GeoBrandsIdIndexRoute
   '/api/v1/geo/brands/dictionary-versions/': typeof ApiV1GeoBrandsDictionaryVersionsIndexRoute
+  '/api/v1/geo/drafts/$draftId/': typeof ApiV1GeoDraftsDraftIdIndexRoute
+  '/api/v1/geo/knowledge-assets/$assetId/': typeof ApiV1GeoKnowledgeAssetsAssetIdIndexRoute
+  '/api/v1/geo/knowledge-claims/$claimId/': typeof ApiV1GeoKnowledgeClaimsClaimIdIndexRoute
+  '/api/v1/geo/knowledge-claims/conflicts/': typeof ApiV1GeoKnowledgeClaimsConflictsIndexRoute
   '/api/v1/geo/prompt-sets/$id/': typeof ApiV1GeoPromptSetsIdIndexRoute
   '/api/v1/geo/prompts/$id/': typeof ApiV1GeoPromptsIdIndexRoute
+  '/api/v1/geo/reports/$id/': typeof ApiV1GeoReportsIdIndexRoute
+  '/api/v1/geo/site-audit/findings/': typeof ApiV1GeoSiteAuditFindingsIndexRoute
+  '/api/v1/geo/site-audit/runs/': typeof ApiV1GeoSiteAuditRunsIndexRoute
   '/api/v1/geo/site-pages/$pageId/': typeof ApiV1GeoSitePagesPageIdIndexRoute
   '/api/v1/geo/sites/$siteId/': typeof ApiV1GeoSitesSiteIdIndexRoute
   '/api/v1/geo/tasks/$id/': typeof ApiV1GeoTasksIdIndexRoute
@@ -1463,6 +1804,7 @@ export interface FileRoutesById {
   '/_authed/app/org/$org/geo/site-pages/$id': typeof AuthedAppOrgOrgGeoSitePagesIdRoute
   '/_authed/app/org/$org/geo/tasks/$id': typeof AuthedAppOrgOrgGeoTasksIdRoute
   '/api/v1/geo/brands/$id/products/$productId': typeof ApiV1GeoBrandsIdProductsProductIdRoute
+  '/api/v1/geo/knowledge-claims/conflicts/$conflictId/resolution': typeof ApiV1GeoKnowledgeClaimsConflictsConflictIdResolutionRoute
   '/_authed/app/org/$org/brand/$brand/': typeof AuthedAppOrgOrgBrandBrandIndexRoute
   '/_authed/app/org/$org/geo/knowledge/': typeof AuthedAppOrgOrgGeoKnowledgeIndexRoute
   '/_authed/app/org/$org/geo/observations/': typeof AuthedAppOrgOrgGeoObservationsIndexRoute
@@ -1470,6 +1812,7 @@ export interface FileRoutesById {
   '/_authed/app/org/$org/geo/site-pages/': typeof AuthedAppOrgOrgGeoSitePagesIndexRoute
   '/_authed/app/org/$org/geo/tasks/': typeof AuthedAppOrgOrgGeoTasksIndexRoute
   '/api/v1/geo/brands/$id/products/': typeof ApiV1GeoBrandsIdProductsIndexRoute
+  '/api/v1/geo/site-audit/findings/$findingId/': typeof ApiV1GeoSiteAuditFindingsFindingIdIndexRoute
   '/api/v1/geo/site-pages/$pageId/versions/': typeof ApiV1GeoSitePagesPageIdVersionsIndexRoute
   '/api/v1/geo/sites/$siteId/crawl-runs/': typeof ApiV1GeoSitesSiteIdCrawlRunsIndexRoute
   '/_authed/app/org/$org/brand/$brand/prompts/$promptId': typeof AuthedAppOrgOrgBrandBrandPromptsPromptIdRoute
@@ -1478,6 +1821,8 @@ export interface FileRoutesById {
   '/_authed/app/org/$org/brand/$brand/settings/competitors': typeof AuthedAppOrgOrgBrandBrandSettingsCompetitorsRoute
   '/_authed/app/org/$org/brand/$brand/settings/llms': typeof AuthedAppOrgOrgBrandBrandSettingsLlmsRoute
   '/_authed/app/org/$org/brand/$brand/settings/prompts': typeof AuthedAppOrgOrgBrandBrandSettingsPromptsRoute
+  '/_authed/app/org/$org/geo/knowledge/assets/$assetId': typeof AuthedAppOrgOrgGeoKnowledgeAssetsAssetIdRoute
+  '/_authed/app/org/$org/geo/knowledge/drafts/$draftId': typeof AuthedAppOrgOrgGeoKnowledgeDraftsDraftIdRoute
   '/api/v1/geo/site-pages/$pageId/versions/$versionId/snapshot': typeof ApiV1GeoSitePagesPageIdVersionsVersionIdSnapshotRoute
   '/api/v1/geo/sites/$siteId/crawl-runs/$runId/pause': typeof ApiV1GeoSitesSiteIdCrawlRunsRunIdPauseRoute
   '/api/v1/geo/sites/$siteId/crawl-runs/$runId/resume': typeof ApiV1GeoSitesSiteIdCrawlRunsRunIdResumeRoute
@@ -1550,6 +1895,7 @@ export interface FileRouteTypes {
     | '/api/v1/brands/$brandId/query-fanout'
     | '/api/v1/geo/manual-observations/evidence'
     | '/api/v1/geo/manual-observations/import'
+    | '/api/v1/geo/metrics/batch-comparison'
     | '/api/v1/geo/observations/$id'
     | '/api/v1/geo/prompts/buyer-roles'
     | '/api/v1/geo/prompts/export'
@@ -1558,11 +1904,17 @@ export interface FileRouteTypes {
     | '/api/v1/organizations/$organizationId/billing'
     | '/api/v1/prompts/$promptId/snapshot'
     | '/app/org/$org/'
+    | '/api/geo/$org/knowledge-assets/'
     | '/api/plausible/js/script/'
     | '/api/v1/geo/brands/'
+    | '/api/v1/geo/drafts/'
+    | '/api/v1/geo/knowledge-assets/'
+    | '/api/v1/geo/knowledge-claims/'
+    | '/api/v1/geo/metrics/'
     | '/api/v1/geo/observations/'
     | '/api/v1/geo/prompt-sets/'
     | '/api/v1/geo/prompts/'
+    | '/api/v1/geo/reports/'
     | '/api/v1/geo/sampling-runs/'
     | '/api/v1/geo/site-pages/'
     | '/api/v1/geo/sites/'
@@ -1584,14 +1936,31 @@ export interface FileRouteTypes {
     | '/app/org/$org/settings/mcp'
     | '/app/org/$org/settings/members'
     | '/app/org/$org/settings/skill'
+    | '/api/geo/$org/drafts/$draftId/export'
+    | '/api/geo/$org/knowledge-assets/$assetId/file'
     | '/api/geo/$org/observations/$id/evidence'
     | '/api/geo/$org/observations/$id/export'
+    | '/api/geo/$org/reports/$id/$format'
     | '/api/v1/brands/$brandId/citations/domains'
     | '/api/v1/brands/$brandId/citations/urls'
     | '/api/v1/geo/brands/dictionary-versions/$version'
+    | '/api/v1/geo/drafts/$draftId/export'
+    | '/api/v1/geo/drafts/$draftId/publications'
+    | '/api/v1/geo/drafts/$draftId/transitions'
+    | '/api/v1/geo/drafts/$draftId/versions'
+    | '/api/v1/geo/knowledge-assets/$assetId/claims'
+    | '/api/v1/geo/knowledge-assets/$assetId/file'
+    | '/api/v1/geo/knowledge-assets/$assetId/reviews'
+    | '/api/v1/geo/knowledge-claims/$claimId/reviews'
+    | '/api/v1/geo/knowledge-claims/$claimId/sources'
+    | '/api/v1/geo/observations/$id/reviews'
     | '/api/v1/geo/prompt-sets/$id/freeze'
     | '/api/v1/geo/prompt-sets/$id/versions'
     | '/api/v1/geo/prompts/$id/transitions'
+    | '/api/v1/geo/reports/$id/export'
+    | '/api/v1/geo/reports/$id/reviews'
+    | '/api/v1/geo/site-audit/findings/tasks'
+    | '/api/v1/geo/site-audit/runs/$runId'
     | '/api/v1/geo/site-pages/$pageId/reparse'
     | '/api/v1/geo/tasks/$id/transitions'
     | '/api/v1/prompts/$promptId/runs/$runId'
@@ -1600,8 +1969,15 @@ export interface FileRouteTypes {
     | '/api/v1/brands/$brandId/tags/'
     | '/api/v1/geo/brands/$id/'
     | '/api/v1/geo/brands/dictionary-versions/'
+    | '/api/v1/geo/drafts/$draftId/'
+    | '/api/v1/geo/knowledge-assets/$assetId/'
+    | '/api/v1/geo/knowledge-claims/$claimId/'
+    | '/api/v1/geo/knowledge-claims/conflicts/'
     | '/api/v1/geo/prompt-sets/$id/'
     | '/api/v1/geo/prompts/$id/'
+    | '/api/v1/geo/reports/$id/'
+    | '/api/v1/geo/site-audit/findings/'
+    | '/api/v1/geo/site-audit/runs/'
     | '/api/v1/geo/site-pages/$pageId/'
     | '/api/v1/geo/sites/$siteId/'
     | '/api/v1/geo/tasks/$id/'
@@ -1620,6 +1996,7 @@ export interface FileRouteTypes {
     | '/app/org/$org/geo/site-pages/$id'
     | '/app/org/$org/geo/tasks/$id'
     | '/api/v1/geo/brands/$id/products/$productId'
+    | '/api/v1/geo/knowledge-claims/conflicts/$conflictId/resolution'
     | '/app/org/$org/brand/$brand/'
     | '/app/org/$org/geo/knowledge/'
     | '/app/org/$org/geo/observations/'
@@ -1627,6 +2004,7 @@ export interface FileRouteTypes {
     | '/app/org/$org/geo/site-pages/'
     | '/app/org/$org/geo/tasks/'
     | '/api/v1/geo/brands/$id/products/'
+    | '/api/v1/geo/site-audit/findings/$findingId/'
     | '/api/v1/geo/site-pages/$pageId/versions/'
     | '/api/v1/geo/sites/$siteId/crawl-runs/'
     | '/app/org/$org/brand/$brand/prompts/$promptId'
@@ -1635,6 +2013,8 @@ export interface FileRouteTypes {
     | '/app/org/$org/brand/$brand/settings/competitors'
     | '/app/org/$org/brand/$brand/settings/llms'
     | '/app/org/$org/brand/$brand/settings/prompts'
+    | '/app/org/$org/geo/knowledge/assets/$assetId'
+    | '/app/org/$org/geo/knowledge/drafts/$draftId'
     | '/api/v1/geo/site-pages/$pageId/versions/$versionId/snapshot'
     | '/api/v1/geo/sites/$siteId/crawl-runs/$runId/pause'
     | '/api/v1/geo/sites/$siteId/crawl-runs/$runId/resume'
@@ -1699,6 +2079,7 @@ export interface FileRouteTypes {
     | '/api/v1/brands/$brandId/query-fanout'
     | '/api/v1/geo/manual-observations/evidence'
     | '/api/v1/geo/manual-observations/import'
+    | '/api/v1/geo/metrics/batch-comparison'
     | '/api/v1/geo/observations/$id'
     | '/api/v1/geo/prompts/buyer-roles'
     | '/api/v1/geo/prompts/export'
@@ -1707,11 +2088,17 @@ export interface FileRouteTypes {
     | '/api/v1/organizations/$organizationId/billing'
     | '/api/v1/prompts/$promptId/snapshot'
     | '/app/org/$org'
+    | '/api/geo/$org/knowledge-assets'
     | '/api/plausible/js/script'
     | '/api/v1/geo/brands'
+    | '/api/v1/geo/drafts'
+    | '/api/v1/geo/knowledge-assets'
+    | '/api/v1/geo/knowledge-claims'
+    | '/api/v1/geo/metrics'
     | '/api/v1/geo/observations'
     | '/api/v1/geo/prompt-sets'
     | '/api/v1/geo/prompts'
+    | '/api/v1/geo/reports'
     | '/api/v1/geo/sampling-runs'
     | '/api/v1/geo/site-pages'
     | '/api/v1/geo/sites'
@@ -1732,14 +2119,31 @@ export interface FileRouteTypes {
     | '/app/org/$org/settings/mcp'
     | '/app/org/$org/settings/members'
     | '/app/org/$org/settings/skill'
+    | '/api/geo/$org/drafts/$draftId/export'
+    | '/api/geo/$org/knowledge-assets/$assetId/file'
     | '/api/geo/$org/observations/$id/evidence'
     | '/api/geo/$org/observations/$id/export'
+    | '/api/geo/$org/reports/$id/$format'
     | '/api/v1/brands/$brandId/citations/domains'
     | '/api/v1/brands/$brandId/citations/urls'
     | '/api/v1/geo/brands/dictionary-versions/$version'
+    | '/api/v1/geo/drafts/$draftId/export'
+    | '/api/v1/geo/drafts/$draftId/publications'
+    | '/api/v1/geo/drafts/$draftId/transitions'
+    | '/api/v1/geo/drafts/$draftId/versions'
+    | '/api/v1/geo/knowledge-assets/$assetId/claims'
+    | '/api/v1/geo/knowledge-assets/$assetId/file'
+    | '/api/v1/geo/knowledge-assets/$assetId/reviews'
+    | '/api/v1/geo/knowledge-claims/$claimId/reviews'
+    | '/api/v1/geo/knowledge-claims/$claimId/sources'
+    | '/api/v1/geo/observations/$id/reviews'
     | '/api/v1/geo/prompt-sets/$id/freeze'
     | '/api/v1/geo/prompt-sets/$id/versions'
     | '/api/v1/geo/prompts/$id/transitions'
+    | '/api/v1/geo/reports/$id/export'
+    | '/api/v1/geo/reports/$id/reviews'
+    | '/api/v1/geo/site-audit/findings/tasks'
+    | '/api/v1/geo/site-audit/runs/$runId'
     | '/api/v1/geo/site-pages/$pageId/reparse'
     | '/api/v1/geo/tasks/$id/transitions'
     | '/api/v1/prompts/$promptId/runs/$runId'
@@ -1748,8 +2152,15 @@ export interface FileRouteTypes {
     | '/api/v1/brands/$brandId/tags'
     | '/api/v1/geo/brands/$id'
     | '/api/v1/geo/brands/dictionary-versions'
+    | '/api/v1/geo/drafts/$draftId'
+    | '/api/v1/geo/knowledge-assets/$assetId'
+    | '/api/v1/geo/knowledge-claims/$claimId'
+    | '/api/v1/geo/knowledge-claims/conflicts'
     | '/api/v1/geo/prompt-sets/$id'
     | '/api/v1/geo/prompts/$id'
+    | '/api/v1/geo/reports/$id'
+    | '/api/v1/geo/site-audit/findings'
+    | '/api/v1/geo/site-audit/runs'
     | '/api/v1/geo/site-pages/$pageId'
     | '/api/v1/geo/sites/$siteId'
     | '/api/v1/geo/tasks/$id'
@@ -1768,6 +2179,7 @@ export interface FileRouteTypes {
     | '/app/org/$org/geo/site-pages/$id'
     | '/app/org/$org/geo/tasks/$id'
     | '/api/v1/geo/brands/$id/products/$productId'
+    | '/api/v1/geo/knowledge-claims/conflicts/$conflictId/resolution'
     | '/app/org/$org/brand/$brand'
     | '/app/org/$org/geo/knowledge'
     | '/app/org/$org/geo/observations'
@@ -1775,6 +2187,7 @@ export interface FileRouteTypes {
     | '/app/org/$org/geo/site-pages'
     | '/app/org/$org/geo/tasks'
     | '/api/v1/geo/brands/$id/products'
+    | '/api/v1/geo/site-audit/findings/$findingId'
     | '/api/v1/geo/site-pages/$pageId/versions'
     | '/api/v1/geo/sites/$siteId/crawl-runs'
     | '/app/org/$org/brand/$brand/prompts/$promptId'
@@ -1783,6 +2196,8 @@ export interface FileRouteTypes {
     | '/app/org/$org/brand/$brand/settings/competitors'
     | '/app/org/$org/brand/$brand/settings/llms'
     | '/app/org/$org/brand/$brand/settings/prompts'
+    | '/app/org/$org/geo/knowledge/assets/$assetId'
+    | '/app/org/$org/geo/knowledge/drafts/$draftId'
     | '/api/v1/geo/site-pages/$pageId/versions/$versionId/snapshot'
     | '/api/v1/geo/sites/$siteId/crawl-runs/$runId/pause'
     | '/api/v1/geo/sites/$siteId/crawl-runs/$runId/resume'
@@ -1854,6 +2269,7 @@ export interface FileRouteTypes {
     | '/api/v1/brands/$brandId/query-fanout'
     | '/api/v1/geo/manual-observations/evidence'
     | '/api/v1/geo/manual-observations/import'
+    | '/api/v1/geo/metrics/batch-comparison'
     | '/api/v1/geo/observations/$id'
     | '/api/v1/geo/prompts/buyer-roles'
     | '/api/v1/geo/prompts/export'
@@ -1862,11 +2278,17 @@ export interface FileRouteTypes {
     | '/api/v1/organizations/$organizationId/billing'
     | '/api/v1/prompts/$promptId/snapshot'
     | '/_authed/app/org/$org/'
+    | '/api/geo/$org/knowledge-assets/'
     | '/api/plausible/js/script/'
     | '/api/v1/geo/brands/'
+    | '/api/v1/geo/drafts/'
+    | '/api/v1/geo/knowledge-assets/'
+    | '/api/v1/geo/knowledge-claims/'
+    | '/api/v1/geo/metrics/'
     | '/api/v1/geo/observations/'
     | '/api/v1/geo/prompt-sets/'
     | '/api/v1/geo/prompts/'
+    | '/api/v1/geo/reports/'
     | '/api/v1/geo/sampling-runs/'
     | '/api/v1/geo/site-pages/'
     | '/api/v1/geo/sites/'
@@ -1888,14 +2310,31 @@ export interface FileRouteTypes {
     | '/_authed/app/org/$org/settings/mcp'
     | '/_authed/app/org/$org/settings/members'
     | '/_authed/app/org/$org/settings/skill'
+    | '/api/geo/$org/drafts/$draftId/export'
+    | '/api/geo/$org/knowledge-assets/$assetId/file'
     | '/api/geo/$org/observations/$id/evidence'
     | '/api/geo/$org/observations/$id/export'
+    | '/api/geo/$org/reports/$id/$format'
     | '/api/v1/brands/$brandId/citations/domains'
     | '/api/v1/brands/$brandId/citations/urls'
     | '/api/v1/geo/brands/dictionary-versions/$version'
+    | '/api/v1/geo/drafts/$draftId/export'
+    | '/api/v1/geo/drafts/$draftId/publications'
+    | '/api/v1/geo/drafts/$draftId/transitions'
+    | '/api/v1/geo/drafts/$draftId/versions'
+    | '/api/v1/geo/knowledge-assets/$assetId/claims'
+    | '/api/v1/geo/knowledge-assets/$assetId/file'
+    | '/api/v1/geo/knowledge-assets/$assetId/reviews'
+    | '/api/v1/geo/knowledge-claims/$claimId/reviews'
+    | '/api/v1/geo/knowledge-claims/$claimId/sources'
+    | '/api/v1/geo/observations/$id/reviews'
     | '/api/v1/geo/prompt-sets/$id/freeze'
     | '/api/v1/geo/prompt-sets/$id/versions'
     | '/api/v1/geo/prompts/$id/transitions'
+    | '/api/v1/geo/reports/$id/export'
+    | '/api/v1/geo/reports/$id/reviews'
+    | '/api/v1/geo/site-audit/findings/tasks'
+    | '/api/v1/geo/site-audit/runs/$runId'
     | '/api/v1/geo/site-pages/$pageId/reparse'
     | '/api/v1/geo/tasks/$id/transitions'
     | '/api/v1/prompts/$promptId/runs/$runId'
@@ -1904,8 +2343,15 @@ export interface FileRouteTypes {
     | '/api/v1/brands/$brandId/tags/'
     | '/api/v1/geo/brands/$id/'
     | '/api/v1/geo/brands/dictionary-versions/'
+    | '/api/v1/geo/drafts/$draftId/'
+    | '/api/v1/geo/knowledge-assets/$assetId/'
+    | '/api/v1/geo/knowledge-claims/$claimId/'
+    | '/api/v1/geo/knowledge-claims/conflicts/'
     | '/api/v1/geo/prompt-sets/$id/'
     | '/api/v1/geo/prompts/$id/'
+    | '/api/v1/geo/reports/$id/'
+    | '/api/v1/geo/site-audit/findings/'
+    | '/api/v1/geo/site-audit/runs/'
     | '/api/v1/geo/site-pages/$pageId/'
     | '/api/v1/geo/sites/$siteId/'
     | '/api/v1/geo/tasks/$id/'
@@ -1924,6 +2370,7 @@ export interface FileRouteTypes {
     | '/_authed/app/org/$org/geo/site-pages/$id'
     | '/_authed/app/org/$org/geo/tasks/$id'
     | '/api/v1/geo/brands/$id/products/$productId'
+    | '/api/v1/geo/knowledge-claims/conflicts/$conflictId/resolution'
     | '/_authed/app/org/$org/brand/$brand/'
     | '/_authed/app/org/$org/geo/knowledge/'
     | '/_authed/app/org/$org/geo/observations/'
@@ -1931,6 +2378,7 @@ export interface FileRouteTypes {
     | '/_authed/app/org/$org/geo/site-pages/'
     | '/_authed/app/org/$org/geo/tasks/'
     | '/api/v1/geo/brands/$id/products/'
+    | '/api/v1/geo/site-audit/findings/$findingId/'
     | '/api/v1/geo/site-pages/$pageId/versions/'
     | '/api/v1/geo/sites/$siteId/crawl-runs/'
     | '/_authed/app/org/$org/brand/$brand/prompts/$promptId'
@@ -1939,6 +2387,8 @@ export interface FileRouteTypes {
     | '/_authed/app/org/$org/brand/$brand/settings/competitors'
     | '/_authed/app/org/$org/brand/$brand/settings/llms'
     | '/_authed/app/org/$org/brand/$brand/settings/prompts'
+    | '/_authed/app/org/$org/geo/knowledge/assets/$assetId'
+    | '/_authed/app/org/$org/geo/knowledge/drafts/$draftId'
     | '/api/v1/geo/site-pages/$pageId/versions/$versionId/snapshot'
     | '/api/v1/geo/sites/$siteId/crawl-runs/$runId/pause'
     | '/api/v1/geo/sites/$siteId/crawl-runs/$runId/resume'
@@ -1990,38 +2440,70 @@ export interface RootRouteChildren {
   ApiV1ReportsIndexRoute: typeof ApiV1ReportsIndexRoute
   ApiV1GeoManualObservationsEvidenceRoute: typeof ApiV1GeoManualObservationsEvidenceRoute
   ApiV1GeoManualObservationsImportRoute: typeof ApiV1GeoManualObservationsImportRoute
-  ApiV1GeoObservationsIdRoute: typeof ApiV1GeoObservationsIdRoute
+  ApiV1GeoMetricsBatchComparisonRoute: typeof ApiV1GeoMetricsBatchComparisonRoute
+  ApiV1GeoObservationsIdRoute: typeof ApiV1GeoObservationsIdRouteWithChildren
   ApiV1GeoPromptsBuyerRolesRoute: typeof ApiV1GeoPromptsBuyerRolesRoute
   ApiV1GeoPromptsExportRoute: typeof ApiV1GeoPromptsExportRoute
   ApiV1GeoPromptsImportRoute: typeof ApiV1GeoPromptsImportRoute
   ApiV1GeoSamplingRunsIdRoute: typeof ApiV1GeoSamplingRunsIdRoute
+  ApiGeoOrgKnowledgeAssetsIndexRoute: typeof ApiGeoOrgKnowledgeAssetsIndexRoute
   ApiPlausibleJsScriptIndexRoute: typeof ApiPlausibleJsScriptIndexRoute
   ApiV1GeoBrandsIndexRoute: typeof ApiV1GeoBrandsIndexRoute
+  ApiV1GeoDraftsIndexRoute: typeof ApiV1GeoDraftsIndexRoute
+  ApiV1GeoKnowledgeAssetsIndexRoute: typeof ApiV1GeoKnowledgeAssetsIndexRoute
+  ApiV1GeoKnowledgeClaimsIndexRoute: typeof ApiV1GeoKnowledgeClaimsIndexRoute
+  ApiV1GeoMetricsIndexRoute: typeof ApiV1GeoMetricsIndexRoute
   ApiV1GeoObservationsIndexRoute: typeof ApiV1GeoObservationsIndexRoute
   ApiV1GeoPromptSetsIndexRoute: typeof ApiV1GeoPromptSetsIndexRoute
   ApiV1GeoPromptsIndexRoute: typeof ApiV1GeoPromptsIndexRoute
+  ApiV1GeoReportsIndexRoute: typeof ApiV1GeoReportsIndexRoute
   ApiV1GeoSamplingRunsIndexRoute: typeof ApiV1GeoSamplingRunsIndexRoute
   ApiV1GeoSitePagesIndexRoute: typeof ApiV1GeoSitePagesIndexRoute
   ApiV1GeoSitesIndexRoute: typeof ApiV1GeoSitesIndexRoute
   ApiV1GeoTargetsIndexRoute: typeof ApiV1GeoTargetsIndexRoute
   ApiV1GeoTasksIndexRoute: typeof ApiV1GeoTasksIndexRoute
+  ApiGeoOrgDraftsDraftIdExportRoute: typeof ApiGeoOrgDraftsDraftIdExportRoute
+  ApiGeoOrgKnowledgeAssetsAssetIdFileRoute: typeof ApiGeoOrgKnowledgeAssetsAssetIdFileRoute
   ApiGeoOrgObservationsIdEvidenceRoute: typeof ApiGeoOrgObservationsIdEvidenceRoute
   ApiGeoOrgObservationsIdExportRoute: typeof ApiGeoOrgObservationsIdExportRoute
+  ApiGeoOrgReportsIdFormatRoute: typeof ApiGeoOrgReportsIdFormatRoute
   ApiV1GeoBrandsDictionaryVersionsVersionRoute: typeof ApiV1GeoBrandsDictionaryVersionsVersionRoute
+  ApiV1GeoDraftsDraftIdExportRoute: typeof ApiV1GeoDraftsDraftIdExportRoute
+  ApiV1GeoDraftsDraftIdPublicationsRoute: typeof ApiV1GeoDraftsDraftIdPublicationsRoute
+  ApiV1GeoDraftsDraftIdTransitionsRoute: typeof ApiV1GeoDraftsDraftIdTransitionsRoute
+  ApiV1GeoDraftsDraftIdVersionsRoute: typeof ApiV1GeoDraftsDraftIdVersionsRoute
+  ApiV1GeoKnowledgeAssetsAssetIdClaimsRoute: typeof ApiV1GeoKnowledgeAssetsAssetIdClaimsRoute
+  ApiV1GeoKnowledgeAssetsAssetIdFileRoute: typeof ApiV1GeoKnowledgeAssetsAssetIdFileRoute
+  ApiV1GeoKnowledgeAssetsAssetIdReviewsRoute: typeof ApiV1GeoKnowledgeAssetsAssetIdReviewsRoute
+  ApiV1GeoKnowledgeClaimsClaimIdReviewsRoute: typeof ApiV1GeoKnowledgeClaimsClaimIdReviewsRoute
+  ApiV1GeoKnowledgeClaimsClaimIdSourcesRoute: typeof ApiV1GeoKnowledgeClaimsClaimIdSourcesRoute
   ApiV1GeoPromptSetsIdFreezeRoute: typeof ApiV1GeoPromptSetsIdFreezeRoute
   ApiV1GeoPromptSetsIdVersionsRoute: typeof ApiV1GeoPromptSetsIdVersionsRoute
   ApiV1GeoPromptsIdTransitionsRoute: typeof ApiV1GeoPromptsIdTransitionsRoute
+  ApiV1GeoReportsIdExportRoute: typeof ApiV1GeoReportsIdExportRoute
+  ApiV1GeoReportsIdReviewsRoute: typeof ApiV1GeoReportsIdReviewsRoute
+  ApiV1GeoSiteAuditFindingsTasksRoute: typeof ApiV1GeoSiteAuditFindingsTasksRoute
+  ApiV1GeoSiteAuditRunsRunIdRoute: typeof ApiV1GeoSiteAuditRunsRunIdRoute
   ApiV1GeoSitePagesPageIdReparseRoute: typeof ApiV1GeoSitePagesPageIdReparseRoute
   ApiV1GeoTasksIdTransitionsRoute: typeof ApiV1GeoTasksIdTransitionsRoute
   ApiV1GeoBrandsIdIndexRoute: typeof ApiV1GeoBrandsIdIndexRoute
   ApiV1GeoBrandsDictionaryVersionsIndexRoute: typeof ApiV1GeoBrandsDictionaryVersionsIndexRoute
+  ApiV1GeoDraftsDraftIdIndexRoute: typeof ApiV1GeoDraftsDraftIdIndexRoute
+  ApiV1GeoKnowledgeAssetsAssetIdIndexRoute: typeof ApiV1GeoKnowledgeAssetsAssetIdIndexRoute
+  ApiV1GeoKnowledgeClaimsClaimIdIndexRoute: typeof ApiV1GeoKnowledgeClaimsClaimIdIndexRoute
+  ApiV1GeoKnowledgeClaimsConflictsIndexRoute: typeof ApiV1GeoKnowledgeClaimsConflictsIndexRoute
   ApiV1GeoPromptSetsIdIndexRoute: typeof ApiV1GeoPromptSetsIdIndexRoute
   ApiV1GeoPromptsIdIndexRoute: typeof ApiV1GeoPromptsIdIndexRoute
+  ApiV1GeoReportsIdIndexRoute: typeof ApiV1GeoReportsIdIndexRoute
+  ApiV1GeoSiteAuditFindingsIndexRoute: typeof ApiV1GeoSiteAuditFindingsIndexRoute
+  ApiV1GeoSiteAuditRunsIndexRoute: typeof ApiV1GeoSiteAuditRunsIndexRoute
   ApiV1GeoSitePagesPageIdIndexRoute: typeof ApiV1GeoSitePagesPageIdIndexRoute
   ApiV1GeoSitesSiteIdIndexRoute: typeof ApiV1GeoSitesSiteIdIndexRoute
   ApiV1GeoTasksIdIndexRoute: typeof ApiV1GeoTasksIdIndexRoute
   ApiV1GeoBrandsIdProductsProductIdRoute: typeof ApiV1GeoBrandsIdProductsProductIdRoute
+  ApiV1GeoKnowledgeClaimsConflictsConflictIdResolutionRoute: typeof ApiV1GeoKnowledgeClaimsConflictsConflictIdResolutionRoute
   ApiV1GeoBrandsIdProductsIndexRoute: typeof ApiV1GeoBrandsIdProductsIndexRoute
+  ApiV1GeoSiteAuditFindingsFindingIdIndexRoute: typeof ApiV1GeoSiteAuditFindingsFindingIdIndexRoute
   ApiV1GeoSitePagesPageIdVersionsIndexRoute: typeof ApiV1GeoSitePagesPageIdVersionsIndexRoute
   ApiV1GeoSitesSiteIdCrawlRunsIndexRoute: typeof ApiV1GeoSitesSiteIdCrawlRunsIndexRoute
   ApiV1GeoSitePagesPageIdVersionsVersionIdSnapshotRoute: typeof ApiV1GeoSitePagesPageIdVersionsVersionIdSnapshotRoute
@@ -2438,6 +2920,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedAppOrgOrgSettingsRouteImport
       parentRoute: typeof AuthedAppOrgOrgRoute
     }
+    '/api/geo/$org/knowledge-assets/': {
+      id: '/api/geo/$org/knowledge-assets/'
+      path: '/api/geo/$org/knowledge-assets'
+      fullPath: '/api/geo/$org/knowledge-assets/'
+      preLoaderRoute: typeof ApiGeoOrgKnowledgeAssetsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/plausible/js/script/': {
       id: '/api/plausible/js/script/'
       path: '/api/plausible/js/script'
@@ -2480,6 +2969,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1GeoBrandsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/geo/drafts/': {
+      id: '/api/v1/geo/drafts/'
+      path: '/api/v1/geo/drafts'
+      fullPath: '/api/v1/geo/drafts/'
+      preLoaderRoute: typeof ApiV1GeoDraftsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/geo/knowledge-assets/': {
+      id: '/api/v1/geo/knowledge-assets/'
+      path: '/api/v1/geo/knowledge-assets'
+      fullPath: '/api/v1/geo/knowledge-assets/'
+      preLoaderRoute: typeof ApiV1GeoKnowledgeAssetsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/geo/knowledge-claims/': {
+      id: '/api/v1/geo/knowledge-claims/'
+      path: '/api/v1/geo/knowledge-claims'
+      fullPath: '/api/v1/geo/knowledge-claims/'
+      preLoaderRoute: typeof ApiV1GeoKnowledgeClaimsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/geo/manual-observations/evidence': {
       id: '/api/v1/geo/manual-observations/evidence'
       path: '/api/v1/geo/manual-observations/evidence'
@@ -2492,6 +3002,20 @@ declare module '@tanstack/react-router' {
       path: '/api/v1/geo/manual-observations/import'
       fullPath: '/api/v1/geo/manual-observations/import'
       preLoaderRoute: typeof ApiV1GeoManualObservationsImportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/geo/metrics/': {
+      id: '/api/v1/geo/metrics/'
+      path: '/api/v1/geo/metrics'
+      fullPath: '/api/v1/geo/metrics/'
+      preLoaderRoute: typeof ApiV1GeoMetricsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/geo/metrics/batch-comparison': {
+      id: '/api/v1/geo/metrics/batch-comparison'
+      path: '/api/v1/geo/metrics/batch-comparison'
+      fullPath: '/api/v1/geo/metrics/batch-comparison'
+      preLoaderRoute: typeof ApiV1GeoMetricsBatchComparisonRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/geo/observations/': {
@@ -2541,6 +3065,13 @@ declare module '@tanstack/react-router' {
       path: '/api/v1/geo/prompts/import'
       fullPath: '/api/v1/geo/prompts/import'
       preLoaderRoute: typeof ApiV1GeoPromptsImportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/geo/reports/': {
+      id: '/api/v1/geo/reports/'
+      path: '/api/v1/geo/reports'
+      fullPath: '/api/v1/geo/reports/'
+      preLoaderRoute: typeof ApiV1GeoReportsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/geo/sampling-runs/': {
@@ -2725,6 +3256,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedAppOrgOrgSettingsSkillRouteImport
       parentRoute: typeof AuthedAppOrgOrgSettingsRoute
     }
+    '/api/geo/$org/drafts/$draftId/export': {
+      id: '/api/geo/$org/drafts/$draftId/export'
+      path: '/api/geo/$org/drafts/$draftId/export'
+      fullPath: '/api/geo/$org/drafts/$draftId/export'
+      preLoaderRoute: typeof ApiGeoOrgDraftsDraftIdExportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/geo/$org/knowledge-assets/$assetId/file': {
+      id: '/api/geo/$org/knowledge-assets/$assetId/file'
+      path: '/api/geo/$org/knowledge-assets/$assetId/file'
+      fullPath: '/api/geo/$org/knowledge-assets/$assetId/file'
+      preLoaderRoute: typeof ApiGeoOrgKnowledgeAssetsAssetIdFileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/geo/$org/observations/$id/evidence': {
       id: '/api/geo/$org/observations/$id/evidence'
       path: '/api/geo/$org/observations/$id/evidence'
@@ -2737,6 +3282,13 @@ declare module '@tanstack/react-router' {
       path: '/api/geo/$org/observations/$id/export'
       fullPath: '/api/geo/$org/observations/$id/export'
       preLoaderRoute: typeof ApiGeoOrgObservationsIdExportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/geo/$org/reports/$id/$format': {
+      id: '/api/geo/$org/reports/$id/$format'
+      path: '/api/geo/$org/reports/$id/$format'
+      fullPath: '/api/geo/$org/reports/$id/$format'
+      preLoaderRoute: typeof ApiGeoOrgReportsIdFormatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/brands/$brandId/citations/domains': {
@@ -2781,6 +3333,104 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1GeoBrandsDictionaryVersionsVersionRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/geo/drafts/$draftId/': {
+      id: '/api/v1/geo/drafts/$draftId/'
+      path: '/api/v1/geo/drafts/$draftId'
+      fullPath: '/api/v1/geo/drafts/$draftId/'
+      preLoaderRoute: typeof ApiV1GeoDraftsDraftIdIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/geo/drafts/$draftId/export': {
+      id: '/api/v1/geo/drafts/$draftId/export'
+      path: '/api/v1/geo/drafts/$draftId/export'
+      fullPath: '/api/v1/geo/drafts/$draftId/export'
+      preLoaderRoute: typeof ApiV1GeoDraftsDraftIdExportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/geo/drafts/$draftId/publications': {
+      id: '/api/v1/geo/drafts/$draftId/publications'
+      path: '/api/v1/geo/drafts/$draftId/publications'
+      fullPath: '/api/v1/geo/drafts/$draftId/publications'
+      preLoaderRoute: typeof ApiV1GeoDraftsDraftIdPublicationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/geo/drafts/$draftId/transitions': {
+      id: '/api/v1/geo/drafts/$draftId/transitions'
+      path: '/api/v1/geo/drafts/$draftId/transitions'
+      fullPath: '/api/v1/geo/drafts/$draftId/transitions'
+      preLoaderRoute: typeof ApiV1GeoDraftsDraftIdTransitionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/geo/drafts/$draftId/versions': {
+      id: '/api/v1/geo/drafts/$draftId/versions'
+      path: '/api/v1/geo/drafts/$draftId/versions'
+      fullPath: '/api/v1/geo/drafts/$draftId/versions'
+      preLoaderRoute: typeof ApiV1GeoDraftsDraftIdVersionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/geo/knowledge-assets/$assetId/': {
+      id: '/api/v1/geo/knowledge-assets/$assetId/'
+      path: '/api/v1/geo/knowledge-assets/$assetId'
+      fullPath: '/api/v1/geo/knowledge-assets/$assetId/'
+      preLoaderRoute: typeof ApiV1GeoKnowledgeAssetsAssetIdIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/geo/knowledge-assets/$assetId/claims': {
+      id: '/api/v1/geo/knowledge-assets/$assetId/claims'
+      path: '/api/v1/geo/knowledge-assets/$assetId/claims'
+      fullPath: '/api/v1/geo/knowledge-assets/$assetId/claims'
+      preLoaderRoute: typeof ApiV1GeoKnowledgeAssetsAssetIdClaimsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/geo/knowledge-assets/$assetId/file': {
+      id: '/api/v1/geo/knowledge-assets/$assetId/file'
+      path: '/api/v1/geo/knowledge-assets/$assetId/file'
+      fullPath: '/api/v1/geo/knowledge-assets/$assetId/file'
+      preLoaderRoute: typeof ApiV1GeoKnowledgeAssetsAssetIdFileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/geo/knowledge-assets/$assetId/reviews': {
+      id: '/api/v1/geo/knowledge-assets/$assetId/reviews'
+      path: '/api/v1/geo/knowledge-assets/$assetId/reviews'
+      fullPath: '/api/v1/geo/knowledge-assets/$assetId/reviews'
+      preLoaderRoute: typeof ApiV1GeoKnowledgeAssetsAssetIdReviewsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/geo/knowledge-claims/$claimId/': {
+      id: '/api/v1/geo/knowledge-claims/$claimId/'
+      path: '/api/v1/geo/knowledge-claims/$claimId'
+      fullPath: '/api/v1/geo/knowledge-claims/$claimId/'
+      preLoaderRoute: typeof ApiV1GeoKnowledgeClaimsClaimIdIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/geo/knowledge-claims/$claimId/reviews': {
+      id: '/api/v1/geo/knowledge-claims/$claimId/reviews'
+      path: '/api/v1/geo/knowledge-claims/$claimId/reviews'
+      fullPath: '/api/v1/geo/knowledge-claims/$claimId/reviews'
+      preLoaderRoute: typeof ApiV1GeoKnowledgeClaimsClaimIdReviewsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/geo/knowledge-claims/$claimId/sources': {
+      id: '/api/v1/geo/knowledge-claims/$claimId/sources'
+      path: '/api/v1/geo/knowledge-claims/$claimId/sources'
+      fullPath: '/api/v1/geo/knowledge-claims/$claimId/sources'
+      preLoaderRoute: typeof ApiV1GeoKnowledgeClaimsClaimIdSourcesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/geo/knowledge-claims/conflicts/': {
+      id: '/api/v1/geo/knowledge-claims/conflicts/'
+      path: '/api/v1/geo/knowledge-claims/conflicts'
+      fullPath: '/api/v1/geo/knowledge-claims/conflicts/'
+      preLoaderRoute: typeof ApiV1GeoKnowledgeClaimsConflictsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/geo/observations/$id/reviews': {
+      id: '/api/v1/geo/observations/$id/reviews'
+      path: '/reviews'
+      fullPath: '/api/v1/geo/observations/$id/reviews'
+      preLoaderRoute: typeof ApiV1GeoObservationsIdReviewsRouteImport
+      parentRoute: typeof ApiV1GeoObservationsIdRoute
+    }
     '/api/v1/geo/prompt-sets/$id/': {
       id: '/api/v1/geo/prompt-sets/$id/'
       path: '/api/v1/geo/prompt-sets/$id'
@@ -2814,6 +3464,55 @@ declare module '@tanstack/react-router' {
       path: '/api/v1/geo/prompts/$id/transitions'
       fullPath: '/api/v1/geo/prompts/$id/transitions'
       preLoaderRoute: typeof ApiV1GeoPromptsIdTransitionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/geo/reports/$id/': {
+      id: '/api/v1/geo/reports/$id/'
+      path: '/api/v1/geo/reports/$id'
+      fullPath: '/api/v1/geo/reports/$id/'
+      preLoaderRoute: typeof ApiV1GeoReportsIdIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/geo/reports/$id/export': {
+      id: '/api/v1/geo/reports/$id/export'
+      path: '/api/v1/geo/reports/$id/export'
+      fullPath: '/api/v1/geo/reports/$id/export'
+      preLoaderRoute: typeof ApiV1GeoReportsIdExportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/geo/reports/$id/reviews': {
+      id: '/api/v1/geo/reports/$id/reviews'
+      path: '/api/v1/geo/reports/$id/reviews'
+      fullPath: '/api/v1/geo/reports/$id/reviews'
+      preLoaderRoute: typeof ApiV1GeoReportsIdReviewsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/geo/site-audit/findings/': {
+      id: '/api/v1/geo/site-audit/findings/'
+      path: '/api/v1/geo/site-audit/findings'
+      fullPath: '/api/v1/geo/site-audit/findings/'
+      preLoaderRoute: typeof ApiV1GeoSiteAuditFindingsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/geo/site-audit/findings/tasks': {
+      id: '/api/v1/geo/site-audit/findings/tasks'
+      path: '/api/v1/geo/site-audit/findings/tasks'
+      fullPath: '/api/v1/geo/site-audit/findings/tasks'
+      preLoaderRoute: typeof ApiV1GeoSiteAuditFindingsTasksRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/geo/site-audit/runs/': {
+      id: '/api/v1/geo/site-audit/runs/'
+      path: '/api/v1/geo/site-audit/runs'
+      fullPath: '/api/v1/geo/site-audit/runs/'
+      preLoaderRoute: typeof ApiV1GeoSiteAuditRunsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/geo/site-audit/runs/$runId': {
+      id: '/api/v1/geo/site-audit/runs/$runId'
+      path: '/api/v1/geo/site-audit/runs/$runId'
+      fullPath: '/api/v1/geo/site-audit/runs/$runId'
+      preLoaderRoute: typeof ApiV1GeoSiteAuditRunsRunIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/geo/site-pages/$pageId/': {
@@ -3012,6 +3711,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1GeoBrandsIdProductsProductIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/geo/knowledge-claims/conflicts/$conflictId/resolution': {
+      id: '/api/v1/geo/knowledge-claims/conflicts/$conflictId/resolution'
+      path: '/api/v1/geo/knowledge-claims/conflicts/$conflictId/resolution'
+      fullPath: '/api/v1/geo/knowledge-claims/conflicts/$conflictId/resolution'
+      preLoaderRoute: typeof ApiV1GeoKnowledgeClaimsConflictsConflictIdResolutionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/geo/site-audit/findings/$findingId/': {
+      id: '/api/v1/geo/site-audit/findings/$findingId/'
+      path: '/api/v1/geo/site-audit/findings/$findingId'
+      fullPath: '/api/v1/geo/site-audit/findings/$findingId/'
+      preLoaderRoute: typeof ApiV1GeoSiteAuditFindingsFindingIdIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/geo/site-pages/$pageId/versions/': {
       id: '/api/v1/geo/site-pages/$pageId/versions/'
       path: '/api/v1/geo/site-pages/$pageId/versions'
@@ -3082,6 +3795,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedAppOrgOrgBrandBrandSettingsPromptsRouteImport
       parentRoute: typeof AuthedAppOrgOrgBrandBrandRoute
     }
+    '/_authed/app/org/$org/geo/knowledge/assets/$assetId': {
+      id: '/_authed/app/org/$org/geo/knowledge/assets/$assetId'
+      path: '/knowledge/assets/$assetId'
+      fullPath: '/app/org/$org/geo/knowledge/assets/$assetId'
+      preLoaderRoute: typeof AuthedAppOrgOrgGeoKnowledgeAssetsAssetIdRouteImport
+      parentRoute: typeof AuthedAppOrgOrgGeoRoute
+    }
+    '/_authed/app/org/$org/geo/knowledge/drafts/$draftId': {
+      id: '/_authed/app/org/$org/geo/knowledge/drafts/$draftId'
+      path: '/knowledge/drafts/$draftId'
+      fullPath: '/app/org/$org/geo/knowledge/drafts/$draftId'
+      preLoaderRoute: typeof AuthedAppOrgOrgGeoKnowledgeDraftsDraftIdRouteImport
+      parentRoute: typeof AuthedAppOrgOrgGeoRoute
+    }
     '/api/v1/geo/site-pages/$pageId/versions/$versionId/snapshot': {
       id: '/api/v1/geo/site-pages/$pageId/versions/$versionId/snapshot'
       path: '/api/v1/geo/site-pages/$pageId/versions/$versionId/snapshot'
@@ -3149,6 +3876,8 @@ interface AuthedAppOrgOrgGeoRouteChildren {
   AuthedAppOrgOrgGeoReportsIndexRoute: typeof AuthedAppOrgOrgGeoReportsIndexRoute
   AuthedAppOrgOrgGeoSitePagesIndexRoute: typeof AuthedAppOrgOrgGeoSitePagesIndexRoute
   AuthedAppOrgOrgGeoTasksIndexRoute: typeof AuthedAppOrgOrgGeoTasksIndexRoute
+  AuthedAppOrgOrgGeoKnowledgeAssetsAssetIdRoute: typeof AuthedAppOrgOrgGeoKnowledgeAssetsAssetIdRoute
+  AuthedAppOrgOrgGeoKnowledgeDraftsDraftIdRoute: typeof AuthedAppOrgOrgGeoKnowledgeDraftsDraftIdRoute
 }
 
 const AuthedAppOrgOrgGeoRouteChildren: AuthedAppOrgOrgGeoRouteChildren = {
@@ -3172,6 +3901,10 @@ const AuthedAppOrgOrgGeoRouteChildren: AuthedAppOrgOrgGeoRouteChildren = {
   AuthedAppOrgOrgGeoReportsIndexRoute: AuthedAppOrgOrgGeoReportsIndexRoute,
   AuthedAppOrgOrgGeoSitePagesIndexRoute: AuthedAppOrgOrgGeoSitePagesIndexRoute,
   AuthedAppOrgOrgGeoTasksIndexRoute: AuthedAppOrgOrgGeoTasksIndexRoute,
+  AuthedAppOrgOrgGeoKnowledgeAssetsAssetIdRoute:
+    AuthedAppOrgOrgGeoKnowledgeAssetsAssetIdRoute,
+  AuthedAppOrgOrgGeoKnowledgeDraftsDraftIdRoute:
+    AuthedAppOrgOrgGeoKnowledgeDraftsDraftIdRoute,
 }
 
 const AuthedAppOrgOrgGeoRouteWithChildren =
@@ -3393,6 +4126,20 @@ const ApiV1PromptsPromptIdRouteChildren: ApiV1PromptsPromptIdRouteChildren = {
 const ApiV1PromptsPromptIdRouteWithChildren =
   ApiV1PromptsPromptIdRoute._addFileChildren(ApiV1PromptsPromptIdRouteChildren)
 
+interface ApiV1GeoObservationsIdRouteChildren {
+  ApiV1GeoObservationsIdReviewsRoute: typeof ApiV1GeoObservationsIdReviewsRoute
+}
+
+const ApiV1GeoObservationsIdRouteChildren: ApiV1GeoObservationsIdRouteChildren =
+  {
+    ApiV1GeoObservationsIdReviewsRoute: ApiV1GeoObservationsIdReviewsRoute,
+  }
+
+const ApiV1GeoObservationsIdRouteWithChildren =
+  ApiV1GeoObservationsIdRoute._addFileChildren(
+    ApiV1GeoObservationsIdRouteChildren,
+  )
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthedRoute: AuthedRouteWithChildren,
@@ -3442,41 +4189,85 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1GeoManualObservationsEvidenceRoute:
     ApiV1GeoManualObservationsEvidenceRoute,
   ApiV1GeoManualObservationsImportRoute: ApiV1GeoManualObservationsImportRoute,
-  ApiV1GeoObservationsIdRoute: ApiV1GeoObservationsIdRoute,
+  ApiV1GeoMetricsBatchComparisonRoute: ApiV1GeoMetricsBatchComparisonRoute,
+  ApiV1GeoObservationsIdRoute: ApiV1GeoObservationsIdRouteWithChildren,
   ApiV1GeoPromptsBuyerRolesRoute: ApiV1GeoPromptsBuyerRolesRoute,
   ApiV1GeoPromptsExportRoute: ApiV1GeoPromptsExportRoute,
   ApiV1GeoPromptsImportRoute: ApiV1GeoPromptsImportRoute,
   ApiV1GeoSamplingRunsIdRoute: ApiV1GeoSamplingRunsIdRoute,
+  ApiGeoOrgKnowledgeAssetsIndexRoute: ApiGeoOrgKnowledgeAssetsIndexRoute,
   ApiPlausibleJsScriptIndexRoute: ApiPlausibleJsScriptIndexRoute,
   ApiV1GeoBrandsIndexRoute: ApiV1GeoBrandsIndexRoute,
+  ApiV1GeoDraftsIndexRoute: ApiV1GeoDraftsIndexRoute,
+  ApiV1GeoKnowledgeAssetsIndexRoute: ApiV1GeoKnowledgeAssetsIndexRoute,
+  ApiV1GeoKnowledgeClaimsIndexRoute: ApiV1GeoKnowledgeClaimsIndexRoute,
+  ApiV1GeoMetricsIndexRoute: ApiV1GeoMetricsIndexRoute,
   ApiV1GeoObservationsIndexRoute: ApiV1GeoObservationsIndexRoute,
   ApiV1GeoPromptSetsIndexRoute: ApiV1GeoPromptSetsIndexRoute,
   ApiV1GeoPromptsIndexRoute: ApiV1GeoPromptsIndexRoute,
+  ApiV1GeoReportsIndexRoute: ApiV1GeoReportsIndexRoute,
   ApiV1GeoSamplingRunsIndexRoute: ApiV1GeoSamplingRunsIndexRoute,
   ApiV1GeoSitePagesIndexRoute: ApiV1GeoSitePagesIndexRoute,
   ApiV1GeoSitesIndexRoute: ApiV1GeoSitesIndexRoute,
   ApiV1GeoTargetsIndexRoute: ApiV1GeoTargetsIndexRoute,
   ApiV1GeoTasksIndexRoute: ApiV1GeoTasksIndexRoute,
+  ApiGeoOrgDraftsDraftIdExportRoute: ApiGeoOrgDraftsDraftIdExportRoute,
+  ApiGeoOrgKnowledgeAssetsAssetIdFileRoute:
+    ApiGeoOrgKnowledgeAssetsAssetIdFileRoute,
   ApiGeoOrgObservationsIdEvidenceRoute: ApiGeoOrgObservationsIdEvidenceRoute,
   ApiGeoOrgObservationsIdExportRoute: ApiGeoOrgObservationsIdExportRoute,
+  ApiGeoOrgReportsIdFormatRoute: ApiGeoOrgReportsIdFormatRoute,
   ApiV1GeoBrandsDictionaryVersionsVersionRoute:
     ApiV1GeoBrandsDictionaryVersionsVersionRoute,
+  ApiV1GeoDraftsDraftIdExportRoute: ApiV1GeoDraftsDraftIdExportRoute,
+  ApiV1GeoDraftsDraftIdPublicationsRoute:
+    ApiV1GeoDraftsDraftIdPublicationsRoute,
+  ApiV1GeoDraftsDraftIdTransitionsRoute: ApiV1GeoDraftsDraftIdTransitionsRoute,
+  ApiV1GeoDraftsDraftIdVersionsRoute: ApiV1GeoDraftsDraftIdVersionsRoute,
+  ApiV1GeoKnowledgeAssetsAssetIdClaimsRoute:
+    ApiV1GeoKnowledgeAssetsAssetIdClaimsRoute,
+  ApiV1GeoKnowledgeAssetsAssetIdFileRoute:
+    ApiV1GeoKnowledgeAssetsAssetIdFileRoute,
+  ApiV1GeoKnowledgeAssetsAssetIdReviewsRoute:
+    ApiV1GeoKnowledgeAssetsAssetIdReviewsRoute,
+  ApiV1GeoKnowledgeClaimsClaimIdReviewsRoute:
+    ApiV1GeoKnowledgeClaimsClaimIdReviewsRoute,
+  ApiV1GeoKnowledgeClaimsClaimIdSourcesRoute:
+    ApiV1GeoKnowledgeClaimsClaimIdSourcesRoute,
   ApiV1GeoPromptSetsIdFreezeRoute: ApiV1GeoPromptSetsIdFreezeRoute,
   ApiV1GeoPromptSetsIdVersionsRoute: ApiV1GeoPromptSetsIdVersionsRoute,
   ApiV1GeoPromptsIdTransitionsRoute: ApiV1GeoPromptsIdTransitionsRoute,
+  ApiV1GeoReportsIdExportRoute: ApiV1GeoReportsIdExportRoute,
+  ApiV1GeoReportsIdReviewsRoute: ApiV1GeoReportsIdReviewsRoute,
+  ApiV1GeoSiteAuditFindingsTasksRoute: ApiV1GeoSiteAuditFindingsTasksRoute,
+  ApiV1GeoSiteAuditRunsRunIdRoute: ApiV1GeoSiteAuditRunsRunIdRoute,
   ApiV1GeoSitePagesPageIdReparseRoute: ApiV1GeoSitePagesPageIdReparseRoute,
   ApiV1GeoTasksIdTransitionsRoute: ApiV1GeoTasksIdTransitionsRoute,
   ApiV1GeoBrandsIdIndexRoute: ApiV1GeoBrandsIdIndexRoute,
   ApiV1GeoBrandsDictionaryVersionsIndexRoute:
     ApiV1GeoBrandsDictionaryVersionsIndexRoute,
+  ApiV1GeoDraftsDraftIdIndexRoute: ApiV1GeoDraftsDraftIdIndexRoute,
+  ApiV1GeoKnowledgeAssetsAssetIdIndexRoute:
+    ApiV1GeoKnowledgeAssetsAssetIdIndexRoute,
+  ApiV1GeoKnowledgeClaimsClaimIdIndexRoute:
+    ApiV1GeoKnowledgeClaimsClaimIdIndexRoute,
+  ApiV1GeoKnowledgeClaimsConflictsIndexRoute:
+    ApiV1GeoKnowledgeClaimsConflictsIndexRoute,
   ApiV1GeoPromptSetsIdIndexRoute: ApiV1GeoPromptSetsIdIndexRoute,
   ApiV1GeoPromptsIdIndexRoute: ApiV1GeoPromptsIdIndexRoute,
+  ApiV1GeoReportsIdIndexRoute: ApiV1GeoReportsIdIndexRoute,
+  ApiV1GeoSiteAuditFindingsIndexRoute: ApiV1GeoSiteAuditFindingsIndexRoute,
+  ApiV1GeoSiteAuditRunsIndexRoute: ApiV1GeoSiteAuditRunsIndexRoute,
   ApiV1GeoSitePagesPageIdIndexRoute: ApiV1GeoSitePagesPageIdIndexRoute,
   ApiV1GeoSitesSiteIdIndexRoute: ApiV1GeoSitesSiteIdIndexRoute,
   ApiV1GeoTasksIdIndexRoute: ApiV1GeoTasksIdIndexRoute,
   ApiV1GeoBrandsIdProductsProductIdRoute:
     ApiV1GeoBrandsIdProductsProductIdRoute,
+  ApiV1GeoKnowledgeClaimsConflictsConflictIdResolutionRoute:
+    ApiV1GeoKnowledgeClaimsConflictsConflictIdResolutionRoute,
   ApiV1GeoBrandsIdProductsIndexRoute: ApiV1GeoBrandsIdProductsIndexRoute,
+  ApiV1GeoSiteAuditFindingsFindingIdIndexRoute:
+    ApiV1GeoSiteAuditFindingsFindingIdIndexRoute,
   ApiV1GeoSitePagesPageIdVersionsIndexRoute:
     ApiV1GeoSitePagesPageIdVersionsIndexRoute,
   ApiV1GeoSitesSiteIdCrawlRunsIndexRoute:
