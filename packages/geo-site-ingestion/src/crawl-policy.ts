@@ -62,6 +62,8 @@ export function outcomeOfFailure(code: SafeFetchFailure): GeoCrawlItemOutcome {
 		case "REDIRECT_BLOCKED":
 		case "TOO_MANY_REDIRECTS":
 			return "REDIRECT_BLOCKED";
+		case "REDIRECT_REFUSED":
+			return "ROBOTS_DISALLOWED";
 		case "ADDRESS_BLOCKED":
 			return "ADDRESS_BLOCKED";
 		case "MIME_REJECTED":
