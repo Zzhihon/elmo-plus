@@ -45,11 +45,12 @@ import { DemoModeAlert } from "@/components/demo-mode-alert";
 import { useDeploymentFeatures } from "@/hooks/use-deployment-features";
 import { useIsTruncated } from "@/hooks/use-is-truncated";
 import { useOrganization } from "@/hooks/use-organizations";
-import { API_SCOPES } from "@/lib/api/scopes";
+import { ALL_API_SCOPES, type ApiScope } from "@/lib/api/scopes";
 import { trackEvent } from "@/lib/posthog";
 import { pageHead } from "@/lib/route-head";
 import {
 	type ApiKeyAccess,
+	type ApiKeyGeoAccess,
 	type ApiKeySummary,
 	type ApiKeysPageData,
 	createApiKeyFn,
@@ -68,6 +69,19 @@ export const Route = createFileRoute("/_authed/app/org/$org/settings/api-keys")(
 const ACCESS_LABELS: Record<ApiKeyAccess, string> = {
 	read: "Read",
 	write: "Read/Write",
+};
+
+const GEO_ACCESS_LABELS: Record<ApiKeyGeoAccess, string> = {
+	none: "None",
+	read: "Read",
+	write: "Read/Write",
+};
+
+const SCOPE_LABELS: Record<ApiScope, string> = {
+	read: "Read",
+	write: "Write",
+	"geo:read": "GEO Read",
+	"geo:write": "GEO Write",
 };
 
 function formatDate(value: string | null, empty = "—"): string {
@@ -89,7 +103,14 @@ function inactiveReason(key: ApiKeySummary): string {
 }
 
 function ApiKeysSettingsPage() {
-	const { keys, brands, expiryOptions, canManage: isKeyAdmin, organization } = Route.useLoaderData();
+	const {
+		keys,
+		brands,
+		expiryOptions,
+		geoWorkspaceEnabled,
+		canManage: isKeyAdmin,
+		organization,
+	} = Route.useLoaderData();
 	const readOnly = useDeploymentFeatures()?.readOnly ?? false;
 	const canManage = isKeyAdmin && !readOnly;
 	const linkParams = orgLinkParams(useOrganization());
@@ -210,6 +231,7 @@ function ApiKeysSettingsPage() {
 						organizationId={organization.id}
 						brands={brands}
 						expiryOptions={expiryOptions}
+						geoWorkspaceEnabled={geoWorkspaceEnabled}
 						onCreated={handleCreated}
 						onCancel={() => setCreatingOpen(false)}
 					/>
@@ -257,17 +279,20 @@ function CreateKeyForm({
 	organizationId,
 	brands,
 	expiryOptions,
+	geoWorkspaceEnabled,
 	onCreated,
 	onCancel,
 }: {
 	organizationId: string;
 	brands: ApiKeysPageData["brands"];
 	expiryOptions: readonly number[];
+	geoWorkspaceEnabled: boolean;
 	onCreated: (key: string) => void;
 	onCancel: () => void;
 }) {
 	const [name, setName] = useState("");
 	const [access, setAccess] = useState<ApiKeyAccess>("read");
+	const [geoAccess, setGeoAccess] = useState<ApiKeyGeoAccess>("none");
 	const [restrictBrands, setRestrictBrands] = useState(false);
 	const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
 	const [expiresInDays, setExpiresInDays] = useState<string>("never");
@@ -284,6 +309,7 @@ function CreateKeyForm({
 					organizationId,
 					name,
 					access,
+					geoAccess: restrictBrands ? "none" : geoAccess,
 					// Null, not `[]`: unrestricted is the absence of a restriction. The
 					// server rejects `[]` rather than reading it as "all".
 					brandIds: restrictBrands ? selectedBrands : null,
@@ -351,6 +377,13 @@ function CreateKeyForm({
 
 				<Separator />
 
+				{geoWorkspaceEnabled && !restrictBrands && (
+					<>
+						<GeoAccessPicker access={geoAccess} onAccess={setGeoAccess} />
+						<Separator />
+					</>
+				)}
+
 				<BrandPicker
 					brands={brands}
 					restricted={restrictBrands}
@@ -383,6 +416,30 @@ function AccessPicker({ access, onAccess }: { access: ApiKeyAccess; onAccess: (a
 					<TabsTrigger value="write">{ACCESS_LABELS.write}</TabsTrigger>
 				</TabsList>
 			</Tabs>
+		</section>
+	);
+}
+
+function GeoAccessPicker({
+	access,
+	onAccess,
+}: {
+	access: ApiKeyGeoAccess;
+	onAccess: (access: ApiKeyGeoAccess) => void;
+}) {
+	return (
+		<section className="space-y-3">
+			<p className="text-sm font-medium">GEO Workspace Access</p>
+			<Tabs value={access} onValueChange={(value) => onAccess((value ?? "none") as ApiKeyGeoAccess)}>
+				<TabsList>
+					<TabsTrigger value="none">{GEO_ACCESS_LABELS.none}</TabsTrigger>
+					<TabsTrigger value="read">{GEO_ACCESS_LABELS.read}</TabsTrigger>
+					<TabsTrigger value="write">{GEO_ACCESS_LABELS.write}</TabsTrigger>
+				</TabsList>
+			</Tabs>
+			<p className="text-sm text-muted-foreground">
+				Anything this key writes in the GEO workspace is recorded under your name, and you cannot then approve it.
+			</p>
 		</section>
 	);
 }
@@ -497,14 +554,14 @@ function IssuedKeyCard({ value }: { value: string }) {
 /** One pill per grant, always in scope order rather than the order the key
  * happens to hold them in. */
 function AccessCell({ scopes }: { scopes: readonly string[] }) {
-	const held = API_SCOPES.filter((scope) => scopes.includes(scope));
+	const held = ALL_API_SCOPES.filter((scope) => scopes.includes(scope));
 	if (held.length === 0) return <span className="text-muted-foreground">No access</span>;
 
 	return (
 		<div className="flex flex-wrap gap-1">
 			{held.map((scope) => (
-				<Badge key={scope} variant="secondary" className="capitalize">
-					{scope}
+				<Badge key={scope} variant="secondary">
+					{SCOPE_LABELS[scope]}
 				</Badge>
 			))}
 		</div>

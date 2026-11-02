@@ -24,13 +24,6 @@ export {
 	targetEndpointUrls,
 	validateTargetConfig,
 } from "./config";
-export {
-	credentialRefFor,
-	GEO_TARGET_SECRET_PREFIX,
-	secretAad,
-	secretNameFromRef,
-	targetSecretName,
-} from "./credentials";
 export { isHttpUrl } from "./http";
 export { LIVE_SURFACE_PROVIDER_VERSION, LicensedHttpAdapter } from "./live-surface";
 export {

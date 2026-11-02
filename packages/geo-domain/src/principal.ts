@@ -1,17 +1,34 @@
 import type { GeoActorKind } from "./enums";
 import { GeoError } from "./errors";
-import { can, type GeoAccess, type GeoPermission, type GeoRole, isGeoRole, permissionAccess } from "./permissions";
+import {
+	can,
+	type GeoAccess,
+	type GeoPermission,
+	type GeoRole,
+	isGeoRole,
+	permissionAccess,
+	permissionNeedsSecondFactor,
+} from "./permissions";
 import type { GeoTransitionActor } from "./transition";
 
 export interface GeoPrincipal {
 	organizationId: string;
-	/** A better-auth user id for `user`; `apikey:<id>`, `instance-admin` or `system:<source>` otherwise. */
+	/**
+	 * The person answerable for the action: a better-auth user id, including for a key,
+	 * which acts as the admin who issued it. `instance-admin` or `system:<source>` otherwise.
+	 */
 	actorId: string;
 	actorKind: GeoActorKind;
+	/** The key that made the call, for the audit trail; `actorId` is who answers for it. */
+	apiKeyId?: string;
 	roles: readonly GeoRole[];
 	requestId: string;
 	/** Set only for key-based callers. Narrows what the roles would otherwise allow. */
 	scopes?: readonly GeoAccess[];
+	/** The signed-in session behind a `user`. */
+	sessionId?: string;
+	/** Set only for a `user` whose session meets the organization's second-factor rule. */
+	secondFactorSatisfied?: boolean;
 }
 
 const ORG_ADMIN_MEMBER_ROLES = new Set(["owner", "admin"]);
@@ -40,14 +57,29 @@ export function geoSystemPrincipal(organizationId: string, source: string, reque
 	return { organizationId, actorId: `system:${source}`, actorKind: "system", roles: [], requestId };
 }
 
-export function principalCan(principal: GeoPrincipal, permission: GeoPermission): boolean {
+function hasAuthority(principal: GeoPrincipal, permission: GeoPermission): boolean {
 	if (!can(principal.roles, permission)) return false;
 	return principal.scopes === undefined || principal.scopes.includes(permissionAccess(permission));
 }
 
+function lacksSecondFactor(principal: GeoPrincipal, permission: GeoPermission): boolean {
+	return permissionNeedsSecondFactor(permission) && principal.secondFactorSatisfied !== true;
+}
+
+/**
+ * The one gate for every permission check, on both the server function and the core
+ * side, so a sensitive administrative action cannot be reached by forgetting a guard.
+ */
+export function principalCan(principal: GeoPrincipal, permission: GeoPermission): boolean {
+	return hasAuthority(principal, permission) && !lacksSecondFactor(principal, permission);
+}
+
 export function assertGeoPermission(principal: GeoPrincipal, permission: GeoPermission): void {
-	if (!principalCan(principal, permission)) {
+	if (!hasAuthority(principal, permission)) {
 		throw new GeoError("FORBIDDEN", "当前账号没有执行此操作的权限");
+	}
+	if (lacksSecondFactor(principal, permission)) {
+		throw new GeoError("FORBIDDEN", "此操作要求本次登录完成两步验证：请先到“设置 › 安全”完成验证");
 	}
 }
 

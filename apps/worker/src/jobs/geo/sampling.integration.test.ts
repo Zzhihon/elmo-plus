@@ -5,8 +5,13 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { credentialRefFor, type FetchLike, targetSecretName } from "@workspace/geo-cn-providers";
-import { GEO_EVALUATE_OBSERVATION_QUEUE, GEO_QUEUE, samplingRunIdempotencyKey } from "@workspace/geo-domain";
+import type { FetchLike } from "@workspace/geo-cn-providers";
+import {
+	GEO_EVALUATE_OBSERVATION_QUEUE,
+	GEO_QUEUE,
+	samplingRunIdempotencyKey,
+	targetCredentialRef,
+} from "@workspace/geo-domain";
 import { getObjectStore } from "@workspace/geo-evidence";
 import { applyGeoBootstrapSites } from "@workspace/geo-site-ingestion/store";
 import { db } from "@workspace/lib/db/db";
@@ -29,17 +34,17 @@ import {
 	geoSamplingTargets,
 	geoSiteSources,
 	organization,
-	secrets,
 } from "@workspace/lib/db/schema";
 import { runGeoBootstrap } from "@workspace/lib/geo/bootstrap";
+import { putGeoCredential } from "@workspace/lib/geo/credentials";
 import { linkGeoRetestBatches } from "@workspace/lib/geo/maintenance";
-import { encryptSecret, getKeyring } from "@workspace/lib/secrets";
 import { and, eq, inArray } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { evaluateObservation, sweepUnevaluated } from "./evaluation-run";
 import { generateReport, reportTick } from "./reports-generate";
 import { applyGeoBootstrapTargets } from "./sampling-bootstrap";
 import { processCaptureJob } from "./sampling-capture";
+import { loadTargetCredential } from "./sampling-credentials";
 import { dispatchBatch, sweepSampling } from "./sampling-dispatch";
 import { recountBatch } from "./sampling-store";
 
@@ -101,7 +106,7 @@ function startFakeModelApi(): Promise<void> {
 					model: `${model}-2026`,
 					choices: [{ message: { content: ANSWER }, finish_reason: "stop" }],
 					usage: { prompt_tokens: 100, completion_tokens: 200 },
-					citations: [{ url: "https://www.example-electric.test/products/kyn28?utm_source=x", title: "产品" }],
+					citations: [{ url: "https://www.example-electric.test/products/xg900?utm_source=x", title: "产品" }],
 				},
 				{ "x-request-id": `trace-${count}` },
 			);
@@ -275,6 +280,19 @@ describe("bootstrap file", () => {
 	});
 });
 
+describe("a target's credential", () => {
+	it("is read from its own organization's store only", async () => {
+		const own = await createOrganization();
+		const other = await createOrganization();
+		await putGeoCredential(db, other, "SHARED_KEY", "sk-other-organization");
+		await putGeoCredential(db, own, "OWN_KEY", "sk-own-organization");
+		expect(await loadTargetCredential(own, "OWN_KEY")).toBe("sk-own-organization");
+		expect(await loadTargetCredential(own, "SHARED_KEY")).toBeNull();
+		expect(await loadTargetCredential(own, "geo:" + other + ":SHARED_KEY")).toBeNull();
+		expect(await loadTargetCredential(own, "secret:OPENAI_API_KEY")).toBeNull();
+	});
+});
+
 describe("sampling a frozen set through a model API", () => {
 	let organizationId: string;
 	let batchId: string;
@@ -298,20 +316,9 @@ describe("sampling a frozen set through a model API", () => {
 				createdBy: "user-admin",
 			})
 			.returning();
-		const name = targetSecretName(target.id);
-		const keyring = getKeyring();
-		if (!keyring) throw new Error("test keyring missing");
-		await db.insert(secrets).values({
-			name,
-			encryptedValue: await encryptSecret(`sk-test-${randomBytes(8).toString("hex")}`, {
-				key: keyring.primary,
-				aad: `secret:${name}`,
-			}),
-		});
-		await db
-			.update(geoSamplingTargets)
-			.set({ credentialRef: credentialRefFor(name) })
-			.where(eq(geoSamplingTargets.id, target.id));
+		const ref = targetCredentialRef(target.id);
+		await putGeoCredential(db, organizationId, ref, `sk-test-${randomBytes(8).toString("hex")}`);
+		await db.update(geoSamplingTargets).set({ credentialRef: ref }).where(eq(geoSamplingTargets.id, target.id));
 		return target.id;
 	}
 

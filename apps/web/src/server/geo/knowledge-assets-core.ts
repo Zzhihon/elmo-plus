@@ -12,8 +12,10 @@ import {
 	GeoError,
 	type GeoPrincipal,
 	type GeoPublicationScope,
+	principalCan,
 	scopeAllows,
 	sniffKnowledgeFile,
+	validityExtended,
 } from "@workspace/geo-domain";
 import { geoObjectKey, getObjectStore, ScanUnavailableError, scanUpload } from "@workspace/geo-evidence";
 import { canonicalKeyOf, normalizeValueText, searchTokensOf } from "@workspace/geo-site-ingestion";
@@ -21,18 +23,21 @@ import { db } from "@workspace/lib/db/db";
 import type { DbConnection } from "@workspace/lib/db/db-connection";
 import {
 	geoAssertionSources,
+	geoAuditLogs,
 	geoKnowledgeAssertions,
 	geoKnowledgeAssets,
 	geoSiteEntities,
 } from "@workspace/lib/db/schema";
 import { writeGeoAudit } from "@workspace/lib/geo/audit";
-import { detectAssertionConflicts, sweepKnowledgeValidity } from "@workspace/lib/geo/knowledge";
+import { detectAssertionConflicts, lockClaimField, sweepKnowledgeValidity } from "@workspace/lib/geo/knowledge";
 import { and, count, desc, eq, getTableName, ilike, inArray, ne, notInArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
 	canReadConfidential,
 	displayNames,
+	hiddenFromReader,
 	iso,
+	type LocatorFields,
 	locatorFields,
 	nameOf,
 	optionalText,
@@ -156,12 +161,18 @@ function visibleAssets(principal: GeoPrincipal) {
 	return canReadConfidential(principal) ? own : and(own, ne(geoKnowledgeAssets.confidentiality, "CONFIDENTIAL"));
 }
 
-export async function loadAsset(tx: DbConnection, principal: GeoPrincipal, assetId: string): Promise<AssetRow> {
-	const [row] = await tx
+export async function loadAsset(
+	tx: DbConnection,
+	principal: GeoPrincipal,
+	assetId: string,
+	lock = false,
+): Promise<AssetRow> {
+	const query = tx
 		.select()
 		.from(geoKnowledgeAssets)
 		.where(and(visibleAssets(principal), eq(geoKnowledgeAssets.id, assetId)))
 		.limit(1);
+	const [row] = lock ? await query.for("update") : await query;
 	if (!row) throw new GeoError("NOT_FOUND", "资料不存在");
 	return row;
 }
@@ -169,6 +180,49 @@ export async function loadAsset(tx: DbConnection, principal: GeoPrincipal, asset
 // ---------------------------------------------------------------------------
 // Upload, list, read
 // ---------------------------------------------------------------------------
+
+async function scanOrRefuse(bytes: Uint8Array): Promise<Awaited<ReturnType<typeof scanUpload>>> {
+	try {
+		return await scanUpload(bytes);
+	} catch (error) {
+		if (error instanceof ScanUnavailableError) {
+			throw new GeoError("TARGET_UNAVAILABLE", "恶意文件扫描服务不可用，请稍后重试", { cause: error });
+		}
+		throw error;
+	}
+}
+
+/**
+ * Uploading the same file again is how a document stored before a scanner was
+ * configured gets its scan, and with it the chance to stand behind a high-risk fact.
+ */
+async function rescanUnscanned(principal: GeoPrincipal, asset: AssetRow, bytes: Uint8Array): Promise<AssetRow> {
+	const scan = await scanOrRefuse(bytes);
+	if (scan.status === "UNSCANNED") return asset;
+	const after = await db.transaction(async (tx) => {
+		const [row] = await tx
+			.update(geoKnowledgeAssets)
+			.set({ scanStatus: scan.status })
+			.where(and(eq(geoKnowledgeAssets.id, asset.id), eq(geoKnowledgeAssets.scanStatus, "UNSCANNED")))
+			.returning();
+		await writeGeoAudit(tx, {
+			principal,
+			action: "knowledge.asset.rescan",
+			entityType: "knowledge_asset",
+			entityId: asset.id,
+			before: { scanStatus: asset.scanStatus },
+			after: { scanStatus: scan.status },
+			metadata: scan.status === "INFECTED" ? { signature: scan.signature } : {},
+		});
+		if (scan.status === "INFECTED") await sweepKnowledgeValidity(tx, principal.organizationId);
+		return row ?? asset;
+	});
+	if (scan.status === "INFECTED") {
+		if (asset.objectKey) await getObjectStore().delete(asset.objectKey);
+		throw new GeoError("VALIDATION_ERROR", "文件未通过恶意文件扫描，已拒绝上传");
+	}
+	return after;
+}
 
 /**
  * The object key is the content hash, so a user-supplied name never reaches
@@ -196,22 +250,16 @@ export async function uploadKnowledgeAsset(
 		.where(and(eq(geoKnowledgeAssets.organizationId, principal.organizationId), eq(geoKnowledgeAssets.sha256, sha256)))
 		.limit(1);
 	if (existing) {
-		if (existing.confidentiality === "CONFIDENTIAL" && !canReadConfidential(principal)) {
-			throw new GeoError("CONFLICT", "相同的文件已经上传过");
+		// Says no more than a refused upload would: this reader may not learn the document exists.
+		if (hiddenFromReader(principal, existing.confidentiality)) {
+			throw new GeoError("CONFLICT", "该文件无法上传，请联系知识审核人");
 		}
-		const names = await displayNames([existing.uploadedBy, existing.reviewedBy]);
-		return { asset: assetView(existing, names), created: false };
+		const current = existing.scanStatus === "UNSCANNED" ? await rescanUnscanned(principal, existing, bytes) : existing;
+		const names = await displayNames([current.uploadedBy, current.reviewedBy]);
+		return { asset: assetView(current, names), created: false };
 	}
 
-	let scan: Awaited<ReturnType<typeof scanUpload>>;
-	try {
-		scan = await scanUpload(bytes);
-	} catch (error) {
-		if (error instanceof ScanUnavailableError) {
-			throw new GeoError("TARGET_UNAVAILABLE", "恶意文件扫描服务不可用，请稍后重试", { cause: error });
-		}
-		throw error;
-	}
+	const scan = await scanOrRefuse(bytes);
 	if (scan.status === "INFECTED") {
 		await writeGeoAudit(db, {
 			principal,
@@ -330,18 +378,33 @@ export async function getKnowledgeAsset(principal: GeoPrincipal, assetId: string
 	const names = await displayNames([asset.uploadedBy, asset.reviewedBy]);
 	return {
 		asset: assetView(asset, names),
-		claims: claims.map((claim) => ({ ...claim, locator: locatorFields(claim.locator) })),
+		claims: claims.map(({ locator, ...claim }) =>
+			hiddenFromReader(principal, claim.publicationScope)
+				? { ...claim, claimText: null, fieldPath: null, entityTitle: null, locator: {} as LocatorFields }
+				: { ...claim, locator: locatorFields(locator) },
+		),
 	};
+}
+
+const EXTEND_VALIDITY_ACTION = "knowledge.asset.extend_validity";
+
+function assetPatch(before: AssetRow, input: AssetUpdate): { patch: Partial<AssetRow>; extended: boolean } {
+	const patch: Partial<AssetRow> = {};
+	if (input.title !== undefined) patch.title = input.title;
+	if (input.description !== undefined) patch.description = input.description ?? null;
+	if (input.validUntil !== undefined) patch.validUntil = parseValidUntil(input.validUntil);
+	const extended = patch.validUntil !== undefined && validityExtended(before.validUntil, patch.validUntil);
+	if (extended && before.approvalStatus === "APPROVED") {
+		Object.assign(patch, { approvalStatus: "PENDING", reviewedBy: null, reviewedAt: null, reviewNote: null });
+	}
+	return { patch, extended };
 }
 
 export async function updateKnowledgeAsset(principal: GeoPrincipal, assetId: string, input: AssetUpdate) {
 	assertGeoPermission(principal, "knowledge.write");
 	return db.transaction(async (tx) => {
-		const before = await loadAsset(tx, principal, assetId);
-		const patch: Partial<AssetRow> = {};
-		if (input.title !== undefined) patch.title = input.title;
-		if (input.description !== undefined) patch.description = input.description ?? null;
-		if (input.validUntil !== undefined) patch.validUntil = parseValidUntil(input.validUntil);
+		const before = await loadAsset(tx, principal, assetId, true);
+		const { patch, extended } = assetPatch(before, input);
 		if (Object.keys(patch).length === 0) return before;
 		const [after] = await tx
 			.update(geoKnowledgeAssets)
@@ -350,7 +413,7 @@ export async function updateKnowledgeAsset(principal: GeoPrincipal, assetId: str
 			.returning();
 		await writeGeoAudit(tx, {
 			principal,
-			action: "knowledge.asset.update",
+			action: extended ? EXTEND_VALIDITY_ACTION : "knowledge.asset.update",
 			entityType: "knowledge_asset",
 			entityId: before.id,
 			before,
@@ -361,13 +424,32 @@ export async function updateKnowledgeAsset(principal: GeoPrincipal, assetId: str
 	});
 }
 
+async function extendedValidityBy(tx: DbConnection, asset: AssetRow): Promise<string | null> {
+	const [row] = await tx
+		.select({ actorId: geoAuditLogs.actorId })
+		.from(geoAuditLogs)
+		.where(
+			and(
+				eq(geoAuditLogs.organizationId, asset.organizationId),
+				eq(geoAuditLogs.action, EXTEND_VALIDITY_ACTION),
+				eq(geoAuditLogs.entityId, asset.id),
+			),
+		)
+		.orderBy(desc(geoAuditLogs.createdAt))
+		.limit(1);
+	return row?.actorId ?? null;
+}
+
 /** A reviewer confirms the document is genuine and current; only then does it count as an original. */
 export async function reviewKnowledgeAsset(principal: GeoPrincipal, assetId: string, input: AssetReviewInput) {
 	assertGeoPermission(principal, "knowledge.review");
 	return db.transaction(async (tx) => {
-		const before = await loadAsset(tx, principal, assetId);
+		const before = await loadAsset(tx, principal, assetId, true);
 		if (input.decision === "APPROVE" && before.uploadedBy === principal.actorId) {
 			throw new GeoError("FORBIDDEN", "上传人不能确认自己上传的资料");
+		}
+		if (input.decision === "APPROVE" && (await extendedValidityBy(tx, before)) === principal.actorId) {
+			throw new GeoError("FORBIDDEN", "延长有效期的人不能确认这份资料");
 		}
 		if (input.decision === "APPROVE" && before.scanStatus === "PENDING") {
 			throw new GeoError("CONFLICT", "资料尚未完成扫描");
@@ -397,6 +479,10 @@ export async function downloadKnowledgeAsset(principal: GeoPrincipal, assetId: s
 	assertGeoPermission(principal, "knowledge.read");
 	const asset = await loadAsset(db, principal, assetId);
 	if (!asset.objectKey) throw new GeoError("NOT_FOUND", "该资料没有原件文件");
+	// Reviewers may have to open one to judge it; nobody else should be handed an unchecked file.
+	if (asset.scanStatus !== "CLEAN" && !principalCan(principal, "knowledge.review")) {
+		throw new GeoError("CONFLICT", "该资料未通过恶意文件扫描，不能下载");
+	}
 	const object = await getObjectStore().get(asset.objectKey);
 	if (!object) throw new GeoError("NOT_FOUND", "原件文件不存在");
 	await writeGeoAudit(db, {
@@ -404,7 +490,7 @@ export async function downloadKnowledgeAsset(principal: GeoPrincipal, assetId: s
 		action: "knowledge.asset.download",
 		entityType: "knowledge_asset",
 		entityId: asset.id,
-		metadata: { size: object.size, confidentiality: asset.confidentiality },
+		metadata: { size: object.size, confidentiality: asset.confidentiality, scan: asset.scanStatus },
 	});
 	const extension = asset.objectKey.split(".").pop() ?? "bin";
 	const display = encodeURIComponent(asset.fileName ?? `${asset.title}.${extension}`);
@@ -482,6 +568,28 @@ async function resolveEntity(tx: DbConnection, principal: GeoPrincipal, entity: 
 	return existing;
 }
 
+/** A conflict with a value this reader may not see would give away that the value exists. */
+async function visibleConflictCount(
+	tx: DbConnection,
+	principal: GeoPrincipal,
+	conflicts: readonly { approvedId: string }[],
+): Promise<number> {
+	if (conflicts.length === 0 || canReadConfidential(principal)) return conflicts.length;
+	const rows = await tx
+		.select({ id: geoKnowledgeAssertions.id })
+		.from(geoKnowledgeAssertions)
+		.where(
+			and(
+				inArray(
+					geoKnowledgeAssertions.id,
+					conflicts.map((conflict) => conflict.approvedId),
+				),
+				ne(geoKnowledgeAssertions.publicationScope, "CONFIDENTIAL"),
+			),
+		);
+	return conflicts.filter((conflict) => rows.some((row) => row.id === conflict.approvedId)).length;
+}
+
 /**
  * A reviewer records a claim found in a customer original, with page and
  * paragraph. It lands on the same entity as the website's claims, so one model
@@ -494,15 +602,15 @@ export async function registerAssetClaim(principal: GeoPrincipal, assetId: strin
 		usableForClaims(asset);
 		const entity = await resolveEntity(tx, principal, input.entity);
 		const value = normalizeValueText(input.value || input.claimText);
-		await tx.execute(
-			sql`select pg_advisory_xact_lock(hashtext(${`geo-claim:${entity.id}:${input.fieldPath}:${input.claimType}`}))`,
-		);
+		await lockClaimField(tx, { entityId: entity.id, fieldPath: input.fieldPath, claimType: input.claimType });
+		// A reader who may not see a confidential twin gets a claim of their own, as if it did not exist.
 		const [same] = await tx
 			.select({ id: geoKnowledgeAssertions.id, status: geoKnowledgeAssertions.status })
 			.from(geoKnowledgeAssertions)
 			.where(
 				and(
 					eq(geoKnowledgeAssertions.organizationId, principal.organizationId),
+					...(canReadConfidential(principal) ? [] : [ne(geoKnowledgeAssertions.publicationScope, "CONFIDENTIAL")]),
 					eq(geoKnowledgeAssertions.entityId, entity.id),
 					eq(geoKnowledgeAssertions.fieldPath, input.fieldPath),
 					eq(geoKnowledgeAssertions.claimType, input.claimType),
@@ -558,7 +666,12 @@ export async function registerAssetClaim(principal: GeoPrincipal, assetId: strin
 			metadata: { assetId: asset.id, page: input.locator.page ?? null },
 		});
 		const conflicts = await detectAssertionConflicts(tx, principal, { assertionIds: [assertionId] });
-		return { assertionId, created: !same, entityId: entity.id, conflicts: conflicts.length };
+		return {
+			assertionId,
+			created: !same,
+			entityId: entity.id,
+			conflicts: await visibleConflictCount(tx, principal, conflicts),
+		};
 	});
 }
 
@@ -572,6 +685,7 @@ export async function attachAssetSource(principal: GeoPrincipal, assertionId: st
 			.where(
 				and(
 					eq(geoKnowledgeAssertions.organizationId, principal.organizationId),
+					...(canReadConfidential(principal) ? [] : [ne(geoKnowledgeAssertions.publicationScope, "CONFIDENTIAL")]),
 					eq(geoKnowledgeAssertions.id, assertionId),
 				),
 			)
@@ -629,7 +743,9 @@ const FORM_OVERHEAD_BYTES = 64 * 1024;
 
 /** The upload routes take the file and its metadata as one multipart form. */
 export async function readAssetUpload(request: Request): Promise<{ file: File; metadata: AssetMetadata }> {
-	const declared = Number(request.headers.get("Content-Length") ?? "0");
+	// Parsing a form buffers all of it, so a body of undeclared length is refused before it can fill memory.
+	const declared = Number(request.headers.get("Content-Length") ?? Number.NaN);
+	if (!Number.isFinite(declared)) throw new GeoError("VALIDATION_ERROR", "上传请求必须声明 Content-Length");
 	if (declared > GEO_KNOWLEDGE_UPLOAD_MAX_BYTES + FORM_OVERHEAD_BYTES) {
 		throw new GeoError("VALIDATION_ERROR", `文件不能超过 ${GEO_KNOWLEDGE_UPLOAD_MAX_BYTES / 1024 / 1024} MB`);
 	}

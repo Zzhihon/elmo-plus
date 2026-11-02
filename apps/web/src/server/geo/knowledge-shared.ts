@@ -28,6 +28,14 @@ export function canReadConfidential(principal: GeoPrincipal): boolean {
 	return principalCan(principal, "knowledge.read_confidential");
 }
 
+/**
+ * The one rule for every way a claim or an original leaves the server: its contents
+ * are blanked for a reader who may not see that classification, whichever view asked.
+ */
+export function hiddenFromReader(principal: GeoPrincipal, classification: string | null | undefined): boolean {
+	return classification === "CONFIDENTIAL" && !canReadConfidential(principal);
+}
+
 export async function displayNames(ids: readonly (string | null | undefined)[]): Promise<Record<string, string>> {
 	const userIds = [...new Set(ids.filter((id): id is string => Boolean(id)))].filter(
 		(id) => !id.includes(":") && id !== "instance-admin",
@@ -40,7 +48,6 @@ export async function displayNames(ids: readonly (string | null | undefined)[]):
 export function nameOf(names: Record<string, string>, id: string | null | undefined): string | null {
 	if (!id) return null;
 	if (id.startsWith("system:")) return "系统";
-	if (id.startsWith("apikey:")) return "API Key";
 	return names[id] ?? id;
 }
 

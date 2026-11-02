@@ -23,7 +23,7 @@ function secretOf(uri: string): string | null {
 	}
 }
 
-function EnrollForm({ onDone }: { onDone: () => void }) {
+function EnrollForm({ hasPassword, onDone }: { hasPassword: boolean; onDone: () => void }) {
 	const [password, setPassword] = useState("");
 	const [code, setCode] = useState("");
 	const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
@@ -34,7 +34,7 @@ function EnrollForm({ onDone }: { onDone: () => void }) {
 		e.preventDefault();
 		setBusy(true);
 		setError(null);
-		const result = await authClient.twoFactor.enable({ password });
+		const result = await authClient.twoFactor.enable(hasPassword ? { password } : {});
 		setBusy(false);
 		if (result.error || !result.data || result.data.method !== "totp") {
 			setError(result.error?.message ?? "无法开始设置，请确认密码正确");
@@ -64,17 +64,21 @@ function EnrollForm({ onDone }: { onDone: () => void }) {
 	if (!enrollment) {
 		return (
 			<form onSubmit={start} className="flex max-w-sm flex-col gap-3">
-				<Label htmlFor="mfa-password">输入当前登录密码以开始设置</Label>
-				<Input
-					id="mfa-password"
-					type="password"
-					autoComplete="current-password"
-					value={password}
-					onChange={(e) => setPassword(e.target.value)}
-					required
-				/>
+				{hasPassword && (
+					<>
+						<Label htmlFor="mfa-password">输入当前登录密码以开始设置</Label>
+						<Input
+							id="mfa-password"
+							type="password"
+							autoComplete="current-password"
+							value={password}
+							onChange={(e) => setPassword(e.target.value)}
+							required
+						/>
+					</>
+				)}
 				<ResultNotice error={error} />
-				<Button type="submit" disabled={busy || !password}>
+				<Button type="submit" disabled={busy || (hasPassword && !password)}>
 					开始设置两步验证
 				</Button>
 			</form>
@@ -116,7 +120,55 @@ function EnrollForm({ onDone }: { onDone: () => void }) {
 	);
 }
 
-function DisableForm({ onDone }: { onDone: () => void }) {
+function StepUpForm({ onDone }: { onDone: () => void }) {
+	const [code, setCode] = useState("");
+	const [useBackup, setUseBackup] = useState(false);
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	async function submit(e: React.FormEvent) {
+		e.preventDefault();
+		setBusy(true);
+		setError(null);
+		const trimmed = code.trim();
+		const result = useBackup
+			? await authClient.twoFactor.verifyBackupCode({ code: trimmed })
+			: await authClient.twoFactor.verifyTotp({ code: trimmed });
+		setBusy(false);
+		if (result.error) {
+			setError("验证码不正确，请重试");
+			return;
+		}
+		setCode("");
+		onDone();
+	}
+
+	return (
+		<form onSubmit={submit} className="flex max-w-sm flex-col gap-3">
+			<Label htmlFor="mfa-step-up">
+				{useBackup ? "输入一个备用码" : "输入验证器显示的 6 位验证码"}，完成本次登录的两步验证
+			</Label>
+			<Input
+				id="mfa-step-up"
+				autoComplete="one-time-code"
+				value={code}
+				onChange={(e) => setCode(e.target.value)}
+				required
+			/>
+			<ResultNotice error={error} />
+			<div className="flex items-center gap-2">
+				<Button type="submit" disabled={busy || !code.trim()}>
+					验证
+				</Button>
+				<Button type="button" variant="ghost" onClick={() => setUseBackup((value) => !value)}>
+					{useBackup ? "改用验证码" : "改用备用码"}
+				</Button>
+			</div>
+		</form>
+	);
+}
+
+function DisableForm({ hasPassword, onDone }: { hasPassword: boolean; onDone: () => void }) {
 	const [password, setPassword] = useState("");
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -125,7 +177,7 @@ function DisableForm({ onDone }: { onDone: () => void }) {
 		e.preventDefault();
 		setBusy(true);
 		setError(null);
-		const result = await authClient.twoFactor.disable({ password });
+		const result = await authClient.twoFactor.disable(hasPassword ? { password } : {});
 		setBusy(false);
 		if (result.error) {
 			setError(result.error.message ?? "关闭失败，请确认密码正确");
@@ -136,17 +188,21 @@ function DisableForm({ onDone }: { onDone: () => void }) {
 
 	return (
 		<form onSubmit={submit} className="flex max-w-sm flex-col gap-3">
-			<Label htmlFor="mfa-disable">输入密码关闭两步验证</Label>
-			<Input
-				id="mfa-disable"
-				type="password"
-				autoComplete="current-password"
-				value={password}
-				onChange={(e) => setPassword(e.target.value)}
-				required
-			/>
+			{hasPassword && (
+				<>
+					<Label htmlFor="mfa-disable">输入密码关闭两步验证</Label>
+					<Input
+						id="mfa-disable"
+						type="password"
+						autoComplete="current-password"
+						value={password}
+						onChange={(e) => setPassword(e.target.value)}
+						required
+					/>
+				</>
+			)}
 			<ResultNotice error={error} />
-			<Button type="submit" variant="outline" disabled={busy || !password}>
+			<Button type="submit" variant="outline" disabled={busy || (hasPassword && !password)}>
 				关闭两步验证
 			</Button>
 		</form>
@@ -172,18 +228,31 @@ export function GeoSecurityTab({ organizationId }: { organizationId: string }) {
 				</CardTitle>
 				<CardDescription>
 					{data?.adminMfaRequired
-						? "本组织要求平台管理员启用两步验证后才能使用管理设置。"
+						? "本组织要求平台管理员在本次登录中完成两步验证后才能使用管理设置。"
 						: "本组织已通过双人审批关闭管理员两步验证要求，仍建议启用。"}
 				</CardDescription>
 			</CardHeader>
 			<CardContent>
-				{data && !data.hasPassword && (
+				{data?.sessionFactor === "SSO" && (
 					<p className="text-sm text-muted-foreground">
 						你通过单点登录（SSO）登录，两步验证由身份提供方负责，此处无需设置。
 					</p>
 				)}
-				{data?.hasPassword && !data.twoFactorEnabled && <EnrollForm onDone={refresh} />}
-				{data?.hasPassword && data.twoFactorEnabled && <DisableForm onDone={refresh} />}
+				{data && data.sessionFactor !== "SSO" && !data.twoFactorEnabled && (
+					<EnrollForm hasPassword={data.hasPassword} onDone={refresh} />
+				)}
+				{data && data.sessionFactor !== "SSO" && data.twoFactorEnabled && (
+					<div className="flex flex-col gap-6">
+						{data.sessionFactor === "TWO_FACTOR" ? (
+							<>
+								<p className="text-sm text-muted-foreground">本次登录已完成两步验证。</p>
+								<DisableForm hasPassword={data.hasPassword} onDone={refresh} />
+							</>
+						) : (
+							<StepUpForm onDone={refresh} />
+						)}
+					</div>
+				)}
 			</CardContent>
 		</Card>
 	);

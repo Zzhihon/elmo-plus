@@ -12,6 +12,7 @@ import {
 	type GeoPrincipal,
 	type GeoRetentionSettings,
 	type GeoRole,
+	type GeoSessionFactor,
 	principalCan,
 	retentionProblem,
 	rolesForMember,
@@ -20,7 +21,6 @@ import {
 import { db } from "@workspace/lib/db/db";
 import type { DbConnection } from "@workspace/lib/db/db-connection";
 import {
-	account,
 	geoAdminRequests,
 	geoAlerts,
 	geoAuditLogs,
@@ -41,6 +41,7 @@ import {
 } from "@workspace/lib/geo/credentials";
 import { findGeoApprovalTimeouts, geoBackupHealth } from "@workspace/lib/geo/maintenance";
 import { previewGeoRetention } from "@workspace/lib/geo/retention";
+import { loadGeoSecondFactorState } from "@workspace/lib/geo/session-factor";
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, lte, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getBoss } from "@/lib/boss-client";
@@ -59,7 +60,9 @@ export interface GeoSecurityStatus {
 	twoFactorEnabled: boolean;
 	hasPassword: boolean;
 	adminMfaRequired: boolean;
-	/** Whether this person may use the admin settings as far as MFA goes. */
+	/** How this session proved itself, if it did. */
+	sessionFactor: GeoSessionFactor | null;
+	/** Whether this session may use the admin settings as far as MFA goes. */
 	mfaSatisfied: boolean;
 }
 
@@ -72,41 +75,19 @@ async function settingsRow(tx: DbConnection, organizationId: string): Promise<Se
 	return row ?? null;
 }
 
-/**
- * A person signing in only through SSO has no password here for TOTP to sit beside;
- * their identity provider is expected to enforce the second factor.
- */
 export async function securityStatus(principal: GeoPrincipal): Promise<GeoSecurityStatus> {
-	const settings = await settingsRow(db, principal.organizationId);
-	const adminMfaRequired = settings?.adminMfaRequired ?? true;
-	if (principal.actorKind !== "user") {
-		return { twoFactorEnabled: false, hasPassword: false, adminMfaRequired, mfaSatisfied: false };
-	}
-	const [row] = await db
-		.select({ twoFactorEnabled: user.twoFactorEnabled })
-		.from(user)
-		.where(eq(user.id, principal.actorId))
-		.limit(1);
-	const [credential] = await db
-		.select({ id: account.id })
-		.from(account)
-		.where(and(eq(account.userId, principal.actorId), eq(account.providerId, "credential")))
-		.limit(1);
-	const twoFactorEnabled = row?.twoFactorEnabled === true;
-	const hasPassword = Boolean(credential);
+	const state = await loadGeoSecondFactorState(db, {
+		organizationId: principal.organizationId,
+		userId: principal.actorId,
+		sessionId: principal.sessionId,
+	});
 	return {
-		twoFactorEnabled,
-		hasPassword,
-		adminMfaRequired,
-		mfaSatisfied: !adminMfaRequired || twoFactorEnabled || !hasPassword,
+		twoFactorEnabled: state.twoFactorEnabled,
+		hasPassword: state.hasPassword,
+		adminMfaRequired: state.adminMfaRequired,
+		sessionFactor: state.sessionFactor,
+		mfaSatisfied: state.satisfied,
 	};
-}
-
-export async function assertAdminMfa(principal: GeoPrincipal): Promise<void> {
-	const status = await securityStatus(principal);
-	if (!status.mfaSatisfied) {
-		throw new GeoError("FORBIDDEN", "管理设置要求两步验证：请先在「安全」页启用两步验证");
-	}
 }
 
 // ---------------------------------------------------------------------------
@@ -526,8 +507,7 @@ export async function listCredentials(principal: GeoPrincipal) {
 			),
 	]);
 	const configured = new Set(credentials.map((credential) => credential.ref));
-	// A target's own credential, set on the target itself, is not one of these organization references.
-	const referencing = targets.filter((target) => isGeoCredentialRef(target.credentialRef as string));
+	const referencing = targets;
 	return {
 		credentials: credentials.map((credential) => ({
 			ref: credential.ref,
@@ -567,6 +547,13 @@ export async function putCredential(principal: GeoPrincipal, input: z.infer<type
 export async function removeCredential(principal: GeoPrincipal, ref: string) {
 	assertGeoPermission(principal, "secret.manage");
 	return db.transaction(async (tx) => {
+		// Removing the secret must not leave a target believing it still has one to send.
+		await tx
+			.update(geoSamplingTargets)
+			.set({ credentialRef: null })
+			.where(
+				and(eq(geoSamplingTargets.organizationId, principal.organizationId), eq(geoSamplingTargets.credentialRef, ref)),
+			);
 		const removed = await deleteGeoCredential(tx, principal.organizationId, ref);
 		if (!removed) throw new GeoError("NOT_FOUND", "密钥不存在");
 		await writeGeoAudit(tx, {

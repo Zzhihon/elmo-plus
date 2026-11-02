@@ -1,4 +1,4 @@
-import { GeoError } from "@workspace/geo-domain";
+import { GeoError, isGeoCredentialRef } from "@workspace/geo-domain";
 import { eq, sql } from "drizzle-orm";
 import { decodeProtectedHeader } from "jose";
 import type { DbConnection } from "../db/db-connection";
@@ -6,19 +6,17 @@ import { secrets } from "../db/schema";
 import { decryptSecret, ENCRYPTION_KEY_ENV, encryptSecret, getKeyring, type Keyring, keyId } from "../secrets/crypto";
 
 /**
- * Organization-scoped credentials for GEO sampling targets, kept in the same
- * `secrets` table and under the same keyring as provider credentials. The org id
- * is part of the row name and of the AEAD context, so one organization's ciphertext
- * cannot be replayed under another's name. Nothing here ever returns a value except
- * `resolveGeoCredential`, which only the worker calls.
+ * The one store for GEO sampling target credentials, whether set in the settings page or
+ * directly on a target, kept in the same `secrets` table and under the same keyring as
+ * provider credentials. The org id is part of the row name and of the AEAD context, so
+ * one organization's ciphertext cannot be replayed under another's name, and a target's
+ * reference cannot name anything outside its organization. Nothing here ever returns a
+ * value except `resolveGeoCredential`, for making the calls a target exists to make.
  */
 
-const REF_SHAPE = /^[A-Z][A-Z0-9_]{1,63}$/;
 const MAX_VALUE_LENGTH = 8192;
 
-export function isGeoCredentialRef(ref: string): boolean {
-	return REF_SHAPE.test(ref);
-}
+export { isGeoCredentialRef };
 
 function assertRef(ref: string): void {
 	if (!isGeoCredentialRef(ref)) {
@@ -144,7 +142,7 @@ export async function reencryptGeoCredentials(
 	return { reencrypted, failed };
 }
 
-/** For the worker's sampling adapters. Null when the reference is unset or will not decrypt. */
+/** For the sampling adapters. Null when the reference is unset or will not decrypt. */
 export async function resolveGeoCredential(
 	db: DbConnection,
 	organizationId: string,
@@ -162,7 +160,8 @@ export async function resolveGeoCredential(
 	if (!row) return null;
 	try {
 		return await decryptSecret(row.encryptedValue, { keyring, aad: aadFor(name) });
-	} catch {
+	} catch (error) {
+		console.error(`[geo] credential ${ref} will not decrypt (${error instanceof Error ? error.name : "error"})`);
 		return null;
 	}
 }

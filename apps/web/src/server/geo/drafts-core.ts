@@ -204,6 +204,20 @@ async function authorIdsOf(tx: DbConnection, item: ItemRow): Promise<string[]> {
 	return [...new Set([item.authorId, ...rows.map((row) => row.createdBy)])];
 }
 
+async function techApproverIdsOf(tx: DbConnection, item: ItemRow): Promise<string[]> {
+	const rows = await tx
+		.select({ actorId: geoContentReviews.actorId })
+		.from(geoContentReviews)
+		.where(
+			and(
+				eq(geoContentReviews.itemId, item.id),
+				eq(geoContentReviews.version, item.currentVersion),
+				eq(geoContentReviews.action, "APPROVE_TECH"),
+			),
+		);
+	return rows.map((row) => row.actorId);
+}
+
 async function assertTask(tx: DbConnection, principal: GeoPrincipal, taskId: string) {
 	const [task] = await tx
 		.select({ id: geoOptimizationTasks.id, state: geoOptimizationTasks.state })
@@ -218,35 +232,40 @@ async function assertTask(tx: DbConnection, principal: GeoPrincipal, taskId: str
 
 /**
  * What blocks moving a version forward: a high-risk claim the facts do not
- * support, a citation to nothing, or a cited fact that is no longer approved,
- * public, in date, unfrozen and undisputed (UAT-08).
+ * support or cite, a citation to nothing, or any fact the version was written
+ * from, cited or not, that is no longer approved, public, in date, unfrozen and
+ * undisputed (UAT-08).
  */
 async function releaseProblems(tx: DbConnection, principal: GeoPrincipal, version: VersionRow) {
 	const claims = claimsOf(version);
 	const validation = validate(version.body, claims);
-	const cited = claims.filter((claim) => validation.citedRefs.includes(claim.ref));
 	const states = await loadFactStates(
 		tx,
 		principal.organizationId,
-		cited.map((claim) => claim.assertionId),
+		claims.map((claim) => claim.assertionId),
 	);
-	return { validation, factProblems: draftFactProblems(cited, states) };
+	return { validation, factProblems: draftFactProblems(claims, states) };
 }
 
 function assertReleasable(problems: Awaited<ReturnType<typeof releaseProblems>>) {
 	if (problems.validation.blocking) {
 		throw new GeoError(
 			"EVIDENCE_REQUIRED",
-			`草稿中有 ${problems.validation.blockingCount} 处高风险内容找不到来源或与来源不一致，请修改后再提交`,
+			`草稿中有 ${problems.validation.blockingCount} 处高风险内容未标注引用、找不到来源或与来源不一致，请修改后再提交`,
 		);
 	}
 	if (problems.factProblems.length > 0) {
 		const refs = problems.factProblems.map((problem) => problem.ref).join("、");
 		throw new GeoError(
 			"EVIDENCE_REQUIRED",
-			`引用的事实 ${refs} 已失效（过期、冻结、存在冲突或不再公开），请修改后再提交`,
+			`草稿依据的事实 ${refs} 已失效（过期、冻结、存在冲突或不再公开），请修改后再提交`,
 		);
 	}
+}
+
+/** Re-checks an item's current version as it stands now, for anything that puts it in front of the public. */
+export async function assertContentReleasable(tx: DbConnection, principal: GeoPrincipal, item: ItemRow): Promise<void> {
+	assertReleasable(await releaseProblems(tx, principal, await loadVersion(tx, item)));
 }
 
 async function recordReview(
@@ -424,16 +443,17 @@ export async function transitionDraft(principal: GeoPrincipal, id: string, input
 		const item = await loadItem(tx, principal, id, true);
 		const to = assertGeoTransition(
 			contentTransition({
-				item: { state: item.approvalState, authorIds: await authorIdsOf(tx, item) },
+				item: {
+					state: item.approvalState,
+					authorIds: await authorIdsOf(tx, item),
+					techApproverIds: await techApproverIdsOf(tx, item),
+				},
 				action: input.action,
 				actor: transitionActorOf(principal),
 				comment: input.comment,
 			}),
 		);
-		if (input.action !== "REJECT") {
-			const version = await loadVersion(tx, item);
-			assertReleasable(await releaseProblems(tx, principal, version));
-		}
+		if (input.action !== "REJECT") await assertContentReleasable(tx, principal, item);
 		const reviewing = input.action !== "SUBMIT";
 		await tx
 			.update(geoContentItems)
@@ -515,6 +535,7 @@ export async function recordPublication(principal: GeoPrincipal, id: string, inp
 		if (publishedAt.getTime() > Date.now() + 5 * 60_000) {
 			throw new GeoError("VALIDATION_ERROR", "发布时间不能晚于当前时间");
 		}
+		await assertContentReleasable(tx, principal, item);
 		const [record] = await tx
 			.insert(geoPublicationRecords)
 			.values({

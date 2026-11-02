@@ -25,6 +25,7 @@ import type { z } from "zod";
 import { geoRequestId, resolveGeoApiPrincipal } from "@/server/geo/context";
 import { clampedPaging, pagination } from "./analytics-range";
 import { type ApiHandlerMeta, apiHandlerMeta, createApiHandler, stampApiHandler, withMethodGuard } from "./handler";
+import { geoApiScope } from "./scopes";
 
 export function geoErrorResponse(code: GeoErrorCode, message: string, status: number, requestId: string): Response {
 	return Response.json({ error: { code, message, request_id: requestId } }, { status });
@@ -104,17 +105,20 @@ async function runIdempotent(
 
 	try {
 		const response = await run();
-		const body = response.ok
-			? await response
-					.clone()
-					.json()
-					.catch(() => undefined)
-			: undefined;
-		if (body === undefined) await releaseGeoIdempotencyKey(db, scope);
-		else await completeGeoIdempotencyKey(db, { ...scope, status: response.status, body });
+		if (!response.ok) {
+			await releaseGeoIdempotencyKey(db, scope);
+			return response;
+		}
+		const body = await response
+			.clone()
+			.json()
+			.catch(() => null);
+		await completeGeoIdempotencyKey(db, { ...scope, status: response.status, body });
 		return response;
 	} catch (error) {
-		await releaseGeoIdempotencyKey(db, scope);
+		// A domain refusal rolled its transaction back, so a retry is safe. Anything else may
+		// have failed after a commit, so the key stays claimed until it expires as in flight.
+		if (error instanceof GeoError) await releaseGeoIdempotencyKey(db, scope);
 		throw error;
 	}
 }
@@ -149,7 +153,7 @@ function parseQuery<Q>(schema: z.ZodType<Q> | undefined, request: Request): Q {
 export function createGeoApiHandler<P = Record<string, string>, B = undefined, Q = undefined>(
 	opts: GeoApiHandlerOptions<P, B, Q>,
 ) {
-	const scopes = [permissionAccess(opts.permission)];
+	const scopes = [geoApiScope(permissionAccess(opts.permission))];
 
 	const handler = async (args: RouteArgs): Promise<Response> => {
 		const requestId = geoRequestId(args.request);

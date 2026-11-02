@@ -28,7 +28,7 @@ import {
 	geoPrompts,
 } from "@workspace/lib/db/schema";
 import { runStructuredCompletionPrompt } from "@workspace/lib/onboarding";
-import { and, asc, desc, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import { getBoss } from "../../boss";
 
 export interface EvaluationJobData {
@@ -63,7 +63,7 @@ async function dictionaryAt(organizationId: string, sampledAt: Date) {
 	return first ?? null;
 }
 
-/** Approved, unexpired facts only, read straight from the knowledge table. */
+/** Approved, unexpired, not confidential: the value ends up beside the answer, where every reader of samples sees it. */
 async function approvedAssertions(organizationId: string): Promise<ApprovedAssertion[]> {
 	return db
 		.select({
@@ -76,6 +76,7 @@ async function approvedAssertions(organizationId: string): Promise<ApprovedAsser
 			and(
 				eq(geoKnowledgeAssertions.organizationId, organizationId),
 				eq(geoKnowledgeAssertions.status, "APPROVED"),
+				ne(geoKnowledgeAssertions.publicationScope, "CONFIDENTIAL"),
 				or(isNull(geoKnowledgeAssertions.validUntil), gt(geoKnowledgeAssertions.validUntil, new Date())),
 			),
 		)

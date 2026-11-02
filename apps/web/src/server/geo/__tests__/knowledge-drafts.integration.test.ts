@@ -10,6 +10,7 @@ import {
 	geoContentReviews,
 	geoContentVersions,
 	geoKnowledgeAssertions,
+	geoKnowledgeAssets,
 	geoPublicationRecords,
 	geoSitePages,
 	geoSitePageVersions,
@@ -60,12 +61,13 @@ beforeAll(async () => {
 		type: "application/pdf",
 	});
 	const { asset } = await uploadKnowledgeAsset(operator, pdf, {
-		title: "KYN28 产品样本",
+		title: "XG-900 产品样本",
 		assetType: "PRODUCT_SPEC",
 		confidentiality: "PUBLIC",
 		publicationScope: "PUBLIC",
 	});
 	assetId = asset.id;
+	await db.update(geoKnowledgeAssets).set({ scanStatus: "CLEAN" }).where(eq(geoKnowledgeAssets.id, assetId));
 	await expectGeoError(reviewKnowledgeAsset(operator, assetId, { decision: "APPROVE", note: "本人上传" }), "FORBIDDEN");
 	await reviewKnowledgeAsset(knowledgeReviewer, assetId, { decision: "APPROVE", note: "原件核对无误" });
 });
@@ -77,10 +79,10 @@ afterAll(async () => {
 describe("knowledge review gates", () => {
 	it("keeps a high-risk fact from its own author and from a reviewer without technical standing", async () => {
 		const registered = await registerAssetClaim(tech, assetId, {
-			entity: { kind: "PRODUCT", title: "KYN28 高压开关柜" },
+			entity: { kind: "PRODUCT", title: "XG-900 高压开关柜" },
 			claimType: "TECH_PARAMETER",
 			fieldPath: "ratedVoltage",
-			claimText: "KYN28 高压开关柜额定电压 12kV",
+			claimText: "XG-900 高压开关柜额定电压 12kV",
 			value: "12kV",
 			locator: { page: 3 },
 		});
@@ -106,7 +108,7 @@ describe("knowledge review gates", () => {
 			.returning();
 		const [page] = await db
 			.insert(geoSitePages)
-			.values({ organizationId, siteSourceId: source.id, normalizedUrl: "https://www.example-electric.test/p/kyn28" })
+			.values({ organizationId, siteSourceId: source.id, normalizedUrl: "https://www.example-electric.test/p/xg900" })
 			.returning();
 		const [version] = await db
 			.insert(geoSitePageVersions)
@@ -128,7 +130,7 @@ describe("knowledge review gates", () => {
 				entityId,
 				claimType: "TECH_PARAMETER",
 				fieldPath: "ratedCurrent",
-				claimText: "KYN28 高压开关柜额定电流 1250A",
+				claimText: "XG-900 高压开关柜额定电流 1250A",
 				normalizedValue: "1250a",
 				riskLevel: "HIGH",
 				status: "PENDING_REVIEW",
@@ -153,7 +155,7 @@ describe("knowledge review gates", () => {
 			entity: { id: entityId },
 			claimType: "TECH_PARAMETER",
 			fieldPath: "ratedVoltage",
-			claimText: "KYN28 高压开关柜额定电压 24kV",
+			claimText: "XG-900 高压开关柜额定电压 24kV",
 			value: "24kV",
 			locator: { page: 7 },
 		});
@@ -179,7 +181,7 @@ describe("knowledge views", () => {
 	it("counts the claims each original backs and finds entities by name", async () => {
 		const { rows } = await listKnowledgeAssets(operator, {}, { limit: 20, offset: 0 });
 		expect(rows).toEqual([expect.objectContaining({ id: assetId, claimCount: 3 })]);
-		const entities = await searchEntities(operator, { q: "KYN28" });
+		const entities = await searchEntities(operator, { q: "XG-900" });
 		expect(entities).toEqual([expect.objectContaining({ id: entityId, pageCount: 0 })]);
 	});
 });
@@ -187,7 +189,7 @@ describe("knowledge views", () => {
 describe("content drafts", () => {
 	it("refuses model generation until the organization approves model use, so the draft is written by hand", async () => {
 		await expectGeoError(
-			createDraft(operator, { kind: "FAQ", title: "KYN28 选型问答", assertionIds: [approvedFactId], mode: "LLM" }),
+			createDraft(operator, { kind: "FAQ", title: "XG-900 选型问答", assertionIds: [approvedFactId], mode: "LLM" }),
 			"FORBIDDEN",
 		);
 	});
@@ -195,15 +197,15 @@ describe("content drafts", () => {
 	it("checks facts on submit, takes technical then marketing review, and goes back to draft on rejection", async () => {
 		const draft = await createDraft(operator, {
 			kind: "FAQ",
-			title: "KYN28 选型问答",
+			title: "XG-900 选型问答",
 			assertionIds: [approvedFactId],
 			mode: "MANUAL",
-			body: "KYN28 高压开关柜的额定电压为 40.5kV[F1]。",
+			body: "XG-900 高压开关柜的额定电压为 40.5kV[F1]。",
 		});
 		expect(draft.validation.blocking).toBe(true);
 		await expectGeoError(transitionDraft(operator, draft.id, { action: "SUBMIT" }), "EVIDENCE_REQUIRED");
 
-		await reviseDraft(operator, draft.id, { mode: "MANUAL", body: "KYN28 高压开关柜的额定电压为 12kV[F1]。" });
+		await reviseDraft(operator, draft.id, { mode: "MANUAL", body: "XG-900 高压开关柜的额定电压为 12kV[F1]。" });
 		await transitionDraft(operator, draft.id, { action: "SUBMIT" });
 		await expectGeoError(transitionDraft(marketing, draft.id, { action: "APPROVE_MARKETING" }), "CONFLICT");
 		await transitionDraft(tech, draft.id, { action: "APPROVE_TECH" });
@@ -214,7 +216,7 @@ describe("content drafts", () => {
 
 		await reviseDraft(operator, draft.id, {
 			mode: "MANUAL",
-			body: "KYN28 高压开关柜的额定电压为 12kV[F1]，适用于配电室。",
+			body: "XG-900 高压开关柜的额定电压为 12kV[F1]，适用于配电室。",
 			note: "补充适用场景",
 		});
 		await transitionDraft(operator, draft.id, { action: "SUBMIT" });
@@ -224,7 +226,7 @@ describe("content drafts", () => {
 		});
 		await expectGeoError(
 			recordPublication(marketing, draft.id, {
-				url: "https://www.example-electric.test/faq/kyn28",
+				url: "https://www.example-electric.test/faq/xg900",
 				publishedAt: new Date().toISOString(),
 				proofNote: "官网后台截图",
 			}),
@@ -232,7 +234,7 @@ describe("content drafts", () => {
 		);
 		expect(
 			await recordPublication(operator, draft.id, {
-				url: "https://www.example-electric.test/faq/kyn28",
+				url: "https://www.example-electric.test/faq/xg900",
 				publishedAt: new Date().toISOString(),
 				proofNote: "官网后台截图",
 			}),

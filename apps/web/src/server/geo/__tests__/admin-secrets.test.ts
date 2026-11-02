@@ -28,10 +28,10 @@ function principal(overrides: Partial<GeoPrincipal>): GeoPrincipal {
 	return { organizationId: "org-1", actorId: "user-1", actorKind: "user", roles: [], requestId: "req-1", ...overrides };
 }
 
-const admin = principal({ roles: ["platform_admin"] });
+const admin = principal({ roles: ["platform_admin"], secondFactorSatisfied: true });
 const viewer = principal({ actorId: "user-2", roles: ["viewer"] });
 const operatorKey = principal({
-	actorId: "apikey:k1",
+	actorId: "user-admin",
 	actorKind: "api_key",
 	roles: ["viewer", "geo_operator"],
 	scopes: ["read", "write"],

@@ -1,5 +1,7 @@
 import {
 	assertGeoPermission,
+	contentVersionRisk,
+	effectiveRiskLevel,
 	GeoError,
 	type GeoPrincipal,
 	type GeoPriority,
@@ -11,6 +13,8 @@ import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 import type { AnyPgColumn, PgTable } from "drizzle-orm/pg-core";
 import type { DbConnection } from "../db/db-connection";
 import {
+	geoContentItems,
+	geoContentVersions,
 	geoKnowledgeAssertions,
 	geoObservations,
 	geoOptimizationTasks,
@@ -119,6 +123,49 @@ async function assertReferencesInOrganization(
 	);
 }
 
+async function evidenceRisk(
+	tx: DbConnection,
+	organizationId: string,
+	assertionIds: readonly string[],
+): Promise<GeoRiskLevel> {
+	if (assertionIds.length === 0) return "NORMAL";
+	const rows = await tx
+		.select({ riskLevel: geoKnowledgeAssertions.riskLevel, claimType: geoKnowledgeAssertions.claimType })
+		.from(geoKnowledgeAssertions)
+		.where(
+			and(
+				eq(geoKnowledgeAssertions.organizationId, organizationId),
+				inArray(geoKnowledgeAssertions.id, [...assertionIds]),
+			),
+		);
+	return rows.some((row) => effectiveRiskLevel(row) === "HIGH") ? "HIGH" : "NORMAL";
+}
+
+/**
+ * What a task's evidence and linked content make it, whatever was declared when it
+ * was opened. Read afresh because content can be linked or revised at any point.
+ */
+export async function derivedTaskRisk(tx: DbConnection, organizationId: string, taskId: string): Promise<GeoRiskLevel> {
+	const evidence = await tx
+		.select({ assertionId: geoTaskEvidence.assertionId })
+		.from(geoTaskEvidence)
+		.where(and(eq(geoTaskEvidence.organizationId, organizationId), eq(geoTaskEvidence.taskId, taskId)));
+	const assertionIds = evidence.map((row) => row.assertionId).filter((id): id is string => id !== null);
+	if ((await evidenceRisk(tx, organizationId, assertionIds)) === "HIGH") return "HIGH";
+	const versions = await tx
+		.select({ claims: geoContentVersions.claims, validation: geoContentVersions.validation })
+		.from(geoContentItems)
+		.innerJoin(
+			geoContentVersions,
+			and(
+				eq(geoContentVersions.itemId, geoContentItems.id),
+				eq(geoContentVersions.version, geoContentItems.currentVersion),
+			),
+		)
+		.where(and(eq(geoContentItems.organizationId, organizationId), eq(geoContentItems.taskId, taskId)));
+	return versions.some((version) => contentVersionRisk(version) === "HIGH") ? "HIGH" : "NORMAL";
+}
+
 function evidenceRows(organizationId: string, taskId: string, input: CreateOptimizationTaskInput) {
 	const { observationIds = [], findingIds = [], assertionIds = [] } = input.evidence ?? {};
 	return [
@@ -190,6 +237,7 @@ async function recordNewTask(
 		toState: INITIAL_STATE,
 		action: "CREATE",
 		actorId: principal.actorId,
+		ownerId: task.ownerId,
 		comment: input.comment ?? null,
 	});
 
@@ -220,6 +268,7 @@ export async function createOptimizationTask(
 	await assertReferencesInOrganization(tx, organizationId, input);
 
 	const sourceRef = input.sourceRef ?? null;
+	const risk = await evidenceRisk(tx, organizationId, input.evidence?.assertionIds ?? []);
 	const [task] = await tx
 		.insert(geoOptimizationTasks)
 		.values({
@@ -228,7 +277,7 @@ export async function createOptimizationTask(
 			kind: input.kind,
 			state: INITIAL_STATE,
 			priority: input.priority ?? "P2",
-			riskLevel: input.riskLevel ?? "NORMAL",
+			riskLevel: risk === "HIGH" ? "HIGH" : (input.riskLevel ?? "NORMAL"),
 			promptId: input.promptId ?? null,
 			ownerId: input.ownerId ?? null,
 			recommendedAction: input.recommendedAction ?? null,

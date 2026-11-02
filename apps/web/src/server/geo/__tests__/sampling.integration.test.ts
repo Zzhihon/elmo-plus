@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { GeoPrincipal } from "@workspace/geo-domain";
+import { type GeoPrincipal, targetCredentialRef } from "@workspace/geo-domain";
 import { getObjectStore } from "@workspace/geo-evidence";
 import { db } from "@workspace/lib/db/db";
 import {
@@ -10,11 +10,12 @@ import {
 	geoObservations,
 	geoOrgSettings,
 	geoSamplingRuns,
+	geoSamplingTargets,
 	secrets,
 } from "@workspace/lib/db/schema";
-import { and, count, eq } from "drizzle-orm";
+import { and, count, eq, inArray } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { listCredentials } from "@/server/geo/admin-core";
+import { listCredentials, putCredential } from "@/server/geo/admin-core";
 import {
 	exportObservation,
 	getObservation,
@@ -279,11 +280,17 @@ describe("planning a sampling batch", () => {
 		}
 	});
 
-	it("keeps a target's own credential out of the settings page's missing references", async () => {
+	it("keeps a credential set on a target in the store the settings page manages", async () => {
 		const target = await modelApiTarget(true);
 		await setSamplingTargetCredential(admin, target.id, "sk-test-0123456789");
-		const { missingRefs } = await listCredentials(admin);
+		const { credentials, missingRefs } = await listCredentials(admin);
 		expect(missingRefs).toEqual([]);
+		expect(credentials.find((credential) => credential.usedBy.length > 0)?.ref).toMatch(/^TARGET_[0-9A-F]{32}$/);
+
+		const targets = await listSamplingTargets(admin);
+		expect(targets.find((row) => row.id === target.id)?.credentialConfigured).toBe(true);
+		await setSamplingTargetCredential(admin, target.id, null);
+		expect((await listSamplingTargets(admin)).find((row) => row.id === target.id)?.credentialConfigured).toBe(false);
 	});
 });
 
@@ -344,7 +351,7 @@ describe("a target's endpoint and stored credential", () => {
 		const stored = await db
 			.select()
 			.from(secrets)
-			.where(eq(secrets.name, `geo-target:${target.id}`));
+			.where(eq(secrets.name, `geo:${organizationId}:${targetCredentialRef(target.id)}`));
 		expect(stored).toEqual([]);
 
 		const sent: (string | null)[] = [];
@@ -358,6 +365,26 @@ describe("a target's endpoint and stored credential", () => {
 		expect(result.available).toBe(false);
 		expect(sent).toEqual([]);
 		expect((await loadTarget(admin, target.id)).credentialRef).toBeNull();
+	});
+
+	it("lets go of a shared credential when the endpoint moves, and keeps it for the targets still using it", async () => {
+		const moving = await modelApiTarget(true);
+		const staying = await modelApiTarget(true);
+		await putCredential(admin, { ref: "SHARED_MODEL_KEY", value: "sk-shared-0123456789" });
+		await db
+			.update(geoSamplingTargets)
+			.set({ credentialRef: "SHARED_MODEL_KEY" })
+			.where(inArray(geoSamplingTargets.id, [moving.id, staying.id]));
+
+		const updated = await updateSamplingTarget(
+			admin,
+			moving.id,
+			input({ baseUrl: "https://elsewhere.example.test/v1", model: "test-model" }),
+		);
+		expect(updated).toMatchObject({ credentialRef: null, verificationStatus: "UNVERIFIED" });
+		expect((await loadTarget(admin, staying.id)).credentialRef).toBe("SHARED_MODEL_KEY");
+		const { credentials } = await listCredentials(admin);
+		expect(credentials.find((credential) => credential.ref === "SHARED_MODEL_KEY")).toBeDefined();
 	});
 
 	it("refuses to check an endpoint that resolves to a private address, before reading its credential", async () => {

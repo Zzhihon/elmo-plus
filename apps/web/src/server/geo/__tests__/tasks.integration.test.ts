@@ -166,7 +166,7 @@ describe("optimization tasks", () => {
 
 	it("walks every state from analysis to verified, with publication proof and a retest comparison", async () => {
 		const { task } = await createTask(operator, {
-			title: "官网增加 KYN28 案例",
+			title: "官网增加 XG-900 案例",
 			kind: "CASE_ADDITION",
 			sourceKind: "MANUAL",
 			riskLevel: "HIGH",
@@ -191,18 +191,18 @@ describe("optimization tasks", () => {
 
 		const publishedAt = new Date().toISOString();
 		await expectGeoError(
-			step(owner, { action: "PUBLISH", publishedUrl: "https://www.example-electric.test/cases/kyn28", publishedAt }),
+			step(owner, { action: "PUBLISH", publishedUrl: "https://www.example-electric.test/cases/xg900", publishedAt }),
 			"EVIDENCE_REQUIRED",
 		);
 		const published = await step(owner, {
 			action: "PUBLISH",
-			publishedUrl: "https://www.example-electric.test/cases/kyn28",
+			publishedUrl: "https://www.example-electric.test/cases/xg900",
 			publishedAt,
 			proofNote: "官网后台发布记录截图",
 		});
 		expect(published).toMatchObject({
 			state: "PUBLISHED",
-			publishedUrl: "https://www.example-electric.test/cases/kyn28",
+			publishedUrl: "https://www.example-electric.test/cases/xg900",
 		});
 		await step(owner, { action: "REQUEST_RETEST" });
 		await expectGeoError(step(owner, { action: "VERIFY" }), "EVIDENCE_REQUIRED");

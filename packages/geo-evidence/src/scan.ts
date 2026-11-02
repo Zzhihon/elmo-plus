@@ -2,8 +2,9 @@ import { Socket } from "node:net";
 
 /**
  * Malware scanning through clamd's INSTREAM command. With no clamd configured an
- * upload is accepted as UNSCANNED and the UI has to say so; with one configured but
- * unreachable the scan throws, so a broken scanner never quietly waves files through.
+ * upload is accepted as UNSCANNED, the UI has to say so, and it cannot back a high-risk
+ * fact; with one configured but unreachable the scan throws, so a broken scanner never
+ * quietly waves files through.
  */
 
 export type GeoScanOutcome =

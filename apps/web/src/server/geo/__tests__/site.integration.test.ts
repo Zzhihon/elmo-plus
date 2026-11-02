@@ -85,7 +85,7 @@ function startFakeSite(): Promise<void> {
 				return response.end(
 					`<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${[
 						"",
-						"products/kyn28",
+						"products/xg900",
 						"products/retired",
 					]
 						.map((p) => `<url><loc>${BASE}${p}</loc></url>`)
@@ -94,12 +94,12 @@ function startFakeSite(): Promise<void> {
 			case "/":
 				return html(
 					200,
-					page("示例电气", '<a href="/products/kyn28">KYN28</a> <a href="/products/retired">旧型号</a>'),
+					page("示例电气", '<a href="/products/xg900">XG-900</a> <a href="/products/retired">旧型号</a>'),
 				);
-			case "/products/kyn28":
+			case "/products/xg900":
 				return html(
 					200,
-					page("KYN28 高压开关柜", `<p>额定电压：<span class="spec-voltage">${voltage}</span></p><p>适用于配电。</p>`),
+					page("XG-900 高压开关柜", `<p>额定电压：<span class="spec-voltage">${voltage}</span></p><p>适用于配电。</p>`),
 				);
 			case "/products/retired":
 				if (retiredPageGone) return html(404, page("未找到", "页面不存在"));
@@ -260,7 +260,7 @@ describe("crawling an authorized site", () => {
 	it("fetches, parses and normalizes every page into candidate facts awaiting review", async () => {
 		const run = await crawl("FULL");
 		expect(run.status).toBe("SUCCEEDED");
-		const product = await pageByPath("products/kyn28");
+		const product = await pageByPath("products/xg900");
 		expect(product).toMatchObject({ status: "ACTIVE", httpStatus: 200, category: "product" });
 		const versions = await db.select().from(geoSitePageVersions).where(eq(geoSitePageVersions.pageId, product.id));
 		expect(versions).toHaveLength(1);
@@ -268,7 +268,7 @@ describe("crawling an authorized site", () => {
 
 		const assertions = await voltageAssertions();
 		expect(assertions.map((row) => [row.status, row.claimText]).sort()).toEqual([
-			["PENDING_REVIEW", "KYN28 高压开关柜｜额定电压：12kV"],
+			["PENDING_REVIEW", "XG-900 高压开关柜｜额定电压：12kV"],
 			["PENDING_REVIEW", "XGN15 环网柜｜额定电压：10kV"],
 		]);
 	});
@@ -277,7 +277,7 @@ describe("crawling an authorized site", () => {
 		retiredPageGone = true;
 		const run = await crawl("FULL");
 		expect(["SUCCEEDED", "PARTIAL"]).toContain(run.status);
-		const product = await pageByPath("products/kyn28");
+		const product = await pageByPath("products/xg900");
 		const versions = await db.select().from(geoSitePageVersions).where(eq(geoSitePageVersions.pageId, product.id));
 		expect(versions).toHaveLength(1);
 
@@ -297,7 +297,7 @@ describe("crawling an authorized site", () => {
 
 		voltage = "24kV";
 		await crawl("FULL");
-		const product = await pageByPath("products/kyn28");
+		const product = await pageByPath("products/xg900");
 		const versions = await db.select().from(geoSitePageVersions).where(eq(geoSitePageVersions.pageId, product.id));
 		expect(versions).toHaveLength(2);
 		const candidate = (await voltageAssertions()).find((row) => row.claimText.includes("24kV"));
@@ -318,7 +318,7 @@ describe("crawling an authorized site", () => {
 
 	it("lists each page with its latest version and counts parsed key pages as covered", async () => {
 		const { rows } = await listSitePages(operator, { siteId }, { page: 1, limit: 50, offset: 0 });
-		const product = rows.find((row) => row.url === `${BASE}products/kyn28`);
+		const product = rows.find((row) => row.url === `${BASE}products/xg900`);
 		const [latest] = await db
 			.select()
 			.from(geoSitePageVersions)
@@ -327,27 +327,27 @@ describe("crawling an authorized site", () => {
 			.limit(1);
 		expect(product).toMatchObject({
 			currentVersionId: latest?.id,
-			title: "KYN28 高压开关柜",
+			title: "XG-900 高压开关柜",
 			parseStatus: "PARSED",
 			versionCount: 2,
 		});
 
-		await setKeyUrls(admin, siteId, [`${BASE}products/kyn28`, `${BASE}products/retired`]);
+		await setKeyUrls(admin, siteId, [`${BASE}products/xg900`, `${BASE}products/retired`]);
 		const coverage = await getKeyUrlCoverage(operator, siteId);
 		expect(coverage.statuses.map((entry) => [entry.url, entry.status, entry.parsed])).toEqual([
-			[`${BASE}products/kyn28`, "ACTIVE", true],
+			[`${BASE}products/xg900`, "ACTIVE", true],
 			[`${BASE}products/retired`, "GONE", true],
 		]);
 		expect(coverage).toMatchObject({ covered: 1 });
 	});
 
 	it("shows a page's versions, the diff between them, its snapshot and a QA spot check", async () => {
-		const product = await pageByPath("products/kyn28");
+		const product = await pageByPath("products/xg900");
 		const detail = await getSitePage(operator, product.id);
 		expect(detail.versions).toHaveLength(2);
 		expect(detail.assertions.map((row) => row.claimText).sort()).toEqual([
-			"KYN28 高压开关柜｜额定电压：12kV",
-			"KYN28 高压开关柜｜额定电压：24kV",
+			"XG-900 高压开关柜｜额定电压：12kV",
+			"XG-900 高压开关柜｜额定电压：24kV",
 		]);
 		const [newest, older] = detail.versions;
 		const version = await getPageVersion(operator, product.id, newest.id);
@@ -368,11 +368,11 @@ describe("crawling an authorized site", () => {
 		const { rows } = await searchClaims(operator, { q: "开关柜" }, { limit: 20, offset: 0 });
 		expect(rows.length).toBe(2);
 		const detail = await getClaimDetail(operator, rows[0].id);
-		expect(JSON.stringify(detail)).toContain(`${BASE}products/kyn28`);
+		expect(JSON.stringify(detail)).toContain(`${BASE}products/xg900`);
 		const overview = await knowledgeOverview(operator);
 		expect(overview).toBeTruthy();
-		const entities = await searchEntities(operator, { q: "KYN28" });
-		expect(entities).toEqual([expect.objectContaining({ title: "KYN28 高压开关柜", pageCount: 1 })]);
+		const entities = await searchEntities(operator, { q: "XG-900" });
+		expect(entities).toEqual([expect.objectContaining({ title: "XG-900 高压开关柜", pageCount: 1 })]);
 	});
 
 	it("audits the stored pages after a crawl and turns a finding into a task", async () => {

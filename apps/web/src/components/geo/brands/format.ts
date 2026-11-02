@@ -5,7 +5,6 @@ export function formatGeoDateTime(value: Date | string | null): string {
 
 export function geoActorLabel(actorId: string, members: ReadonlyMap<string, string>): string {
 	if (actorId.startsWith("system:")) return "系统";
-	if (actorId.startsWith("apikey:")) return "API Key";
 	if (actorId === "instance-admin") return "实例管理密钥";
 	return members.get(actorId) ?? actorId;
 }

@@ -36,7 +36,7 @@ export interface GeoDraftValidation {
 	citedRefs: string[];
 	blocking: boolean;
 	blockingCount: number;
-	/** Claims shown as “待证实”: no source found, or a source exists but the sentence does not cite it. */
+	/** Ordinary claims shown as “待证实”: no source found, or a source exists but the sentence does not cite it. */
 	pendingCount: number;
 }
 
@@ -57,7 +57,7 @@ const IP_RATING = /IP\d{2}(?![0-9])/g;
 const MODEL =
 	/(?<![A-Za-z0-9])(?:[A-Z]{1,6}\d+[A-Z0-9]*(?:[-/][A-Z0-9.]+)*|[A-Z]{2,6}(?:[-/][A-Z0-9.]*\d[A-Z0-9.]*)+)/g;
 const NUMBER =
-	/(?<![\d.])(\d+(?:,\d{3})*(?:\.\d+)?)\s*(kVA|MVA|kV|kA|kW|MW|Hz|mm|cm|kg|℃|°C|%|万元|亿元|千伏|毫米|元|V|A|m|t|级|项|台|套|个|年|家|人|吨|米)?/g;
+	/(?<![\d.])(\d+(?:,\d{3})*(?:\.\d+)?)\s*(kVA|MVA|kV|kA|kW|MW|Hz|mm|cm|kg|℃|°C|%|万元|亿元|千伏|千瓦|千安|兆瓦|毫米|厘米|千克|公斤|元|V|A|m|t|级|项|台|套|个|年|家|人|吨|米)?/g;
 const CERTIFICATE = /[\p{Script=Han}A-Za-z0-9]{2,16}?(?:证书|认证|许可证)/gu;
 const CERTIFICATE_LEADS = ["通过", "获得", "取得", "拥有", "具备", "持有", "荣获", "并获", "已获"];
 
@@ -95,8 +95,111 @@ const HIGH_UNITS = new Set([
 	"项",
 	"ip",
 ]);
-const UNIT_ALIASES: Record<string, string> = { 千伏: "kv", 毫米: "mm", 米: "m", 吨: "t", "℃": "c", "°c": "c" };
-const HIGH_CONTEXT = /专利|注册资本|资本金|额定|电压|电流|容量|频率|防护等级/;
+const UNIT_ALIASES: Record<string, string> = {
+	千伏: "kv",
+	千瓦: "kw",
+	千安: "ka",
+	兆瓦: "mw",
+	毫米: "mm",
+	厘米: "cm",
+	千克: "kg",
+	公斤: "kg",
+	米: "m",
+	吨: "t",
+	"℃": "c",
+	"°c": "c",
+};
+const HIGH_CONTEXT = /专利|注册资本|资本金|额定|电压|电流|容量|频率|防护等级|有效期|资质|证书/;
+
+const CN_DIGITS: Record<string, number> = {
+	零: 0,
+	〇: 0,
+	一: 1,
+	壹: 1,
+	二: 2,
+	贰: 2,
+	貳: 2,
+	两: 2,
+	兩: 2,
+	三: 3,
+	叁: 3,
+	參: 3,
+	四: 4,
+	肆: 4,
+	五: 5,
+	伍: 5,
+	六: 6,
+	陆: 6,
+	陸: 6,
+	七: 7,
+	柒: 7,
+	八: 8,
+	捌: 8,
+	九: 9,
+	玖: 9,
+};
+const CN_SMALL_UNITS: Record<string, number> = { 十: 10, 拾: 10, 百: 100, 佰: 100, 千: 1000, 仟: 1000 };
+const CN_LARGE_UNITS: Record<string, number> = { 万: 10_000, 萬: 10_000, 亿: 100_000_000, 億: 100_000_000 };
+const CN_NUMERAL = "[零〇一壹二贰貳两兩三叁參四肆五伍六陆陸七柒八捌九玖十拾百佰千仟万萬亿億]";
+const CN_UNITS =
+	"千伏|千瓦|千安|兆瓦|毫米|厘米|千克|公斤|万元|亿元|億元|萬元|元|级|級|项|項|台|套|个|個|年|家|人|吨|噸|米";
+const CN_QUANTITY = new RegExp(`(?<![第每这那某哪任${CN_NUMERAL.slice(1, -1)}])(${CN_NUMERAL}+?)(${CN_UNITS})`, "g");
+const CN_PERCENT = new RegExp(`百分之(${CN_NUMERAL}+)`, "g");
+const CN_BIG_NUMBER = new RegExp(`(${CN_NUMERAL}{2,})(?=万|亿|萬|億)`, "g");
+const MIXED_NUMBER = /(?<![\d.])(\d+(?:\.\d+)?)([十拾百佰千仟])(万|亿|萬|億)/g;
+/** "一家公司" and "一个团队" are articles rather than quantities. */
+const CN_ARTICLE_UNITS = new Set(["个", "個", "台", "套", "年", "家", "人"]);
+
+/** Null for text that only looks numeric, such as a lone 万. */
+function parseChineseNumber(text: string): number | null {
+	const chars = [...text];
+	if (chars.every((char) => char in CN_DIGITS)) {
+		return chars.length === 1 ? CN_DIGITS[chars[0]] : Number(chars.map((char) => CN_DIGITS[char]).join(""));
+	}
+	if (!chars.some((char) => char in CN_DIGITS || char in CN_SMALL_UNITS)) return null;
+	let total = 0;
+	let section = 0;
+	let digit: number | null = null;
+	for (const char of chars) {
+		if (char in CN_DIGITS) {
+			digit = CN_DIGITS[char];
+		} else if (char in CN_SMALL_UNITS) {
+			section += (digit ?? 1) * CN_SMALL_UNITS[char];
+			digit = null;
+		} else {
+			total = (total + section + (digit ?? 0)) * CN_LARGE_UNITS[char];
+			section = 0;
+			digit = null;
+		}
+	}
+	return total + section + (digit ?? 0);
+}
+
+/**
+ * Written-out amounts become the digits the checks understand, in the facts and the
+ * draft alike, so "注册资本伍仟万元" is held to the same evidence as "5000万元".
+ * Only a numeral tied to a unit counts: 一流 and 十分 are ordinary words.
+ */
+function normalizeChineseNumbers(text: string): string {
+	return text
+		.replace(MIXED_NUMBER, (_, digits: string, small: string, large: string) => {
+			const value = Number(digits) * CN_SMALL_UNITS[small];
+			return `${value}${large}`;
+		})
+		.replace(CN_PERCENT, (whole, numeral: string) => {
+			const value = parseChineseNumber(numeral);
+			return value === null ? whole : `${value}%`;
+		})
+		.replace(CN_QUANTITY, (whole, numeral: string, unit: string) => {
+			if (numeral === "一" && CN_ARTICLE_UNITS.has(unit)) return whole;
+			const value = parseChineseNumber(numeral);
+			return value === null ? whole : `${value}${unit}`;
+		})
+		.replace(CN_BIG_NUMBER, (whole, numeral: string) => {
+			const value = parseChineseNumber(numeral);
+			return value === null ? whole : String(value);
+		});
+}
 
 function normText(value: string): string {
 	return value
@@ -147,7 +250,8 @@ function numberToken(match: RegExpExecArray, context: string): Token | null {
 }
 
 function tokenize(input: string): Token[] {
-	let text = input.normalize("NFKC");
+	const normalized = normalizeChineseNumbers(input.normalize("NFKC"));
+	let text = normalized;
 	const standards = takeAll(text, STANDARD, (match) => standardToken(match[0]));
 	text = standards.rest;
 	const ratings = takeAll(text, IP_RATING, (match) => ({
@@ -166,7 +270,7 @@ function tokenize(input: string): Token[] {
 	});
 	text = models.rest;
 	const certificates: Token[] = [];
-	for (const match of input.normalize("NFKC").matchAll(CERTIFICATE)) {
+	for (const match of normalized.matchAll(CERTIFICATE)) {
 		const core = certificateCore(match[0]);
 		if (core.length < 4) continue;
 		certificates.push({ kind: "CERTIFICATE", raw: core, norm: normText(core), risk: "NORMAL" });
@@ -322,10 +426,12 @@ export function validateDraft(body: string, facts: readonly GeoDraftFact[]): Geo
 		checks.push(...checkSegment(segment, index, citedFacts, all));
 	});
 
+	// A high-risk value with no citation cannot be re-checked once its fact lapses, so it blocks too.
 	const blockingCount =
-		checks.filter((check) => check.risk === "HIGH" && (check.status === "UNSUPPORTED" || check.status === "MISMATCH"))
-			.length + unknown.size;
-	const pendingCount = checks.filter((check) => check.status === "UNCITED" || check.status === "UNSUPPORTED").length;
+		checks.filter((check) => check.risk === "HIGH" && check.status !== "SUPPORTED").length + unknown.size;
+	const pendingCount = checks.filter(
+		(check) => check.risk !== "HIGH" && (check.status === "UNCITED" || check.status === "UNSUPPORTED"),
+	).length;
 	return {
 		checks,
 		unknownRefs: [...unknown].sort(),

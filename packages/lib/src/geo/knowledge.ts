@@ -85,6 +85,16 @@ export async function loadAssertionSources(
 	return result;
 }
 
+/** One writer at a time per field, held until the transaction ends. */
+export async function lockClaimField(
+	tx: DbConnection,
+	field: { entityId: string; fieldPath: string; claimType: string },
+): Promise<void> {
+	await tx.execute(
+		sql`select pg_advisory_xact_lock(hashtext(${`geo-claim:${field.entityId}:${field.fieldPath}:${field.claimType}`}))`,
+	);
+}
+
 /** What a draft or an export needs to know about each fact right now. */
 export async function loadFactStates(
 	db: DbConnection,
@@ -127,8 +137,10 @@ export async function loadFactStates(
 
 /**
  * Opens a conflict for every new value that disagrees with an approved fact of
- * the same entity and field. A pair that was already settled is not reopened,
- * and neither side is modified. With `assertionIds`, only their fields are checked.
+ * the same entity and field, and leaves both sides as they are. A pair settled
+ * earlier opens again if its candidate came back for review: keeping the approved
+ * value then did not decide the resubmitted one. With `assertionIds`, only their
+ * fields are checked.
  */
 export async function detectAssertionConflicts(
 	db: DbConnection,
@@ -178,6 +190,7 @@ export async function detectAssertionConflicts(
 		.where(
 			and(
 				eq(geoAssertionConflicts.organizationId, organizationId),
+				eq(geoAssertionConflicts.status, "OPEN"),
 				inArray(geoAssertionConflicts.candidateId, [...new Set(pairs.map((pair) => pair.candidateId))]),
 			),
 		);

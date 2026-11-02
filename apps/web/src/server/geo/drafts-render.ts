@@ -93,6 +93,17 @@ function sourceLine(source: PublicSource): string {
 	return `客户资料《${source.title ?? "未命名"}》${source.page ? `第 ${source.page} 页` : ""}`;
 }
 
+const UNSAFE_INLINE_LINK = /\]\(\s*(?!https?:\/\/|mailto:|#)[^)]*\)/gi;
+const UNSAFE_REFERENCE_LINK = /^(\s*\[(?!\^)[^\]]+\]:\s*)(?!https?:\/\/|mailto:)\S.*$/gim;
+
+/**
+ * The file is pasted into a CMS that may render HTML, so markup stays visible as
+ * text and a link can only lead to the web or a mailbox.
+ */
+function neutralizeMarkdown(text: string): string {
+	return text.replace(/</g, "&lt;").replace(UNSAFE_INLINE_LINK, "]").replace(UNSAFE_REFERENCE_LINK, "$1");
+}
+
 /** Markdown with numbered footnotes; each footnote names the fact and where it can be checked. */
 export function renderDraftMarkdown(input: { title: string; body: string; claims: readonly DraftClaim[] }): string {
 	const order = citationOrder(input.body, input.claims);
@@ -111,7 +122,7 @@ export function renderDraftMarkdown(input: { title: string; body: string; claims
 			const sources = claim.sources.map(sourceLine).join("；") || "已审核事实";
 			return `[^${order.get(claim.ref)}]: ${claim.claimText}。来源：${sources}`;
 		});
-	return [`# ${input.title}`, "", body.trim(), "", ...notes, ""].join("\n");
+	return neutralizeMarkdown([`# ${input.title}`, "", body.trim(), "", ...notes, ""].join("\n"));
 }
 
 function inline(text: string, order: Map<string, number>): string {

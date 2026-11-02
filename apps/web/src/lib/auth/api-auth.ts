@@ -2,7 +2,7 @@ import { API_KEY_RATE_LIMIT_PER_MINUTE } from "@workspace/config/constants";
 import { db } from "@workspace/lib/db/db";
 import { brands, organization } from "@workspace/lib/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
-import { API_SCOPES, type ApiScope, permissionsToScopes } from "@/lib/api/scopes";
+import { ALL_API_SCOPES, type ApiScope, permissionsToScopes } from "@/lib/api/scopes";
 import { getAdminApiKeys, timingSafeStringEqual } from "./policies";
 
 export interface AdminAuth {
@@ -58,11 +58,11 @@ export interface PrincipalReach {
 export function principalReach(auth: Principal): PrincipalReach {
 	switch (auth.kind) {
 		case "admin":
-			return { organizationIds: null, brandIds: null, scopes: new Set(API_SCOPES) };
+			return { organizationIds: null, brandIds: null, scopes: new Set(ALL_API_SCOPES) };
 		case "organization":
 			return { organizationIds: [auth.organizationId], brandIds: auth.brandIds, scopes: auth.scopes };
 		case "user":
-			return { organizationIds: auth.organizationIds, brandIds: null, scopes: new Set(API_SCOPES) };
+			return { organizationIds: auth.organizationIds, brandIds: null, scopes: new Set(ALL_API_SCOPES) };
 	}
 }
 

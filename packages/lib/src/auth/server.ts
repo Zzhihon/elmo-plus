@@ -8,7 +8,7 @@ import { API_KEY_RATE_LIMIT_PER_MINUTE, MCP_PATH } from "@workspace/config/const
 import { isGeoWorkspaceEnabled } from "@workspace/config/geo";
 import { type BetterAuthOptions, type BetterAuthPlugin, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { createAuthMiddleware } from "better-auth/api";
+import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import {
 	createDpopReplayStore,
 	enforceDpopBinding,
@@ -20,6 +20,8 @@ import { tanstackStartCookies } from "better-auth/tanstack-start";
 import type { JWTPayload } from "jose";
 import { db } from "../db/db";
 import * as schema from "../db/schema";
+import { auditGeoMembershipChange } from "../geo/membership-audit";
+import { hasSessionFactor, recordSessionFactor, sessionFactorFor } from "../geo/session-factor";
 import { nativeClientRegistrationDefault } from "./native-client-registration";
 import { ac, adminRole, memberRole, ownerRole, userRole } from "./permissions";
 
@@ -87,10 +89,110 @@ function mcpResourceDefault(resource: string) {
 	} satisfies BetterAuthPlugin;
 }
 
+/**
+ * Notes which sessions finished a second factor or came through a deployment's own SSO
+ * provider, the fact GEO's administrative permissions check. A failure to note it leaves
+ * the session unverified, and verifying again is one code away, so it does not fail the sign-in.
+ */
+function geoSessionFactorPlugin(deploymentSsoProviders: ReadonlySet<string>) {
+	return {
+		id: "geo-session-factor",
+		version: "1.0",
+		hooks: {
+			before: [
+				{
+					matcher: (ctx) => ctx.path === "/two-factor/disable",
+					// Otherwise a session that never proved the factor could remove it and enroll its own.
+					handler: createAuthMiddleware(async (ctx) => {
+						const current = await getSessionFromCtx(ctx);
+						if (current && !(await hasSessionFactor(db, current.session.id))) {
+							throw new APIError("FORBIDDEN", { message: "请先在本次登录中完成两步验证，再关闭两步验证" });
+						}
+					}),
+				},
+			],
+			after: [
+				{
+					matcher: (ctx) => sessionFactorFor(ctx.path, ctx.params?.providerId, deploymentSsoProviders) !== null,
+					handler: createAuthMiddleware(async (ctx) => {
+						const factor = sessionFactorFor(ctx.path, ctx.params?.providerId, deploymentSsoProviders);
+						if (!factor) return;
+						// A rejected code surfaces here as an error; a finished SSO login redirects, which is one too.
+						if (factor === "TWO_FACTOR" && ctx.context.returned instanceof APIError) return;
+						const signedIn =
+							factor === "SSO" ? ctx.context.newSession : (ctx.context.newSession ?? ctx.context.session);
+						if (!signedIn?.session) return;
+						await recordSessionFactor(db, {
+							sessionId: signedIn.session.id,
+							userId: signedIn.user.id,
+							factor,
+						}).catch((error) => console.error("[geo-auth] could not record the session factor", error));
+					}),
+				},
+			],
+		},
+	} satisfies BetterAuthPlugin;
+}
+
+type OrganizationHooks = NonNullable<NonNullable<CreateAuthOptions["organizationOptions"]>["organizationHooks"]>;
+
+/** Keeps the deployment's own hooks and, with GEO on, audits who gains or loses administrator standing. */
+function withGeoMembershipAudit(hooks: OrganizationHooks | undefined): OrganizationHooks | undefined {
+	if (!isGeoWorkspaceEnabled()) return hooks;
+	const audit = (change: Parameters<typeof auditGeoMembershipChange>[1]) =>
+		auditGeoMembershipChange(db, change).catch((error) =>
+			console.error("[geo-auth] could not audit a membership change", error),
+		);
+	return {
+		...hooks,
+		afterAddMember: async (data) => {
+			await hooks?.afterAddMember?.(data);
+			await audit({
+				organizationId: data.organization.id,
+				userId: data.user.id,
+				previousRole: null,
+				role: data.member.role,
+			});
+		},
+		afterAcceptInvitation: async (data) => {
+			await hooks?.afterAcceptInvitation?.(data);
+			await audit({
+				organizationId: data.organization.id,
+				userId: data.user.id,
+				previousRole: null,
+				role: data.member.role,
+			});
+		},
+		afterUpdateMemberRole: async (data) => {
+			await hooks?.afterUpdateMemberRole?.(data);
+			await audit({
+				organizationId: data.organization.id,
+				userId: data.user.id,
+				previousRole: data.previousRole,
+				role: data.member.role,
+			});
+		},
+		afterRemoveMember: async (data) => {
+			await hooks?.afterRemoveMember?.(data);
+			await audit({
+				organizationId: data.organization.id,
+				userId: data.user.id,
+				previousRole: data.member.role,
+				role: null,
+			});
+		},
+	};
+}
+
 /** GEO administrators must hold a second factor; outside GEO nothing asks for one. */
-function geoAuthPlugins(): BetterAuthPlugin[] {
+function geoAuthPlugins(sso: CreateAuthOptions["sso"]): BetterAuthPlugin[] {
 	if (!isGeoWorkspaceEnabled()) return [];
-	return [twoFactor({ issuer: process.env.VITE_APP_NAME || "Elmo" })];
+	const deploymentSsoProviders = new Set((sso?.defaultSSO ?? []).map((provider) => provider.providerId));
+	return [
+		// Passwordless: someone who signs in only through a social provider still has to be able to enroll.
+		twoFactor({ issuer: process.env.VITE_APP_NAME || "Elmo", allowPasswordless: true }),
+		geoSessionFactorPlugin(deploymentSsoProviders),
+	];
 }
 
 export function createAuth(options?: CreateAuthOptions) {
@@ -165,6 +267,7 @@ export function createAuth(options?: CreateAuthOptions) {
 				ac,
 				roles: { owner: ownerRole, admin: ownerRole, member: memberRole },
 				...options?.organizationOptions,
+				organizationHooks: withGeoMembershipAudit(options?.organizationOptions?.organizationHooks),
 			}),
 			// `permissions` is server-only to the plugin, so scopes cannot be set
 			// from a browser.
@@ -199,7 +302,7 @@ export function createAuth(options?: CreateAuthOptions) {
 				allowUnauthenticatedClientRegistration: true,
 			}),
 			sso(options?.sso),
-			...geoAuthPlugins(),
+			...geoAuthPlugins(options?.sso),
 			...(options?.extraPlugins ?? []),
 			// Runs on every session read, including cookie-cache hits. Keep it free
 			// of queries.

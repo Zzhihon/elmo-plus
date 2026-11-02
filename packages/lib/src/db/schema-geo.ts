@@ -49,6 +49,7 @@ import {
 	GEO_ROLES,
 	GEO_RUN_STATUSES,
 	GEO_SCAN_STATUSES,
+	GEO_SESSION_FACTORS,
 	GEO_SITE_AUDIT_RUN_STATUSES,
 	GEO_SITE_ENTITY_KINDS,
 	GEO_SITE_ENTITY_STATUSES,
@@ -119,6 +120,7 @@ import {
 	type GeoRole,
 	type GeoRunStatus,
 	type GeoScanStatus,
+	type GeoSessionFactor,
 	type GeoSiteAuditRunStatus,
 	type GeoSiteEntityKind,
 	type GeoSiteEntityStatus,
@@ -151,7 +153,7 @@ import {
 	uniqueIndex,
 	uuid,
 } from "drizzle-orm/pg-core";
-import { organization, user } from "./schema-auth";
+import { apikey, organization, session, user } from "./schema-auth";
 
 // Actor columns stay plain text with no FK to `user`: an actor can be an API key or
 // the system, and a foreign key would make removing a person rewrite immutable rows.
@@ -205,6 +207,39 @@ export const geoRoleAssignments = pgTable(
 		index("geo_role_assignments_user_idx").on(table.userId),
 		oneOf("geo_role_assignments_role_check", table.role, GEO_ROLES),
 	],
+).enableRLS();
+
+/**
+ * The person who answers for what a GEO key writes. A separate table because the key's
+ * metadata is client-writable and the plugin keeps only the organization as the key's reference.
+ */
+export const geoApiKeyOwners = pgTable(
+	"geo_api_key_owners",
+	{
+		keyId: text("key_id")
+			.primaryKey()
+			.notNull()
+			.references(() => apikey.id, { onDelete: "cascade" }),
+		organizationId: org(),
+		userId: text("user_id").notNull(),
+		createdAt: createdAt(),
+	},
+	(table) => [index("geo_api_key_owners_org_idx").on(table.organizationId)],
+).enableRLS();
+
+/** A session earns its row by completing a second factor or by arriving through an SSO provider, never by default. */
+export const geoSessionFactors = pgTable(
+	"geo_session_factors",
+	{
+		sessionId: text("session_id")
+			.primaryKey()
+			.notNull()
+			.references(() => session.id, { onDelete: "cascade" }),
+		userId: text("user_id").notNull(),
+		factor: text("factor").$type<GeoSessionFactor>().notNull(),
+		verifiedAt: at("verified_at").defaultNow().notNull(),
+	},
+	(table) => [oneOf("geo_session_factors_factor_check", table.factor, GEO_SESSION_FACTORS)],
 ).enableRLS();
 
 export const geoOrgSettings = pgTable("geo_org_settings", {
@@ -1383,6 +1418,8 @@ export const geoTaskEvents = pgTable(
 		toState: text("to_state").$type<GeoTaskState>().notNull(),
 		action: text("action").notNull(),
 		actorId: text("actor_id").notNull(),
+		/** Who the event made responsible, so a past owner can still be told apart from a reviewer. */
+		ownerId: text("owner_id"),
 		comment: text("comment"),
 		createdAt: createdAt(),
 	},

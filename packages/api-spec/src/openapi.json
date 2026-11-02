@@ -2,7 +2,7 @@
 	"openapi": "3.1.1",
 	"info": {
 		"title": "Elmo API",
-		"description": "Track how AI answer engines like ChatGPT, Claude, Perplexity, Gemini, and Google AI Overviews mention and cite your brands. Manage the brands, prompts, and competitors Elmo tracks, and pull the visibility and citation analytics behind the dashboard.\n\n## Authentication\n\nEvery request carries a Bearer token in the `Authorization` header. Two kinds of token are accepted.\n\n**Instance admin keys** come from the operator's `ADMIN_API_KEYS` environment variable. They reach every organization and every endpoint, including the admin-only ones, and are not subject to plan limits or rate limits.\n\n**Organization keys** (`elmo_…`) are issued from the dashboard. A key acts inside exactly one organization, is issued either read or read-write access, and may be narrowed further to a subset of that organization's brands. Plan limits, read-only mode, and per-key rate limits all apply.\n\n## Scopes\n\nA key holds one of two scopes. `read` reaches every read operation; `write` adds every create, update, and delete one, and is issued alongside `read` rather than instead of it. Each operation lists what it requires in `x-elmo-scopes` — an operation listing none is reachable by any valid key. Admin keys hold both implicitly.\n\n| Scope | Grants |\n| --- | --- |\n| `read` | Read brands, prompts, competitors, runs, citations, analytics, and the organization's plan and usage |\n| `write` | Everything `read` grants, plus creating, updating, and deleting brands, prompts, and competitors |\n\nNothing finer is offered, because the operations actually worth withholding are not ones a scope can withhold. Deleting a *prompt* has no scope at all: it takes every run and citation with it, the dashboard offers no such action, and `PATCH /prompts/{promptId}` with `enabled: false` stops the tracking without losing the history. It is reachable with an instance admin key only.\n\nThere is deliberately no billing write scope: the API cannot change a subscription, an add-on quantity, or a payment method under any key, including an admin key. Operations marked `x-elmo-admin-only` are reachable with an instance admin key only; no scope grants them. Report generation and brand analysis spend provider budget with no organization to bill it to; deleting a prompt destroys tracked history the dashboard itself will not. For the same reason a single *field* can be admin-only: `enabled` on `PATCH /brands/{brandId}` stops a brand being sampled at all, so setting it with an organization key is a `403`.\n\n## Access and errors\n\nA brand outside the calling key's reach answers `404` with the same body a brand that does not exist would, so a key can never probe another tenant's data. A key that is valid but lacks the scope an operation requires answers `403` naming the missing scope.\n\nErrors share one envelope — `{ error, message, code }` — where `code` is a stable machine-readable string. Treat an unrecognized `code` as its HTTP status implies; new values are added without a version bump.\n\n## Conventions\n\nTimestamps are ISO-8601 UTC; dates are `YYYY-MM-DD`. Collections take `page` (1-based) and `limit` (max 100) and answer with a `pagination` object. Analytics endpoints take `start` + `end` as ISO 8601 timestamps, half-open, and answer with the whole window in one response; daily series are labelled in UTC. `/prompts/{promptId}/snapshot` keeps the `startDate`/`endDate` calendar days it shipped with.\n\n## Stability\n\nAn operation whose response shape may still change carries `x-stability: experimental`, and says so in the first line of its description. A schema can carry the same marker when only part of a stable operation's response is experimental. Everything else is stable: its shape will only ever gain fields. The absence of the marker is the promise.",
+		"description": "Track how AI answer engines like ChatGPT, Claude, Perplexity, Gemini, and Google AI Overviews mention and cite your brands. Manage the brands, prompts, and competitors Elmo tracks, and pull the visibility and citation analytics behind the dashboard.\n\n## Authentication\n\nEvery request carries a Bearer token in the `Authorization` header. Two kinds of token are accepted.\n\n**Instance admin keys** come from the operator's `ADMIN_API_KEYS` environment variable. They reach every organization and every endpoint, including the admin-only ones, and are not subject to plan limits or rate limits.\n\n**Organization keys** (`elmo_…`) are issued from the dashboard. A key acts inside exactly one organization, is issued either read or read-write access, and may be narrowed further to a subset of that organization's brands. Plan limits, read-only mode, and per-key rate limits all apply.\n\n## Scopes\n\nA key holds one of two scopes. `read` reaches every read operation; `write` adds every create, update, and delete one, and is issued alongside `read` rather than instead of it. Each operation lists what it requires in `x-elmo-scopes` — an operation listing none is reachable by any valid key. Admin keys hold both implicitly.\n\n| Scope | Grants |\n| --- | --- |\n| `read` | Read brands, prompts, competitors, runs, citations, analytics, and the organization's plan and usage |\n| `write` | Everything `read` grants, plus creating, updating, and deleting brands, prompts, and competitors |\n| `geo:read` | Read the GEO workspace under `/geo` |\n| `geo:write` | Everything `geo:read` grants, plus the operator's writes under `/geo` |\n\nThe GEO scopes are granted explicitly when a key is issued; `read` and `write` never imply them. A GEO key must reach the whole organization, and the admin who issued it answers for what it writes: its content is recorded under that person, who then cannot approve it, and the key stops working in `/geo` if they leave or stop being an admin. No key holds a review or administration role, so operations such as approving a fact, changing the audit log, or managing sites and brands answer `403` to every key and are done by a signed-in person. An instance admin key has no person behind it and is read-only under `/geo`.\n\nNothing finer is offered, because the operations actually worth withholding are not ones a scope can withhold. Deleting a *prompt* has no scope at all: it takes every run and citation with it, the dashboard offers no such action, and `PATCH /prompts/{promptId}` with `enabled: false` stops the tracking without losing the history. It is reachable with an instance admin key only.\n\nThere is deliberately no billing write scope: the API cannot change a subscription, an add-on quantity, or a payment method under any key, including an admin key. Operations marked `x-elmo-admin-only` are reachable with an instance admin key only; no scope grants them. Report generation and brand analysis spend provider budget with no organization to bill it to; deleting a prompt destroys tracked history the dashboard itself will not. For the same reason a single *field* can be admin-only: `enabled` on `PATCH /brands/{brandId}` stops a brand being sampled at all, so setting it with an organization key is a `403`.\n\n## Access and errors\n\nA brand outside the calling key's reach answers `404` with the same body a brand that does not exist would, so a key can never probe another tenant's data. A key that is valid but lacks the scope an operation requires answers `403` naming the missing scope.\n\nErrors share one envelope — `{ error, message, code }` — where `code` is a stable machine-readable string. Treat an unrecognized `code` as its HTTP status implies; new values are added without a version bump.\n\n## Conventions\n\nTimestamps are ISO-8601 UTC; dates are `YYYY-MM-DD`. Collections take `page` (1-based) and `limit` (max 100) and answer with a `pagination` object. Analytics endpoints take `start` + `end` as ISO 8601 timestamps, half-open, and answer with the whole window in one response; daily series are labelled in UTC. `/prompts/{promptId}/snapshot` keeps the `startDate`/`endDate` calendar days it shipped with.\n\n## Stability\n\nAn operation whose response shape may still change carries `x-stability: experimental`, and says so in the first line of its description. A schema can carry the same marker when only part of a stable operation's response is experimental. Everything else is stable: its shape will only ever gain fields. The absence of the marker is the promise.",
 		"version": "1.1.0",
 		"contact": {
 			"name": "Elmo",
@@ -849,9 +849,9 @@
 						"type": "array",
 						"items": {
 							"type": "string",
-							"enum": ["read", "write"]
+							"enum": ["read", "write", "geo:read", "geo:write"]
 						},
-						"description": "Scopes this key holds. A read-write key lists both; an admin key always does."
+						"description": "Scopes this key holds. A read-write key lists both; an admin key always does. `geo:read` and `geo:write` appear only on a key issued with GEO workspace access."
 					},
 					"brandIds": {
 						"description": "Brands the key is narrowed to, or null when it reaches every brand in its organization. Never an empty array — a restriction to no brands is rejected at creation rather than treated as no restriction.",
@@ -9615,7 +9615,7 @@
 				"operationId": "listGeoBrands",
 				"summary": "列出品牌与竞品（含产品）",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `brand.read`。",
 				"responses": {
 					"200": {
@@ -9680,7 +9680,7 @@
 				"operationId": "createGeoBrand",
 				"summary": "新增品牌或竞品",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "别名按大小写、全半角与空格归一后去重；与其他启用实体的名称、别名或域名冲突时返回 CONFLICT。\n\n需要 GEO 权限 `brand.manage`。",
 				"responses": {
 					"201": {
@@ -9752,7 +9752,7 @@
 				"operationId": "getGeoBrand",
 				"summary": "获取品牌或竞品详情与别名历史",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `brand.read`。",
 				"responses": {
 					"200": {
@@ -9802,7 +9802,7 @@
 				"operationId": "updateGeoBrand",
 				"summary": "修改、停用或启用品牌或竞品",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "任何实际变化都会生成不可变的新词典版本；历史评估继续引用它们使用的版本。\n\n需要 GEO 权限 `brand.manage`。",
 				"responses": {
 					"200": {
@@ -9893,7 +9893,7 @@
 				"operationId": "createGeoProduct",
 				"summary": "为品牌新增产品",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "需要 GEO 权限 `brand.manage`。",
 				"responses": {
 					"201": {
@@ -9984,7 +9984,7 @@
 				"operationId": "updateGeoProduct",
 				"summary": "修改或停用产品",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "需要 GEO 权限 `brand.manage`。",
 				"responses": {
 					"200": {
@@ -10084,7 +10084,7 @@
 				"operationId": "listGeoDictionaryVersions",
 				"summary": "列出词典版本",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `brand.read`。",
 				"responses": {
 					"200": {
@@ -10147,7 +10147,7 @@
 				"operationId": "getGeoDictionaryVersion",
 				"summary": "获取某个词典版本的完整快照",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `brand.read`。",
 				"responses": {
 					"200": {
@@ -10199,7 +10199,7 @@
 				"operationId": "listGeoPrompts",
 				"summary": "列出问法",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `prompt.read`。",
 				"responses": {
 					"200": {
@@ -10302,7 +10302,7 @@
 				"operationId": "createGeoPrompt",
 				"summary": "新建问法（草稿）",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "需要 GEO 权限 `prompt.write`。",
 				"responses": {
 					"201": {
@@ -10374,7 +10374,7 @@
 				"operationId": "getGeoPrompt",
 				"summary": "获取问法与修订历史",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `prompt.read`。",
 				"responses": {
 					"200": {
@@ -10424,7 +10424,7 @@
 				"operationId": "updateGeoPrompt",
 				"summary": "编辑草稿问法",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "非草稿返回 CONFLICT，需先 REVISE。\n\n需要 GEO 权限 `prompt.write`。",
 				"responses": {
 					"200": {
@@ -10515,7 +10515,7 @@
 				"operationId": "transitionGeoPrompt",
 				"summary": "推进问法审核状态",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "需要 GEO 权限 `prompt.write`。",
 				"responses": {
 					"200": {
@@ -10606,7 +10606,7 @@
 				"operationId": "listGeoBuyerRoles",
 				"summary": "列出买方角色（首次访问时写入六类默认角色）",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `prompt.read`。",
 				"responses": {
 					"200": {
@@ -10645,7 +10645,7 @@
 				"operationId": "importGeoPromptsCsv",
 				"summary": "导入问法 CSV",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "全有或全无：任一行出错则不写入并返回所有错误。以公式字符（= + - @ 及其全角形式）开头的单元格被拒绝。填 prompt_id 只能修改草稿；status 与 test_set_version 列被忽略。新问法均为草稿。\n\n需要 GEO 权限 `prompt.write`。",
 				"responses": {
 					"200": {
@@ -10724,7 +10724,7 @@
 				"operationId": "exportGeoPromptsCsv",
 				"summary": "导出问法 CSV",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `prompt.read`。",
 				"responses": {
 					"200": {
@@ -10799,7 +10799,7 @@
 				"operationId": "listGeoPromptSets",
 				"summary": "列出测试集版本",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `prompt.read`。",
 				"responses": {
 					"200": {
@@ -10836,7 +10836,7 @@
 				"operationId": "createGeoPromptSet",
 				"summary": "新建测试集草稿",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "同名测试集自动递增版本号；同名已有未冻结草稿时返回 CONFLICT。\n\n需要 GEO 权限 `prompt.write`。",
 				"responses": {
 					"201": {
@@ -10918,7 +10918,7 @@
 				"operationId": "getGeoPromptSet",
 				"summary": "获取测试集条目",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `prompt.read`。",
 				"responses": {
 					"200": {
@@ -10968,7 +10968,7 @@
 				"operationId": "updateGeoPromptSetItems",
 				"summary": "替换草稿测试集的问法",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "已冻结的测试集返回 CONFLICT，修改须通过 versions 生成新版本。\n\n需要 GEO 权限 `prompt.write`。",
 				"responses": {
 					"200": {
@@ -11059,7 +11059,7 @@
 				"operationId": "freezeGeoPromptSet",
 				"summary": "冻结测试集",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "把每个条目固定在当前修订号与问法文本；所有问法必须已入选基线或已冻结，基线问法随之变为已冻结。冻结后的测试集不可再修改。\n\n需要 GEO 权限 `prompt.freeze`。",
 				"responses": {
 					"200": {
@@ -11140,7 +11140,7 @@
 				"operationId": "createGeoPromptSetVersion",
 				"summary": "从冻结测试集生成新版本草稿",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "复制条目到版本号 +1 的草稿，parentSetId 指向源测试集；源版本保持不变。\n\n需要 GEO 权限 `prompt.write`。",
 				"responses": {
 					"201": {
@@ -11278,7 +11278,7 @@
 						"$ref": "#/components/responses/InternalServerError"
 					}
 				},
-				"x-elmo-scopes": ["read"]
+				"x-elmo-scopes": ["geo:read"]
 			}
 		},
 		"/geo/sampling-runs": {
@@ -11378,7 +11378,7 @@
 						"$ref": "#/components/responses/InternalServerError"
 					}
 				},
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": ""
 			},
 			"post": {
@@ -11509,7 +11509,7 @@
 						"$ref": "#/components/responses/InternalServerError"
 					}
 				},
-				"x-elmo-scopes": ["write"]
+				"x-elmo-scopes": ["geo:write"]
 			}
 		},
 		"/geo/sampling-runs/{id}": {
@@ -11648,7 +11648,7 @@
 						"$ref": "#/components/responses/InternalServerError"
 					}
 				},
-				"x-elmo-scopes": ["read"]
+				"x-elmo-scopes": ["geo:read"]
 			}
 		},
 		"/geo/manual-observations/import": {
@@ -11747,7 +11747,7 @@
 						}
 					}
 				},
-				"x-elmo-scopes": ["write"]
+				"x-elmo-scopes": ["geo:write"]
 			}
 		},
 		"/geo/manual-observations/evidence": {
@@ -11831,7 +11831,7 @@
 						"$ref": "#/components/responses/InternalServerError"
 					}
 				},
-				"x-elmo-scopes": ["write"]
+				"x-elmo-scopes": ["geo:write"]
 			}
 		},
 		"/geo/observations": {
@@ -12040,7 +12040,7 @@
 						"$ref": "#/components/responses/InternalServerError"
 					}
 				},
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "按问题、平台、源模式、状态与日期检索证据。"
 			}
 		},
@@ -12124,7 +12124,7 @@
 						"$ref": "#/components/responses/InternalServerError"
 					}
 				},
-				"x-elmo-scopes": ["read"]
+				"x-elmo-scopes": ["geo:read"]
 			}
 		},
 		"/geo/tasks": {
@@ -12132,7 +12132,7 @@
 				"operationId": "listGeoTasks",
 				"summary": "查询优化工单",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `task.read`。",
 				"parameters": [
 					{
@@ -12266,7 +12266,7 @@
 				"operationId": "createGeoTask",
 				"summary": "创建优化工单",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "从证据创建时必须带来源与至少一条证据；同一来源已有未结束工单时返回 200 和该工单（created=false）。需要 GEO 权限 `task.create`。",
 				"parameters": [
 					{
@@ -12395,7 +12395,7 @@
 				"operationId": "getGeoTask",
 				"summary": "工单详情：事件、证据、关联内容与复测对比",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `task.read`。",
 				"parameters": [
 					{
@@ -12462,7 +12462,7 @@
 				"operationId": "transitionGeoTask",
 				"summary": "执行工单状态流转",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "按状态机与角色校验。API Key 只有运营权限，审核类动作（APPROVE_TECH、APPROVE_MARKETING、审核阶段的 REJECT）会返回 FORBIDDEN，需由具名审核人在工作台完成。高风险 SITE_REVISION 进入待发布前须已填上线审批编号、备份方案与回滚计划；已发布不会自动视为有效。需要 GEO 权限 `task.transition`。",
 				"parameters": [
 					{
@@ -12579,7 +12579,7 @@
 				"operationId": "listGeoAuditLogs",
 				"summary": "查询审计日志",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `audit.read`，只有平台管理员持有；API Key 永远不具备，因此通过 API Key 调用返回 FORBIDDEN。审计只存哈希，不存内容。",
 				"parameters": [
 					{
@@ -12705,7 +12705,7 @@
 				"operationId": "listGeoSites",
 				"summary": "列出授权站点",
 				"tags": ["GEO Site Ingestion"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `site.read`。",
 				"responses": {
 					"200": {
@@ -12752,7 +12752,7 @@
 				"operationId": "createGeoSite",
 				"summary": "登记授权站点",
 				"tags": ["GEO Site Ingestion"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "需要 GEO 权限 `site.manage`。所有网址必须在 allowedHosts 内；任何越界、内网、IP 字面量或危险协议的网址会使整个请求失败（VALIDATION_ERROR）并写入审计。",
 				"responses": {
 					"201": {
@@ -12840,7 +12840,7 @@
 				"operationId": "getGeoSite",
 				"summary": "站点详情、采集指标与告警",
 				"tags": ["GEO Site Ingestion"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `site.read`。",
 				"responses": {
 					"200": {
@@ -12905,7 +12905,7 @@
 				"operationId": "updateGeoSite",
 				"summary": "修改站点配置、暂停或恢复",
 				"tags": ["GEO Site Ingestion"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "需要 GEO 权限 `site.manage`。解析配置有改动时 profile.version 必须提升；enabled=false 即暂停站点。",
 				"responses": {
 					"200": {
@@ -13002,7 +13002,7 @@
 				"operationId": "listGeoCrawlRuns",
 				"summary": "列出采集任务",
 				"tags": ["GEO Site Ingestion"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `site.read`。",
 				"responses": {
 					"200": {
@@ -13092,7 +13092,7 @@
 				"operationId": "createGeoCrawlRun",
 				"summary": "创建全量或增量采集任务",
 				"tags": ["GEO Site Ingestion"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "需要 GEO 权限 `site.crawl`。只建任务、不同步抓取。同一站点同时只有一个进行中的任务；组织并发与站点每日次数受配额限制（RATE_LIMITED）。",
 				"responses": {
 					"202": {
@@ -13234,7 +13234,7 @@
 				"operationId": "getGeoCrawlRun",
 				"summary": "采集任务进度与统计",
 				"tags": ["GEO Site Ingestion"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `site.read`。统计成功、未变化、新版本、重复、跳过、失败和队列进度。",
 				"responses": {
 					"200": {
@@ -13310,7 +13310,7 @@
 				"operationId": "pauseGeoCrawlRun",
 				"summary": "暂停采集任务",
 				"tags": ["GEO Site Ingestion"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "需要 GEO 权限 `site.crawl`。",
 				"responses": {
 					"200": {
@@ -13406,7 +13406,7 @@
 				"operationId": "resumeGeoCrawlRun",
 				"summary": "恢复采集任务",
 				"tags": ["GEO Site Ingestion"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "需要 GEO 权限 `site.crawl`。",
 				"responses": {
 					"200": {
@@ -13512,7 +13512,7 @@
 				"operationId": "listGeoSitePages",
 				"summary": "按栏目、网址、异常、审核状态与时间过滤页面",
 				"tags": ["GEO Site Ingestion"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `site.read`。",
 				"responses": {
 					"200": {
@@ -13676,7 +13676,7 @@
 				"operationId": "getGeoSitePage",
 				"summary": "页面详情、版本、实体与事实候选",
 				"tags": ["GEO Site Ingestion"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `site.read`。",
 				"responses": {
 					"200": {
@@ -13743,7 +13743,7 @@
 				"operationId": "listGeoSitePageVersions",
 				"summary": "页面版本、解析结果与文本差异",
 				"tags": ["GEO Site Ingestion"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `site.read`。",
 				"responses": {
 					"200": {
@@ -13844,7 +13844,7 @@
 				"operationId": "downloadGeoSiteSnapshot",
 				"summary": "下载原始快照",
 				"tags": ["GEO Site Ingestion"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `site.read_snapshot`。每次下载写审计。不暴露对象存储地址或密钥。",
 				"responses": {
 					"200": {
@@ -13921,7 +13921,7 @@
 				"operationId": "reparseGeoSitePage",
 				"summary": "选定解析配置版本重新解析，不重新下载",
 				"tags": ["GEO Site Ingestion"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "需要 GEO 权限 `site.reparse`。以已存原始 HTML 为输入；同一 HTML 与解析版本的组合只会产生一个版本。",
 				"responses": {
 					"202": {
@@ -14028,7 +14028,7 @@
 				"operationId": "listGeoKnowledgeAssets",
 				"summary": "查询客户资料",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `knowledge.read`。 保密资料只对有 `knowledge.read_confidential` 的调用方可见。",
 				"parameters": [
 					{
@@ -14131,7 +14131,7 @@
 				"operationId": "uploadGeoKnowledgeAsset",
 				"summary": "上传客户资料",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "需要 GEO 权限 `knowledge.write`。 multipart/form-data。按文件字节识别类型（PDF、doc/docx、PNG、JPEG、WebP），最大 25 MB，经 clamd 扫描；感染文件拒绝且不入库，扫描服务不可达返回 503。对象 key 为内容哈希；相同文件再次上传返回 200 和已有资料。",
 				"requestBody": {
 					"required": true,
@@ -14275,7 +14275,7 @@
 				"operationId": "getGeoKnowledgeAsset",
 				"summary": "资料详情与由其支撑的主张",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `knowledge.read`。",
 				"parameters": [
 					{
@@ -14354,7 +14354,7 @@
 				"operationId": "downloadGeoKnowledgeAsset",
 				"summary": "下载资料原件",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `knowledge.read`。 以附件返回（CSP sandbox、nosniff），每次下载写审计。",
 				"parameters": [
 					{
@@ -14417,7 +14417,7 @@
 				"operationId": "reviewGeoKnowledgeAsset",
 				"summary": "确认或驳回资料原件",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "需要 GEO 权限 `knowledge.review`。 上传人不能确认自己上传的资料。驳回后依赖它的已审核事实转入复核。",
 				"parameters": [
 					{
@@ -14533,7 +14533,7 @@
 				"operationId": "registerGeoKnowledgeAssetClaim",
 				"summary": "在原件上登记主张",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "需要 GEO 权限 `knowledge.write`。 按页码/段落定位；与官网同一实体同一字段归并，同值只追加来源，异值生成冲突。",
 				"parameters": [
 					{
@@ -14671,7 +14671,7 @@
 				"operationId": "searchGeoKnowledgeClaims",
 				"summary": "检索知识断言",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `knowledge.read`。 PostgreSQL 全文检索 + 结构化筛选，返回页面与字段级引用。每行 evidenceClass 区分“已审核事实”和“未审核内容”。",
 				"parameters": [
 					{
@@ -14856,7 +14856,7 @@
 				"operationId": "getGeoKnowledgeClaim",
 				"summary": "断言详情",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `knowledge.read`。 含来源定位、审核历史、冲突新旧差异、同字段其他取值。",
 				"parameters": [
 					{
@@ -14924,7 +14924,7 @@
 				"operationId": "reviewGeoKnowledgeClaim",
 				"summary": "提交审核决定",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "需要 GEO 权限 `knowledge.write`。 追加审核历史，记录绑定全部来源版本、操作者、时间、依据和可公开范围。确认/驳回/要求补证/失效/冻结需要 `knowledge.review`；高风险事实只能由技术或市场审核人确认，必须关联已确认且在有效期内的客户原件，录入人不能审核；存在未解决冲突时返回 409。",
 				"parameters": [
 					{
@@ -15063,7 +15063,7 @@
 				"operationId": "attachGeoKnowledgeClaimSource",
 				"summary": "为断言关联客户原件",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "需要 GEO 权限 `knowledge.write`。",
 				"parameters": [
 					{
@@ -15176,7 +15176,7 @@
 				"operationId": "listGeoKnowledgeConflicts",
 				"summary": "查询冲突审核项",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `knowledge.read`。",
 				"parameters": [
 					{
@@ -15266,7 +15266,7 @@
 				"operationId": "resolveGeoKnowledgeConflict",
 				"summary": "处理冲突",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "需要 GEO 权限 `knowledge.review`。 KEEP_APPROVED 驳回新值；ACCEPT_CANDIDATE 按全部审核规则批准新值并替代旧值。绝不自动覆盖已批准版本。",
 				"parameters": [
 					{
@@ -15392,7 +15392,7 @@
 				"operationId": "listGeoDrafts",
 				"summary": "查询内容草稿",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `content.read`。",
 				"parameters": [
 					{
@@ -15495,7 +15495,7 @@
 				"operationId": "createGeoDraft",
 				"summary": "生成或撰写内容草稿",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "需要 GEO 权限 `content.write`。 输入只限 APPROVED、PUBLIC、未过期、未冻结、无冲突的断言；客户保密资料不会进入上下文。LLM 模式需组织已批准调用大模型。返回确定性事实核对结果。",
 				"parameters": [
 					{
@@ -15625,7 +15625,7 @@
 				"operationId": "getGeoDraft",
 				"summary": "草稿详情",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `content.read`。 当前版本按事实现状重新核对。",
 				"parameters": [
 					{
@@ -15693,7 +15693,7 @@
 				"operationId": "reviseGeoDraft",
 				"summary": "修订草稿（新建不可变版本）",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "需要 GEO 权限 `content.write`。 修订后回到草稿状态，需重新经过技术与市场审核。",
 				"parameters": [
 					{
@@ -15832,7 +15832,7 @@
 				"operationId": "transitionGeoDraft",
 				"summary": "提交或审核草稿",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "需要 GEO 权限 `content.write`。 技术审核 → 市场审核；作者不能审核；驳回须留言并回退。存在高风险不一致、引用不存在的事实或引用事实已失效时返回 422。审核动作需对应审核角色，API key 只能提交。",
 				"parameters": [
 					{
@@ -15966,7 +15966,7 @@
 				"operationId": "exportGeoDraft",
 				"summary": "导出发布版本",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "需要 GEO 权限 `content.publish`。 仅技术与市场审核均通过后可导出；导出时再次核对引用事实。每次导出写审计。",
 				"parameters": [
 					{
@@ -16062,7 +16062,7 @@
 				"operationId": "recordGeoDraftPublication",
 				"summary": "登记发布 URL",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "需要 GEO 权限 `content.publish`。 人工发布后登记；不写入任何 CMS。",
 				"parameters": [
 					{
@@ -16178,7 +16178,7 @@
 				"operationId": "getGeoMetrics",
 				"summary": "按固定条件查询 PRD 5.2 指标",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "按平台 × 采样方式分别计算有效采样率、品牌提及率、稳定提及问法率、推荐率、前三率、竞品覆盖率、引用来源分布与错误描述率；从不跨采样方式合并，跨平台数字仅为标注了等权的内部概览。分母为零时指标为 `{status: NO_DATA}`，不返回 0%。 需要 GEO 权限 `metric.read`。",
 				"parameters": [
 					{
@@ -16289,7 +16289,7 @@
 				"operationId": "compareGeoBatches",
 				"summary": "两轮采样按相同条件对比",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "两个批次必须属于同一问法集版本，只比较两轮都采样过的问法，并列出仍不一致的条件。单次对比只能视为观察到的变化。 需要 GEO 权限 `metric.read`。",
 				"parameters": [
 					{
@@ -16383,7 +16383,7 @@
 				"operationId": "listGeoReports",
 				"summary": "查询报告",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `report.read`。",
 				"parameters": [
 					{
@@ -16452,7 +16452,7 @@
 				"operationId": "createGeoReport",
 				"summary": "生成报告",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "只创建任务并返回 job_id；后台生成快照、PDF 与 CSV。说明与下期计划中不得出现未经归因的订单或销售结果表述。 需要 GEO 权限 `report.generate`。",
 				"parameters": [
 					{
@@ -16553,7 +16553,7 @@
 				"operationId": "getGeoReport",
 				"summary": "查询报告快照与导出历史",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `report.read`。",
 				"parameters": [
 					{
@@ -16620,7 +16620,7 @@
 				"operationId": "reviewGeoReport",
 				"summary": "审核报告",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "发起人不能审核自己的报告；驳回需填写意见。API Key 没有审核权限。 需要 GEO 权限 `report.review`。",
 				"parameters": [
 					{
@@ -16738,7 +16738,7 @@
 				"operationId": "exportGeoReport",
 				"summary": "下载报告文件",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "返回生成时保存的 PDF 或 CSV（CSV 已防公式注入），每次下载写入审计日志作为导出历史。 需要 GEO 权限 `report.read`。",
 				"parameters": [
 					{
@@ -16835,7 +16835,7 @@
 				"operationId": "getGeoObservationReview",
 				"summary": "查询评估版本与事实断言",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `observation.read`。",
 				"parameters": [
 					{
@@ -16900,7 +16900,7 @@
 				"operationId": "reviewGeoObservation",
 				"summary": "提交复核",
 				"tags": ["GEO"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "确认或更正评估会追加新的评估版本并切换为当前版本，原始回答与旧版本不变，写入审计日志；`expectedEvaluationId` 不是当前版本时返回 CONFLICT。对事实断言下结论（type=claim）另需 `claim.review`（技术审核人）。API Key 没有复核权限。 需要 GEO 权限 `observation.review`。",
 				"parameters": [
 					{
@@ -17007,7 +17007,7 @@
 				"operationId": "listGeoSiteAuditFindings",
 				"summary": "站点审计发现列表及关联整改工单",
 				"tags": ["GEO Site Audit"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `site_audit.read`。同一规则同一页面跨运行只有一条发现；复跑审计未再发现的自动转为 RESOLVED。“可被抓取”与“被 AI 检索、引用或推荐”不是同一指标；接口只返回诊断与建议，不修改官网。",
 				"parameters": [
 					{
@@ -17182,7 +17182,7 @@
 				"operationId": "getGeoSiteAuditFinding",
 				"summary": "发现详情、证据快照引用与目标问法",
 				"tags": ["GEO Site Audit"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `site_audit.read`。evidence 中的 pageVersionId 指向站点页面版本，可经 `/geo/site-pages/{pageId}/versions/{versionId}/snapshot` 查看原始快照（需 `site.read_snapshot`）。",
 				"parameters": [
 					{
@@ -17247,7 +17247,7 @@
 				"operationId": "updateGeoSiteAuditFinding",
 				"summary": "更新发现状态、优先级、责任部门、目标问法或建议",
 				"tags": ["GEO Site Audit"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "需要 GEO 权限 `site_audit.triage`。人工只能把 OPEN 改为 DISMISSED（必须填写 note）或把 DISMISSED 恢复为 OPEN；TASKED 由建单产生，RESOLVED 由复跑审计判定。每次修改写审计日志。",
 				"parameters": [
 					{
@@ -17344,7 +17344,7 @@
 				"operationId": "createGeoTasksFromSiteAuditFindings",
 				"summary": "从发现批量创建优化工单",
 				"tags": ["GEO Site Audit"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "需要 GEO 权限 `task.create`。只为 OPEN 的发现建单，其他状态跳过并在 skipped 中返回。PER_PAGE 时同一页面已有未结束工单则并入该工单；建单后发现转为 TASKED 并关联 task_id。",
 				"parameters": [
 					{
@@ -17467,7 +17467,7 @@
 				"operationId": "listGeoSiteAuditRuns",
 				"summary": "审计运行记录",
 				"tags": ["GEO Site Audit"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `site_audit.read`。",
 				"parameters": [
 					{
@@ -17557,7 +17557,7 @@
 				"operationId": "createGeoSiteAuditRun",
 				"summary": "手动发起站点审计",
 				"tags": ["GEO Site Audit"],
-				"x-elmo-scopes": ["write"],
+				"x-elmo-scopes": ["geo:write"],
 				"description": "需要 GEO 权限 `site_audit.run`。只建任务、不同步执行，返回 job id。审计读取已采集的页面版本，不重新抓取页面；robots.txt、站点地图与 HTTPS 检查走与采集相同的白名单、限速和熔断。同一站点已有排队或进行中的审计时返回该审计（200）；站点 24 小时内最多 24 次（RATE_LIMITED）。官网采集成功结束后会自动入队一次。",
 				"parameters": [
 					{
@@ -17670,7 +17670,7 @@
 				"operationId": "getGeoSiteAuditRun",
 				"summary": "审计运行状态与统计",
 				"tags": ["GEO Site Audit"],
-				"x-elmo-scopes": ["read"],
+				"x-elmo-scopes": ["geo:read"],
 				"description": "需要 GEO 权限 `site_audit.read`。",
 				"parameters": [
 					{
