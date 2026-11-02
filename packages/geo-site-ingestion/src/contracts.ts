@@ -104,7 +104,7 @@ export type ParseOutcome =
 /** HTML in, structured page out. Pure: the same HTML and profile always give the same result. */
 export interface SitePageParser {
 	readonly version: string;
-	parse(html: string, url: string, profile: SiteProfile): ParseOutcome;
+	parse(html: string, url: string, profile: SiteProfile, baseUrl?: string): ParseOutcome;
 }
 
 export interface EntityFieldValue {
