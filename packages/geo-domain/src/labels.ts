@@ -123,6 +123,7 @@ export const GEO_RUN_STATUS_LABELS: Record<GeoRunStatus, string> = {
 	RATE_LIMITED: "被限流",
 	TIMEOUT: "超时",
 	CAPTCHA: "需要验证码",
+	NETWORK_ERROR: "网络错误",
 };
 
 export const GEO_RECOMMENDATION_LABELS: Record<GeoRecommendation, string> = {

@@ -58,6 +58,7 @@ export const GEO_RUN_STATUSES = [
 	"FAILED",
 	"RATE_LIMITED",
 	"TIMEOUT",
+	"NETWORK_ERROR",
 	"CAPTCHA",
 ] as const;
 export type GeoRunStatus = (typeof GEO_RUN_STATUSES)[number];
@@ -71,6 +72,7 @@ export const GEO_ATTEMPT_STATUSES = [
 	"FAILED",
 	"RATE_LIMITED",
 	"TIMEOUT",
+	"NETWORK_ERROR",
 	"CAPTCHA",
 ] as const;
 export type GeoAttemptStatus = (typeof GEO_ATTEMPT_STATUSES)[number];
@@ -83,6 +85,7 @@ export const GEO_OBSERVATION_STATUSES = [
 	"FAILED",
 	"RATE_LIMITED",
 	"TIMEOUT",
+	"NETWORK_ERROR",
 	"CAPTCHA",
 ] as const;
 export type GeoObservationStatus = (typeof GEO_OBSERVATION_STATUSES)[number];
