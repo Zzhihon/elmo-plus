@@ -8,7 +8,12 @@ export const Route = createFileRoute("/api/v1/geo/prompts/import")({
 		handlers: withGeoMethodGuard({
 			POST: createGeoApiHandler({
 				permission: "prompt.write",
-				body: z.object({ csv: z.string().min(1).max(2 * 1024 * 1024) }),
+				body: z.object({
+					csv: z
+						.string()
+						.min(1)
+						.max(2 * 1024 * 1024),
+				}),
 				idempotent: true,
 				handle: async ({ principal, body }) => {
 					const result = await importPromptsCsv(principal, body.csv);
