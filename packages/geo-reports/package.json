@@ -18,7 +18,8 @@
 		"@workspace/geo-evidence": "workspace:*",
 		"@workspace/lib": "workspace:*",
 		"drizzle-orm": "catalog:",
-		"pdfkit": "^0.20.2"
+		"pdfkit": "^0.20.2",
+		"zod": "catalog:"
 	},
 	"devDependencies": {
 		"@types/pdfkit": "^0.17.7",

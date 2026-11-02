@@ -19,5 +19,5 @@ export {
 	type RuleEvaluationInput,
 	reviewPriorityOf,
 } from "./evaluate";
-export { buildSemanticPrompt } from "./llm-prompt";
+export { buildSemanticPrompt, type SemanticJudgement, semanticJudgementSchema } from "./llm-prompt";
 export { findOrderedLists } from "./ordered-list";

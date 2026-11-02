@@ -288,3 +288,15 @@ export function evidencePath(input: {
 	params.set("to", input.to);
 	return `/app/org/${encodeURIComponent(input.organizationSlug)}/geo/observations?${params.toString()}`;
 }
+
+export const GEO_REPORT_KINDS = ["MONTHLY", "ADHOC"] as const;
+export type GeoReportKind = (typeof GEO_REPORT_KINDS)[number];
+
+/** What `geo_generated_reports.filters` holds: everything needed to build the snapshot again. */
+export interface ReportFilters {
+	kind: GeoReportKind;
+	periodLabel: string;
+	promptSetId: string | null;
+	notes: string | null;
+	nextPlan: string[] | null;
+}

@@ -1,4 +1,5 @@
-import type { GeoDictionarySnapshot } from "@workspace/geo-domain";
+import { GEO_RECOMMENDATIONS, type GeoDictionarySnapshot } from "@workspace/geo-domain";
+import { z } from "zod";
 
 function namesOf(snapshot: GeoDictionarySnapshot, kind: "OWN" | "COMPETITOR"): string {
 	return snapshot.entities
@@ -38,3 +39,14 @@ export function buildSemanticPrompt(input: {
 		input.answer,
 	].join("\n");
 }
+
+/** What the model must return; nothing it says is stored as a result, only compared with the rules. */
+export const semanticJudgementSchema = z.object({
+	brandMentioned: z.boolean(),
+	recommendation: z.enum(GEO_RECOMMENDATIONS),
+	hasOrderedList: z.boolean(),
+	brandRank: z.number().int().min(1).max(50).nullable(),
+	evidenceQuote: z.string().max(400).nullable(),
+	confidence: z.number().min(0).max(1),
+});
+export type SemanticJudgement = z.infer<typeof semanticJudgementSchema>;

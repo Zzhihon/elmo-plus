@@ -21,3 +21,4 @@ export async function compareOrganizationBatches(
 	]);
 	return compareBatches({ batchId: beforeBatchId, samples: before }, { batchId: afterBatchId, samples: after });
 }
+export * from "./report-data";
