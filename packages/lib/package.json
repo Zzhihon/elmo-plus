@@ -60,6 +60,7 @@
 		"./geo/credentials": "./src/geo/credentials.ts",
 		"./geo/dictionary": "./src/geo/dictionary.ts",
 		"./geo/idempotency": "./src/geo/idempotency.ts",
+		"./geo/knowledge": "./src/geo/knowledge.ts",
 		"./geo/maintenance": "./src/geo/maintenance.ts",
 		"./geo/prompt-sets": "./src/geo/prompt-sets.ts",
 		"./geo/retention": "./src/geo/retention.ts",
