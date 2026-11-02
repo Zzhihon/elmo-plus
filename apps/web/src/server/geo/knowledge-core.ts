@@ -52,6 +52,7 @@ import {
 	count,
 	desc,
 	eq,
+	getTableName,
 	ilike,
 	inArray,
 	isNull,
@@ -1012,10 +1013,12 @@ export async function searchEntities(principal: GeoPrincipal, input: z.infer<typ
 			title: geoSiteEntities.title,
 			canonicalKey: geoSiteEntities.canonicalKey,
 			status: geoSiteEntities.status,
+			// Aliased and spelled out: drizzle drops table names from columns in a
+			// single-table selection, which would leave every "id" here ambiguous.
 			pageCount: sql<number>`(
-				select count(distinct ${geoSitePageVersions.pageId})::int from ${geoSiteEntitySources}
-				join ${geoSitePageVersions} on ${geoSitePageVersions.id} = ${geoSiteEntitySources.pageVersionId}
-				where ${geoSiteEntitySources.entityId} = ${geoSiteEntities.id}
+				select count(distinct v.page_id)::int from ${geoSiteEntitySources} s
+				join ${geoSitePageVersions} v on v.id = s.page_version_id
+				where s.entity_id = ${sql.identifier(getTableName(geoSiteEntities))}.${sql.identifier(geoSiteEntities.id.name)}
 			)`,
 		})
 		.from(geoSiteEntities)
