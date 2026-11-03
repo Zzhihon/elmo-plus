@@ -1,10 +1,12 @@
 import { type CaptureFailure, captureFailure } from "./classify";
 import type { LiveSurfaceConfig } from "./config";
+import { readDoubaoAppResponse } from "./doubao-app";
 import { extractCitations, failedCapture, headerValue, isHttpUrl, requestJson } from "./http";
 import { fillTemplate, readPath } from "./json-path";
 import type { CaptureCapabilities, CaptureRequest, CaptureResult, FetchLike, GeoCaptureAdapter } from "./types";
 
 export const LIVE_SURFACE_PROVIDER_VERSION = "live-surface-licensed-http/1";
+export const DOUBAO_APP_PROVIDER_VERSION = "live-surface-doubao-app/1";
 
 function stringAt(body: unknown, path: string | undefined): string | undefined {
 	if (!path) return undefined;
@@ -54,6 +56,41 @@ function describeResponse(
 			screenshotUrl: isHttpUrl(screenshot) ? screenshot : null,
 			durationMs,
 		},
+	};
+}
+
+function doubaoAppCapture(
+	json: unknown,
+	located: { surfaceMode: "LIVE_SURFACE"; providerVersion: string; sampledAt: string },
+	shared: Partial<CaptureResult>,
+): CaptureResult {
+	const answer = readDoubaoAppResponse(json);
+	const result = {
+		...shared,
+		...located,
+		providerVersion: DOUBAO_APP_PROVIDER_VERSION,
+		modelVersion: answer.model,
+		providerTraceId: answer.responseId ?? shared.providerTraceId,
+		responseMetadata: {
+			...shared.responseMetadata,
+			doubaoAppFeature: answer.feature ?? null,
+			searchSummaries: answer.searchSummaries,
+			searchQueries: answer.searchQueries,
+		},
+	};
+	if (answer.outcome !== "complete" && answer.outcome !== "partial") {
+		return failedCapture(result, answer.outcome, result);
+	}
+	if (!answer.text) {
+		return failedCapture(result, captureFailure("EMPTY_RESPONSE", "EMPTY_RESPONSE", "服务商返回了空回答"), result);
+	}
+	const partial = answer.outcome === "partial";
+	return {
+		...result,
+		status: partial ? "PARTIAL" : "VALID",
+		responseText: answer.text,
+		citations: answer.citations,
+		errorCode: partial ? "PROVIDER_PARTIAL" : undefined,
 	};
 }
 
@@ -134,6 +171,7 @@ export class LicensedHttpAdapter implements GeoCaptureAdapter {
 		const json = outcome.json;
 		const located = { ...base, sampledAt: reportedSampledAt(json, config) ?? now().toISOString() };
 		const shared = describeResponse(json, config, outcome.headers, outcome.durationMs);
+		if (config.responseFormat === "doubao-app") return doubaoAppCapture(json, located, shared);
 		const mapped = mappedFailure(config, stringAt(json, config.response.status));
 		if (mapped && mapped !== "PARTIAL") return failedCapture(located, mapped, shared);
 

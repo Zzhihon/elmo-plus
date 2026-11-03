@@ -31,6 +31,14 @@ export interface LiveSurfaceStatusMap {
 	partial?: string[];
 }
 
+/**
+ * `mapped` reads the answer through the configured field paths. `doubao-app` reads the
+ * Volcengine Ark Responses API with the `doubao_app` tool, whose answer and search results
+ * arrive as typed blocks in no fixed order, so field paths cannot address them.
+ */
+export const LIVE_SURFACE_RESPONSE_FORMATS = ["mapped", "doubao-app"] as const;
+export type LiveSurfaceResponseFormat = (typeof LIVE_SURFACE_RESPONSE_FORMATS)[number];
+
 export interface LiveSurfaceConfig {
 	/** Name of the licensed service and where its licence is recorded; shown beside every result. */
 	serviceName: string;
@@ -40,6 +48,7 @@ export interface LiveSurfaceConfig {
 	auth: { type: "bearer" } | { type: "header"; name: string } | { type: "none" };
 	headers?: Record<string, string>;
 	request: unknown;
+	responseFormat: LiveSurfaceResponseFormat;
 	response: {
 		text: string;
 		citations?: string;
@@ -68,6 +77,7 @@ const ALLOWED_HEADERS = new Set([
 	"x-client-name",
 	"x-client-version",
 	"x-request-source",
+	"ark-beta-doubao-app",
 ]);
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -238,14 +248,27 @@ const OPTIONAL_RESPONSE_PATHS = [
 	"screenshotUrl",
 ] as const;
 
-function parseResponseMapping(value: unknown, errors: string[]): LiveSurfaceConfig["response"] {
+function parseResponseFormat(value: unknown, errors: string[]): LiveSurfaceResponseFormat {
+	if (value === undefined || value === null) return "mapped";
+	if (LIVE_SURFACE_RESPONSE_FORMATS.includes(value as LiveSurfaceResponseFormat)) {
+		return value as LiveSurfaceResponseFormat;
+	}
+	errors.push(`responseFormat 必须是 ${LIVE_SURFACE_RESPONSE_FORMATS.join("、")} 之一`);
+	return "mapped";
+}
+
+function parseResponseMapping(
+	value: unknown,
+	format: LiveSurfaceResponseFormat,
+	errors: string[],
+): LiveSurfaceConfig["response"] {
 	const record = asRecord(value);
 	if (!record) {
-		errors.push("response 映射必填");
+		if (format === "mapped") errors.push("response 映射必填");
 		return { text: "" };
 	}
 	const text = optionalPath(record.text, "response.text", errors);
-	if (!text) errors.push("response.text 必填");
+	if (!text && format === "mapped") errors.push("response.text 必填");
 	const mapping: LiveSurfaceConfig["response"] = {
 		text: text ?? "",
 		statusMap: parseStatusMap(record.statusMap, errors),
@@ -260,6 +283,7 @@ export function parseLiveSurfaceConfig(config: unknown): ConfigResult<LiveSurfac
 	const record = asRecord(config) ?? {};
 	const errors = secretKeyErrors(record);
 	if (record.request === undefined) errors.push("request 模板必填");
+	const responseFormat = parseResponseFormat(record.responseFormat, errors);
 	const value: LiveSurfaceConfig = {
 		serviceName: requiredText(record.serviceName, "serviceName（已获许可的第三方服务名称）必填", errors),
 		licenseNote: requiredText(record.licenseNote, "licenseNote（许可依据）必填", errors),
@@ -269,7 +293,8 @@ export function parseLiveSurfaceConfig(config: unknown): ConfigResult<LiveSurfac
 		auth: parseAuth(record.auth, errors),
 		headers: plainHeaders(record.headers, errors),
 		request: record.request,
-		response: parseResponseMapping(record.response, errors),
+		responseFormat,
+		response: parseResponseMapping(record.response, responseFormat, errors),
 		costPerRequest: optionalNumber(record.costPerRequest, "costPerRequest", 0, 1000, errors),
 	};
 	return errors.length ? { ok: false, errors } : { ok: true, value };

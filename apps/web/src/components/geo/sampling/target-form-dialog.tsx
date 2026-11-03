@@ -322,7 +322,7 @@ export function TargetFormDialog({
 					<Field
 						id="target-config"
 						label="配置（JSON）"
-						hint="模型 API：baseUrl、temperature、maxTokens、extraBody、pricing、citationsPath。已获许可的第三方服务：serviceName、licenseNote、endpoint、auth、request、response。"
+						hint="模型 API：baseUrl、temperature、maxTokens、extraBody、pricing、citationsPath。已获许可的第三方服务：serviceName、licenseNote、endpoint、auth、request、response；豆包助手官方 API 设 responseFormat 为 doubao-app，无需 response 映射。"
 					>
 						<Textarea
 							id="target-config"
