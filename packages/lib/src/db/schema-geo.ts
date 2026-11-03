@@ -16,9 +16,11 @@ import {
 	GEO_BATCH_STATUSES,
 	GEO_BRAND_KINDS,
 	GEO_BREAKER_STATES,
+	GEO_CITED_CONTENT_TYPES,
 	GEO_CLAIM_KINDS,
 	GEO_CLAIM_MATCH_STATUSES,
 	GEO_CLAIM_VERDICTS,
+	GEO_COMPETITOR_CANDIDATE_STATUSES,
 	GEO_CONFLICT_STATUSES,
 	GEO_CONTENT_ACTIONS,
 	GEO_CONTENT_APPROVAL_STATES,
@@ -38,6 +40,8 @@ import {
 	GEO_PRIORITIES,
 	GEO_PROMPT_SET_STATUSES,
 	GEO_PROMPT_STATUSES,
+	GEO_RECOMMENDATION_KINDS,
+	GEO_RECOMMENDATION_STATUSES,
 	GEO_PROMPT_TIERS,
 	GEO_PUBLICATION_SCOPES,
 	GEO_RECOMMENDATIONS,
@@ -56,6 +60,7 @@ import {
 	GEO_SITE_PAGE_STATUSES,
 	GEO_SITE_QA_SAMPLE_STATUSES,
 	GEO_SITE_QA_VERDICTS,
+	GEO_SIMULATION_STATUSES,
 	GEO_SURFACE_MODES,
 	GEO_TASK_KINDS,
 	GEO_TASK_SOURCE_KINDS,
@@ -80,9 +85,11 @@ import {
 	type GeoBrandKind,
 	type GeoBreakerState,
 	type GeoCitationAttribution,
+	type GeoCitedContentType,
 	type GeoClaimKind,
 	type GeoClaimMatchStatus,
 	type GeoClaimVerdict,
+	type GeoCompetitorCandidateStatus,
 	type GeoCompetitorHit,
 	type GeoConflictStatus,
 	type GeoContentAction,
@@ -112,6 +119,8 @@ import {
 	type GeoPromptTier,
 	type GeoPublicationScope,
 	type GeoRecommendation,
+	type GeoRecommendationKind,
+	type GeoRecommendationStatus,
 	type GeoReportReviewStatus,
 	type GeoReportStatus,
 	type GeoRetryRelation,
@@ -121,6 +130,7 @@ import {
 	type GeoRunStatus,
 	type GeoScanStatus,
 	type GeoSessionFactor,
+	type GeoSimulationStatus,
 	type GeoSiteAuditRunStatus,
 	type GeoSiteEntityKind,
 	type GeoSiteEntityStatus,
@@ -1700,5 +1710,158 @@ export const geoBackupRuns = pgTable(
 		index("geo_backup_runs_kind_finished_idx").on(table.kind, table.finishedAt),
 		oneOf("geo_backup_runs_kind_check", table.kind, GEO_BACKUP_KINDS),
 		oneOf("geo_backup_runs_status_check", table.status, GEO_BACKUP_STATUSES),
+	],
+).enableRLS();
+
+// ---------------------------------------------------------------------------
+// Customer console
+// ---------------------------------------------------------------------------
+
+/** Companies AI answers name for the organization's market, found before anyone types a competitor in. */
+export const geoCompetitorCandidates = pgTable(
+	"geo_competitor_candidates",
+	{
+		id: pk(),
+		organizationId: org(),
+		name: text("name").notNull(),
+		normalizedName: text("normalized_name").notNull(),
+		aliases: text("aliases").array().notNull().default([]),
+		domains: text("domains").array().notNull().default([]),
+		mentionCount: integer("mention_count").notNull().default(0),
+		observationCount: integer("observation_count").notNull().default(0),
+		platforms: text("platforms").array().$type<GeoPlatform[]>().notNull().default([]),
+		sampleObservationIds: uuid("sample_observation_ids").array().notNull().default([]),
+		status: text("status").$type<GeoCompetitorCandidateStatus>().notNull().default("PENDING"),
+		brandEntityId: uuid("brand_entity_id").references(() => geoBrandEntities.id),
+		decidedBy: text("decided_by"),
+		decidedAt: at("decided_at"),
+		lastSeenAt: at("last_seen_at"),
+		createdAt: createdAt(),
+		updatedAt: updatedAt(),
+	},
+	(table) => [
+		uniqueIndex("geo_competitor_candidates_org_name_idx").on(table.organizationId, table.normalizedName),
+		index("geo_competitor_candidates_org_status_idx").on(table.organizationId, table.status),
+		oneOf("geo_competitor_candidates_status_check", table.status, GEO_COMPETITOR_CANDIDATE_STATUSES),
+	],
+).enableRLS();
+
+/** Which cards a person put on their exposure dashboard, in order, with each card's own settings. */
+export const geoDashboardLayouts = pgTable(
+	"geo_dashboard_layouts",
+	{
+		id: pk(),
+		organizationId: org(),
+		userId: text("user_id")
+			.notNull()
+			.references(() => user.id, { onDelete: "cascade" }),
+		cards: jsonb("cards").$type<{ id: string; type: string; settings?: Record<string, unknown> }[]>().notNull(),
+		createdAt: createdAt(),
+		updatedAt: updatedAt(),
+	},
+	(table) => [uniqueIndex("geo_dashboard_layouts_org_user_idx").on(table.organizationId, table.userId)],
+).enableRLS();
+
+/**
+ * A question someone asked live from the console. Kept apart from observations: one
+ * live answer is a demo, never a sample, so it never moves a metric unless an operator
+ * saves it as evidence.
+ */
+export const geoSimulationRuns = pgTable(
+	"geo_simulation_runs",
+	{
+		id: pk(),
+		organizationId: org(),
+		userId: text("user_id").notNull(),
+		question: text("question").notNull(),
+		platform: text("platform").$type<GeoPlatform>().notNull(),
+		surfaceMode: text("surface_mode").$type<GeoSurfaceMode>().notNull(),
+		targetId: uuid("target_id").references(() => geoSamplingTargets.id),
+		status: text("status").$type<GeoSimulationStatus>().notNull().default("RUNNING"),
+		answerText: text("answer_text"),
+		citations: jsonb("citations").$type<{ url: string; title?: string }[]>().notNull().default([]),
+		mentions: jsonb("mentions")
+			.$type<{ brandEntityId: string; kind: GeoBrandKind; name: string; start: number; end: number }[]>()
+			.notNull()
+			.default([]),
+		modelVersion: text("model_version"),
+		errorCode: text("error_code"),
+		errorMessage: text("error_message"),
+		latencyMs: integer("latency_ms"),
+		savedObservationId: uuid("saved_observation_id").references(() => geoObservations.id),
+		createdAt: createdAt(),
+		finishedAt: at("finished_at"),
+	},
+	(table) => [
+		index("geo_simulation_runs_org_created_idx").on(table.organizationId, table.createdAt),
+		index("geo_simulation_runs_org_user_created_idx").on(table.organizationId, table.userId, table.createdAt),
+		oneOf("geo_simulation_runs_platform_check", table.platform, GEO_PLATFORMS),
+		oneOf("geo_simulation_runs_surface_mode_check", table.surfaceMode, GEO_SURFACE_MODES),
+		oneOf("geo_simulation_runs_status_check", table.status, GEO_SIMULATION_STATUSES),
+	],
+).enableRLS();
+
+/** One classification per cited URL, shared across organizations: what a public page is does not depend on who asks. */
+export const geoCitationClassifications = pgTable(
+	"geo_citation_classifications",
+	{
+		url: text("url").primaryKey().notNull(),
+		domain: text("domain").notNull(),
+		contentType: text("content_type").$type<GeoCitedContentType>().notNull(),
+		title: text("title"),
+		classifier: text("classifier").notNull(),
+		classifiedAt: createdAt(),
+	},
+	(table) => [
+		index("geo_citation_classifications_domain_idx").on(table.domain),
+		oneOf("geo_citation_classifications_type_check", table.contentType, GEO_CITED_CONTENT_TYPES),
+	],
+).enableRLS();
+
+/**
+ * A concrete "do this to be mentioned more" item, with the evidence that produced it:
+ * which questions were lost, to whom, what the winners' cited pages were, and what the
+ * organization's own site lacks.
+ */
+export const geoRecommendations = pgTable(
+	"geo_recommendations",
+	{
+		id: pk(),
+		organizationId: org(),
+		kind: text("kind").$type<GeoRecommendationKind>().notNull(),
+		/** Stable key of what the item is about, so regenerating updates it instead of duplicating it. */
+		subjectKey: text("subject_key").notNull(),
+		title: text("title").notNull(),
+		summary: text("summary").notNull(),
+		contentType: text("content_type").$type<GeoCitedContentType>(),
+		priority: text("priority").$type<GeoPriority>().notNull().default("P2"),
+		impactScore: doublePrecision("impact_score").notNull().default(0),
+		evidence: jsonb("evidence")
+			.$type<{
+				promptIds?: string[];
+				observationIds?: string[];
+				competitorIds?: string[];
+				citedUrls?: string[];
+				sitePageIds?: string[];
+				findingIds?: string[];
+				[key: string]: unknown;
+			}>()
+			.notNull()
+			.default({}),
+		status: text("status").$type<GeoRecommendationStatus>().notNull().default("OPEN"),
+		taskId: uuid("task_id").references(() => geoOptimizationTasks.id),
+		generatorVersion: text("generator_version").notNull(),
+		decidedBy: text("decided_by"),
+		decidedAt: at("decided_at"),
+		createdAt: createdAt(),
+		updatedAt: updatedAt(),
+	},
+	(table) => [
+		uniqueIndex("geo_recommendations_org_subject_idx").on(table.organizationId, table.kind, table.subjectKey),
+		index("geo_recommendations_org_status_idx").on(table.organizationId, table.status, table.impactScore),
+		oneOf("geo_recommendations_kind_check", table.kind, GEO_RECOMMENDATION_KINDS),
+		oneOf("geo_recommendations_status_check", table.status, GEO_RECOMMENDATION_STATUSES),
+		oneOf("geo_recommendations_priority_check", table.priority, GEO_PRIORITIES),
+		nullOrOneOf("geo_recommendations_content_type_check", table.contentType, GEO_CITED_CONTENT_TYPES),
 	],
 ).enableRLS();

@@ -266,7 +266,7 @@ export const GEO_TASK_KINDS = [
 ] as const;
 export type GeoTaskKind = (typeof GEO_TASK_KINDS)[number];
 
-export const GEO_TASK_SOURCE_KINDS = ["OBSERVATION", "FINDING", "ASSERTION", "MANUAL"] as const;
+export const GEO_TASK_SOURCE_KINDS = ["OBSERVATION", "FINDING", "ASSERTION", "RECOMMENDATION", "MANUAL"] as const;
 export type GeoTaskSourceKind = (typeof GEO_TASK_SOURCE_KINDS)[number];
 
 export const GEO_CONTENT_KINDS = ["FAQ", "SELECTION_GUIDE", "CASE", "COMPANY_INTRO"] as const;
@@ -324,3 +324,30 @@ export type GeoBackupKind = (typeof GEO_BACKUP_KINDS)[number];
 
 export const GEO_BACKUP_STATUSES = ["SUCCEEDED", "FAILED"] as const;
 export type GeoBackupStatus = (typeof GEO_BACKUP_STATUSES)[number];
+
+export const GEO_COMPETITOR_CANDIDATE_STATUSES = ["PENDING", "ACCEPTED", "DISMISSED"] as const;
+export type GeoCompetitorCandidateStatus = (typeof GEO_COMPETITOR_CANDIDATE_STATUSES)[number];
+
+export const GEO_SIMULATION_STATUSES = ["RUNNING", "SUCCEEDED", "FAILED"] as const;
+export type GeoSimulationStatus = (typeof GEO_SIMULATION_STATUSES)[number];
+
+export const GEO_RECOMMENDATION_KINDS = ["CONTENT_GAP", "SITE_FIX", "THIRD_PARTY_CHANNEL", "FACT_CORRECTION"] as const;
+export type GeoRecommendationKind = (typeof GEO_RECOMMENDATION_KINDS)[number];
+
+export const GEO_RECOMMENDATION_STATUSES = ["OPEN", "DISMISSED", "CONVERTED"] as const;
+export type GeoRecommendationStatus = (typeof GEO_RECOMMENDATION_STATUSES)[number];
+
+/** What kind of page an AI answer cited, so gaps can be named as "a product manual", "a case study", … */
+export const GEO_CITED_CONTENT_TYPES = [
+	"PRODUCT_SPEC",
+	"CASE_STUDY",
+	"QUALIFICATION",
+	"COMPANY_PROFILE",
+	"NEWS",
+	"SELECTION_GUIDE",
+	"DIRECTORY_LISTING",
+	"QA_COMMUNITY",
+	"MEDIA_ARTICLE",
+	"OTHER",
+] as const;
+export type GeoCitedContentType = (typeof GEO_CITED_CONTENT_TYPES)[number];
