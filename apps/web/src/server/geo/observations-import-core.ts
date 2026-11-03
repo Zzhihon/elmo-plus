@@ -32,6 +32,7 @@ import { parse as parseCsv } from "csv-parse/sync";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { enqueueGeoJob } from "@/lib/geo/enqueue";
+import { scanOrRefuse } from "./knowledge-assets-core";
 
 const MAX_CONTENT_CHARS = 5 * 1024 * 1024;
 
@@ -464,6 +465,17 @@ export async function uploadEvidenceFile(principal: GeoPrincipal, file: File): P
 	const type = sniffEvidenceType(bytes);
 	if (!type) throw new GeoError("VALIDATION_ERROR", "只支持 PNG、JPEG、WebP 截图或 PDF 文件");
 	const sha256 = createHash("sha256").update(bytes).digest("hex");
+	const scan = await scanOrRefuse(bytes);
+	if (scan.status === "INFECTED") {
+		await writeGeoAudit(db, {
+			principal,
+			action: "evidence.upload.infected",
+			entityType: "evidence_file",
+			entityId: sha256,
+			metadata: { signature: scan.signature, size: bytes.length, contentType: type.mime },
+		});
+		throw new GeoError("VALIDATION_ERROR", "文件未通过恶意文件扫描，已拒绝上传");
+	}
 	const name = `${sha256}.${type.ext}`;
 	const objectKey = geoObjectKey(principal.organizationId, "evidence", name);
 	await getObjectStore().put(objectKey, bytes, { contentType: type.mime });

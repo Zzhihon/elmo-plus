@@ -181,7 +181,7 @@ export async function loadAsset(
 // Upload, list, read
 // ---------------------------------------------------------------------------
 
-async function scanOrRefuse(bytes: Uint8Array): Promise<Awaited<ReturnType<typeof scanUpload>>> {
+export async function scanOrRefuse(bytes: Uint8Array): Promise<Awaited<ReturnType<typeof scanUpload>>> {
 	try {
 		return await scanUpload(bytes);
 	} catch (error) {
