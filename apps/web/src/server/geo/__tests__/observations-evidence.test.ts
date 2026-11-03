@@ -33,7 +33,13 @@ describe("evidence uploads", () => {
 
 	it("refuses a file the malware scan flags and never stores it", async () => {
 		scanUpload.mockResolvedValueOnce({ status: "INFECTED", engine: "clamd", signature: "Eicar-Test-Signature" });
-		const principal = { organizationId: "org", actorId: "u1", actorKind: "user", roles: ["geo_operator"], requestId: "r" } as const;
+		const principal = {
+			organizationId: "org",
+			actorId: "u1",
+			actorKind: "user",
+			roles: ["geo_operator"],
+			requestId: "r",
+		} as const;
 		const file = new File([ascii("%PDF-1.7")], "evidence.pdf");
 		await expect(uploadEvidenceFile(principal, file)).rejects.toThrow("恶意文件扫描");
 		expect(put).not.toHaveBeenCalled();
