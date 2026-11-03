@@ -143,10 +143,18 @@ export class ModelApiAdapter implements GeoCaptureAdapter {
 		};
 
 		if (!completion.text.trim()) {
+			// Reasoning models spend max_tokens on hidden reasoning first, so a low limit
+			// ends the reply before any answer text is written.
 			const failure =
 				completion.finishReason === "content_filter"
 					? captureFailure("REFUSED", "CONTENT_REFUSED", "平台以内容安全为由未返回回答")
-					: captureFailure("EMPTY_RESPONSE", "EMPTY_RESPONSE", "平台返回了空回答");
+					: completion.finishReason === "length"
+						? captureFailure(
+								"EMPTY_RESPONSE",
+								"TOKEN_LIMIT_BEFORE_ANSWER",
+								"输出上限在回答开始前已用尽，请调高 maxTokens",
+							)
+						: captureFailure("EMPTY_RESPONSE", "EMPTY_RESPONSE", "平台返回了空回答");
 			return failedCapture({ ...base, sampledAt }, failure, shared);
 		}
 

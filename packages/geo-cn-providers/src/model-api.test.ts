@@ -75,4 +75,14 @@ describe("model API adapter", () => {
 		expect(result.status).toBe("FAILED");
 		expect(result.responseText).toBeUndefined();
 	});
+
+	it("says the token limit ran out when a reasoning model wrote no answer before it", async () => {
+		const result = await adapter(async () =>
+			Response.json({
+				choices: [{ message: { content: "", reasoning_content: "思考……" }, finish_reason: "length" }],
+			}),
+		).capture(request);
+		expect(result.status).toBe("FAILED");
+		expect(result.errorCode).toBe("TOKEN_LIMIT_BEFORE_ANSWER");
+	});
 });
