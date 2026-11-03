@@ -211,6 +211,14 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 			"OpenRouter API key. Without TYPESAFE_API_KEY, the worker also calls Jev through OpenRouter with it to judge mentions and sentiment.",
 	},
 	{
+		name: "OPENROUTER_BASE_URL",
+		scope: "server",
+		requiredBy: "optional",
+		provider: "openrouter",
+		description:
+			"OpenAI-compatible base URL that the OpenRouter provider sends requests to instead of https://openrouter.ai/api/v1, such as a gateway reachable from mainland China.",
+	},
+	{
 		name: "ONBOARDING_LLM_TARGET",
 		scope: "server",
 		requiredBy: "optional",

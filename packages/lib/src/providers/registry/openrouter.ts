@@ -10,8 +10,12 @@ import type {
 } from "../types";
 import { jsonSchemaResponseFormat, parseSchemaJson } from "./ai-sdk";
 
-const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
-const OPENROUTER_API_URL = `${OPENROUTER_BASE_URL}/chat/completions`;
+const DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
+
+function openrouterApiUrl(): string {
+	const base = process.env.OPENROUTER_BASE_URL?.trim() || DEFAULT_OPENROUTER_BASE_URL;
+	return `${base.replace(/\/+$/, "")}/chat/completions`;
+}
 // Must be a family with OpenRouter's *native* web-search plugin (vs the Exa
 // fallback); per the docs that's OpenAI, Anthropic, Perplexity, and xAI.
 const DEFAULT_RESEARCH_MODEL = "anthropic/claude-sonnet-5.5";
@@ -76,7 +80,7 @@ export const openrouter: Provider = {
 		// `engine: "native"` runs the underlying provider's real web-search tool
 		// (e.g. Anthropic's web_search_20250305) instead of the Exa fallback.
 		if (webSearch) body.plugins = [{ id: "web", engine: "native" }];
-		const res = await fetch(OPENROUTER_API_URL, {
+		const res = await fetch(openrouterApiUrl(), {
 			method: "POST",
 			headers: openrouterHeaders(),
 			body: JSON.stringify(body),
@@ -125,7 +129,7 @@ export const openrouter: Provider = {
 		// The SDK's Responses API (client.responses.send()) does preserve annotations
 		// via ResponseOutputText, but it's currently in beta. Consider switching to
 		// the Responses API + SDK when it's stable.
-		const res = await fetch(OPENROUTER_API_URL, {
+		const res = await fetch(openrouterApiUrl(), {
 			method: "POST",
 			headers: openrouterHeaders(),
 			body: JSON.stringify(body),
