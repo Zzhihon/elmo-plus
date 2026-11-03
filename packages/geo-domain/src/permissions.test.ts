@@ -99,9 +99,12 @@ describe("separation of duties", () => {
 		expect(can(["geo_operator"], "secret.manage")).toBe(false);
 	});
 
-	it("keeps a viewer read-only and away from raw snapshots and the audit log", () => {
+	it("keeps a viewer to its own dashboard and live questions, away from raw snapshots and the audit log", () => {
 		const writes = GEO_PERMISSIONS.filter((permission) => permissionAccess(permission) === "write");
-		expect(writes.filter((permission) => can(["viewer"], permission))).toEqual([]);
+		expect(writes.filter((permission) => can(["viewer"], permission))).toEqual([
+			"dashboard.customize",
+			"console.simulate",
+		]);
 		expect(can(["viewer"], "site.read_snapshot")).toBe(false);
 		expect(can(["viewer"], "audit.read")).toBe(false);
 		expect(can(["viewer"], "knowledge.read_confidential")).toBe(false);

@@ -83,6 +83,25 @@ const PERMISSIONS = {
 	"audit.read": { access: "read", roles: ["platform_admin"] },
 	"alert.read": { access: "read", roles: STAFF },
 	"alert.manage": { access: "write", roles: ["geo_operator", "platform_admin"] },
+
+	"dashboard.read": { access: "read", roles: ALL_ROLES },
+	// Each person arranges only their own cards, which changes nothing anyone else sees.
+	"dashboard.customize": { access: "write", roles: ALL_ROLES },
+	// Customers ask live too: a live answer is capped per day and never moves a metric.
+	"console.simulate": { access: "write", roles: ALL_ROLES },
+	"console.read": { access: "read", roles: ALL_ROLES },
+
+	"recommendation.read": { access: "read", roles: ALL_ROLES },
+	"recommendation.generate": { access: "write", roles: ["geo_operator", "platform_admin"] },
+	"recommendation.triage": { access: "write", roles: ["geo_operator", "platform_admin"] },
+
+	"competitor.read": { access: "read", roles: ALL_ROLES },
+	"competitor.discover": { access: "write", roles: ["geo_operator", "platform_admin"] },
+	// Accepting a candidate edits the brand dictionary, so it takes the same role as brand.manage.
+	"competitor.decide": { access: "write", roles: ["platform_admin"] },
+
+	// The customer picking questions from our catalog is the business review for those questions.
+	"prompt.select_catalog": { access: "write", roles: ["marketing_reviewer", "geo_operator", "platform_admin"] },
 } as const satisfies Record<string, { access: GeoAccess; roles: readonly GeoRole[] }>;
 
 export type GeoPermission = keyof typeof PERMISSIONS;
@@ -90,6 +109,7 @@ export type GeoPermission = keyof typeof PERMISSIONS;
 /** What a platform administrator does to the workspace itself: only from a session that proved a second factor. */
 const SECOND_FACTOR_PERMISSIONS: readonly GeoPermission[] = [
 	"brand.manage",
+	"competitor.decide",
 	"target.manage",
 	"site.manage",
 	"settings.read",
