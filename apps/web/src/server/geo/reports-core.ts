@@ -8,6 +8,7 @@ import {
 } from "@workspace/geo-domain";
 import { getObjectStore } from "@workspace/geo-evidence";
 import {
+	chinaDate,
 	chinaDayRange,
 	chinaMonth,
 	type ReportFilters,
@@ -333,7 +334,7 @@ export async function exportReport(principal: GeoPrincipal, reportId: string, fo
 			metadata: { format },
 		}),
 	);
-	const datePart = row.periodStart.toISOString().slice(0, 10);
+	const datePart = chinaDate(row.periodStart);
 	return {
 		body: object.body,
 		contentType: format === "pdf" ? "application/pdf" : "text/csv; charset=utf-8",
