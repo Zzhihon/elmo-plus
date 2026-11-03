@@ -52,6 +52,7 @@ declare global {
 			readonly MISTRAL_API_KEY?: string;
 			readonly OPENROUTER_API_KEY?: string;
 			readonly OPENROUTER_BASE_URL?: string;
+			readonly OPENROUTER_RESEARCH_MODEL?: string;
 			readonly SEARCHAPI_API_KEY?: string;
 			readonly OLOSTEP_API_KEY?: string;
 			readonly BRIGHTDATA_API_TOKEN?: string;

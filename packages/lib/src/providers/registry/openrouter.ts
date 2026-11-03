@@ -20,6 +20,10 @@ function openrouterApiUrl(): string {
 // fallback); per the docs that's OpenAI, Anthropic, Perplexity, and xAI.
 const DEFAULT_RESEARCH_MODEL = "anthropic/claude-sonnet-5.5";
 
+function researchModel(): string {
+	return process.env.OPENROUTER_RESEARCH_MODEL?.trim() || DEFAULT_RESEARCH_MODEL;
+}
+
 function openrouterHeaders(): Record<string, string> {
 	return {
 		Authorization: `Bearer ${getCredential("OPENROUTER_API_KEY")}`,
@@ -70,10 +74,11 @@ export const openrouter: Provider = {
 		schema,
 		webSearch = true,
 	}: StructuredResearchOptions<T>): Promise<StructuredResearchResult<T>> {
+		const model = researchModel();
 		// Raw fetch (no AI SDK) so we can attach the OpenRouter `plugins` field
 		// — the AI SDK's OpenAI-compat path doesn't pass it through.
 		const body: Record<string, unknown> = {
-			model: DEFAULT_RESEARCH_MODEL,
+			model,
 			messages: [{ role: "user", content: prompt }],
 			response_format: jsonSchemaResponseFormat(schema),
 		};
@@ -91,14 +96,14 @@ export const openrouter: Provider = {
 		const data: any = await res.json();
 		const content = data?.choices?.[0]?.message?.content;
 		if (typeof content !== "string") {
-			throw new Error(`OpenRouter returned no JSON content (model=${DEFAULT_RESEARCH_MODEL})`);
+			throw new Error(`OpenRouter returned no JSON content (model=${model})`);
 		}
 		return {
 			object: parseSchemaJson(schema, content),
 			// Report the alias we sent, not OpenRouter's resolved version
 			// (e.g. "openai/gpt-5-mini" vs "openai/gpt-5-mini-2025-08-07") —
 			// matches what openai-api and anthropic-api do.
-			modelVersion: DEFAULT_RESEARCH_MODEL,
+			modelVersion: model,
 		};
 	},
 

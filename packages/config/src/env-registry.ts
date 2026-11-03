@@ -219,6 +219,14 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 			"OpenAI-compatible base URL that the OpenRouter provider sends requests to instead of https://openrouter.ai/api/v1, such as a gateway reachable from mainland China.",
 	},
 	{
+		name: "OPENROUTER_RESEARCH_MODEL",
+		scope: "server",
+		requiredBy: "optional",
+		provider: "openrouter",
+		description:
+			"Model the OpenRouter provider asks for structured research, such as brand onboarding and GEO evaluation. Set it with OPENROUTER_BASE_URL when the endpoint is not OpenRouter. It must support JSON schema output.",
+	},
+	{
 		name: "ONBOARDING_LLM_TARGET",
 		scope: "server",
 		requiredBy: "optional",
