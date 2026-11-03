@@ -28,21 +28,22 @@ function isSearch(block: Record<string, unknown>): boolean {
 	return block.type === "search" || block.type === "reasoning_search";
 }
 
+function searchCards(blocks: Record<string, unknown>[]): CaptureCitation[] {
+	return blocks.filter(isSearch).flatMap((block) =>
+		(Array.isArray(block.results) ? block.results : []).flatMap((result) => {
+			const card = record(record(result)?.text_card);
+			if (!isHttpUrl(card?.url)) return [];
+			const title = text(card.title, 500)?.trim();
+			return [title ? { url: card.url, title } : { url: card.url }];
+		}),
+	);
+}
+
 function searchCitations(blocks: Record<string, unknown>[]): CaptureCitation[] {
 	const seen = new Set<string>();
-	const citations: CaptureCitation[] = [];
-	for (const block of blocks.filter(isSearch)) {
-		for (const result of Array.isArray(block.results) ? block.results : []) {
-			const card = record(record(result)?.text_card);
-			const url = card?.url;
-			if (!isHttpUrl(url) || seen.has(url)) continue;
-			seen.add(url);
-			const title = text(card?.title, 500)?.trim();
-			citations.push(title ? { url, title } : { url });
-			if (citations.length >= MAX_CITATIONS) return citations;
-		}
-	}
-	return citations;
+	return searchCards(blocks)
+		.filter((citation) => !seen.has(citation.url) && Boolean(seen.add(citation.url)))
+		.slice(0, MAX_CITATIONS);
 }
 
 function reportedOutcome(body: Record<string, unknown>): DoubaoAppAnswer["outcome"] {
