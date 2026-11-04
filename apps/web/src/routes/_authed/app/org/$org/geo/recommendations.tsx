@@ -41,20 +41,31 @@ const SECTION_HINTS: Record<GeoRecommendationKind, string> = {
 	FACT_CORRECTION: "AI 回答里关于我们的错误说法，需要在官网和常被引用的平台上更正。",
 };
 
+const FOLDED_SHOWN = 5;
+
 function ItemList({
 	items,
 	organizationId,
 	orgSlug,
+	folded = false,
 }: {
 	items: RecommendationItem[];
 	organizationId: string;
 	orgSlug: string;
+	folded?: boolean;
 }) {
+	const [expanded, setExpanded] = useState(false);
+	const shown = folded && !expanded ? items.slice(0, FOLDED_SHOWN) : items;
 	return (
 		<div className="flex flex-col gap-3">
-			{items.map((item) => (
+			{shown.map((item) => (
 				<RecommendationCard key={item.id} item={item} organizationId={organizationId} orgSlug={orgSlug} />
 			))}
+			{folded && items.length > FOLDED_SHOWN && (
+				<Button variant="ghost" size="sm" className="self-start" onClick={() => setExpanded(!expanded)}>
+					{expanded ? "收起" : `展开其余 ${items.length - FOLDED_SHOWN} 项`}
+				</Button>
+			)}
 		</div>
 	);
 }
@@ -97,7 +108,7 @@ function Section({
 						</div>
 					))
 				) : (
-					<ItemList items={items} organizationId={organizationId} orgSlug={orgSlug} />
+					<ItemList items={items} organizationId={organizationId} orgSlug={orgSlug} folded={kind === "SITE_FIX"} />
 				)}
 			</CardContent>
 		</Card>
