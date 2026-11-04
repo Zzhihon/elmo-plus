@@ -64,7 +64,11 @@ function quoteAround(text: string, names: readonly string[]): string | null {
 		if (at < 0) continue;
 		const start = Math.max(0, at - QUOTE_RADIUS);
 		const end = Math.min(text.length, at + name.length + QUOTE_RADIUS);
-		const snippet = text.slice(start, end).replace(/\s+/g, " ").trim();
+		const snippet = text
+			.slice(start, end)
+			.replace(/(\*\*|__|`|#{1,6}\s)/g, "")
+			.replace(/\s+/g, " ")
+			.trim();
 		return `${start > 0 ? "…" : ""}${snippet}${end < text.length ? "…" : ""}`;
 	}
 	return null;

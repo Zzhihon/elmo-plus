@@ -257,9 +257,9 @@ function addToBucket(buckets: Map<string, Bucket>, key: string, cell: LostCell, 
 
 const unique = <T>(values: Iterable<T>) => [...new Set(values)];
 
-function listNames(names: readonly string[], limit = 3): string {
+function listNames(names: readonly string[], unit: string, limit = 3): string {
 	const shown = names.slice(0, limit).join("、");
-	return names.length > limit ? `${shown}等 ${names.length} 家` : shown;
+	return names.length > limit ? `${shown}等 ${names.length} ${unit}` : shown;
 }
 
 function lostSummary(cells: readonly LostCell[], competitorNames: Map<string, string>): string {
@@ -269,8 +269,8 @@ function lostSummary(cells: readonly LostCell[], competitorNames: Map<string, st
 	const competitors = unique(cells.flatMap((cell) => cell.competitorIds))
 		.map((id) => competitorNames.get(id))
 		.filter((name): name is string => Boolean(name));
-	const whom = roles.length > 0 ? `，提问的是${listNames(roles)}` : "";
-	return `有 ${questions} 个问题在${platforms.join("、")}上，AI 提到了${listNames(competitors)}，却没有提到我们${whom}。`;
+	const whom = roles.length > 0 ? `，提问的是${listNames(roles, "类采购角色")}` : "";
+	return `有 ${questions} 个问题在${platforms.join("、")}上，AI 提到了${listNames(competitors, "家")}，却没有提到我们${whom}。`;
 }
 
 function evidenceFromCells(cells: readonly LostCell[], competitors: readonly CompetitorRef[]) {
