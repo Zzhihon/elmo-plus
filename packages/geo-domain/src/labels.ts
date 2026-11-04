@@ -30,10 +30,13 @@ export const GEO_PLATFORM_LABELS: Record<GeoPlatform, string> = {
 	deepseek: "DeepSeek",
 	yuanbao: "腾讯元宝",
 	qwen: "通义千问",
+	chatgpt: "ChatGPT",
+	gemini: "Gemini",
 };
 
 export const GEO_SURFACE_MODE_LABELS: Record<GeoSurfaceMode, string> = {
 	LIVE_SURFACE: "用户界面实测",
+	BROWSER_AGENT: "浏览器模拟用户",
 	MODEL_API: "模型 API 代理评测",
 	MANUAL_EVIDENCE: "人工证据",
 };

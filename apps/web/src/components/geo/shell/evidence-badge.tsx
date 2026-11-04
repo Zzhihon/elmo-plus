@@ -8,6 +8,7 @@ import { type GeoBadgeTone, GeoStatusBadge } from "./status-badge";
 
 const SURFACE_TONES: Record<GeoSurfaceMode, GeoBadgeTone> = {
 	LIVE_SURFACE: "info",
+	BROWSER_AGENT: "info",
 	MODEL_API: "warning",
 	MANUAL_EVIDENCE: "neutral",
 };

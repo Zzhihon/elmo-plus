@@ -12,10 +12,16 @@ import {
 type EvaluatedSample = MetricSample & { evaluation: MetricEvaluation };
 
 /** The most realistic way an answer was captured comes first: what a buyer would actually see. */
-export const HEADLINE_MODE_PREFERENCE: readonly GeoSurfaceMode[] = ["LIVE_SURFACE", "MANUAL_EVIDENCE", "MODEL_API"];
+export const HEADLINE_MODE_PREFERENCE: readonly GeoSurfaceMode[] = [
+	"LIVE_SURFACE",
+	"BROWSER_AGENT",
+	"MANUAL_EVIDENCE",
+	"MODEL_API",
+];
 
 export const CUSTOMER_MODE_LABELS: Record<GeoSurfaceMode, string> = {
 	LIVE_SURFACE: "真实产品端",
+	BROWSER_AGENT: "浏览器模拟用户",
 	MANUAL_EVIDENCE: "人工记录",
 	MODEL_API: "模型接口",
 };

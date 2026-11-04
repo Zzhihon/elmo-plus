@@ -3,6 +3,7 @@ import type { ConsoleOutcome } from "@/server/geo/console-core";
 
 const MODE_LABELS: Record<GeoSurfaceMode, string> = {
 	LIVE_SURFACE: "真实产品端",
+	BROWSER_AGENT: "浏览器模拟用户",
 	MODEL_API: "模型 API",
 	MANUAL_EVIDENCE: "人工记录",
 };

@@ -203,6 +203,8 @@ const LINE_COLORS: Record<GeoPlatform, string> = {
 	deepseek: "#7c3aed",
 	yuanbao: "#059669",
 	qwen: "#d97706",
+	chatgpt: "#0f766e",
+	gemini: "#db2777",
 };
 
 export function TrendCard({ data }: { data: DashboardData }) {

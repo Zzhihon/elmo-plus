@@ -28,10 +28,11 @@ export type GeoPromptTier = (typeof GEO_PROMPT_TIERS)[number];
 export const GEO_PROMPT_SET_STATUSES = ["DRAFT", "FROZEN"] as const;
 export type GeoPromptSetStatus = (typeof GEO_PROMPT_SET_STATUSES)[number];
 
-export const GEO_PLATFORMS = ["doubao", "deepseek", "yuanbao", "qwen"] as const;
+export const GEO_PLATFORMS = ["doubao", "deepseek", "yuanbao", "qwen", "chatgpt", "gemini"] as const;
 export type GeoPlatform = (typeof GEO_PLATFORMS)[number];
 
-export const GEO_SURFACE_MODES = ["LIVE_SURFACE", "MODEL_API", "MANUAL_EVIDENCE"] as const;
+/** BROWSER_AGENT: an agent driving a signed-in consumer app in a real browser, as a buyer would use it. */
+export const GEO_SURFACE_MODES = ["LIVE_SURFACE", "BROWSER_AGENT", "MODEL_API", "MANUAL_EVIDENCE"] as const;
 export type GeoSurfaceMode = (typeof GEO_SURFACE_MODES)[number];
 
 export const GEO_BREAKER_STATES = ["CLOSED", "OPEN", "HALF_OPEN"] as const;

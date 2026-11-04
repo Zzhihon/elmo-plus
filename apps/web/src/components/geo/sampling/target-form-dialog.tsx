@@ -52,6 +52,7 @@ const CONFIG_EXAMPLES: Record<GeoSurfaceMode, string> = {
 		null,
 		2,
 	),
+	BROWSER_AGENT: JSON.stringify({ chatUrl: "https://chat.example-ai.test/" }, null, 2),
 	MANUAL_EVIDENCE: "{}",
 };
 

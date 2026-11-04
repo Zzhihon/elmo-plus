@@ -274,6 +274,13 @@
       "when": 1793710050442,
       "tag": "0038_geo_customer_console",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1793818380073,
+      "tag": "0039_geo_browser_agent",
+      "breakpoints": true
     }
   ]
 }
