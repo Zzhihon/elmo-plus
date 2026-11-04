@@ -1,6 +1,6 @@
 import { IconAlertTriangle, IconDots } from "@tabler/icons-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { GEO_VERIFICATION_LABELS } from "@workspace/geo-domain";
+import { GEO_VERIFICATION_LABELS, isImportOnlySurface } from "@workspace/geo-domain";
 import { Alert, AlertDescription, AlertTitle } from "@workspace/ui/components/alert";
 import { Button } from "@workspace/ui/components/button";
 import {
@@ -33,6 +33,10 @@ type Dialog =
 function blockers(target: SamplingTargetView): string[] {
 	const reasons: string[] = [];
 	if (target.surfaceMode === "MANUAL_EVIDENCE") return target.enabled ? [] : ["未启用，启用后可导入人工证据"];
+	if (target.surfaceMode === "BROWSER_AGENT") {
+		if (target.configErrors.length) return ["配置不完整，需要填写对话页地址 chatUrl"];
+		return target.enabled ? [] : ["未启用，启用后浏览器代理才会采样这个平台"];
+	}
 	if (!target.enabled) reasons.push("已停用");
 	if (!target.platformEnabled) reasons.push("部署未开启该平台的自动采样");
 	if (target.verificationStatus !== "PASSED" && target.verificationStatus !== "LIMITED") {
@@ -70,7 +74,7 @@ function TargetActions({ target, onOpen }: { target: SamplingTargetView; onOpen:
 		onError: (err) => setError(writeError(err, "操作失败")),
 	});
 	const canManage = viewer.can("target.manage");
-	const canSecret = viewer.can("secret.manage") && target.surfaceMode !== "MANUAL_EVIDENCE";
+	const canSecret = viewer.can("secret.manage") && !isImportOnlySurface(target.surfaceMode);
 	if (!canManage && !canSecret) return null;
 
 	return (
@@ -178,18 +182,21 @@ export function TargetMatrix({ targets }: { targets: SamplingTargetView[] }) {
 									</TableCell>
 									<TableCell className="max-w-56">
 										{reasons.length === 0 ? (
-											<GeoStatusBadge label="可采样" tone="success" />
+											<GeoStatusBadge
+												label={isImportOnlySurface(target.surfaceMode) ? "可导入" : "可采样"}
+												tone="success"
+											/>
 										) : (
 											<p className="text-xs text-muted-foreground">{reasons.join("；")}</p>
 										)}
-										{target.surfaceMode !== "MANUAL_EVIDENCE" && target.breakerState !== "CLOSED" && (
+										{!isImportOnlySurface(target.surfaceMode) && target.breakerState !== "CLOSED" && (
 											<div className="mt-1">
 												<BreakerBadge state={target.breakerState} />
 											</div>
 										)}
 									</TableCell>
 									<TableCell className="text-xs text-muted-foreground">
-										{target.surfaceMode === "MANUAL_EVIDENCE" ? "—" : quotaText(target)}
+										{isImportOnlySurface(target.surfaceMode) ? "—" : quotaText(target)}
 										{target.costBudget !== null && <div>预算 {formatCost(target.costBudget)} / 30 天</div>}
 									</TableCell>
 									<TableCell className="text-right text-xs tabular-nums text-muted-foreground">

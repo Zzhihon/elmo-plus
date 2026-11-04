@@ -86,6 +86,9 @@ export function assertTargetRunnable(target: SamplingTargetRow): void {
 	if (target.surfaceMode === "MANUAL_EVIDENCE") {
 		throw new GeoError("VALIDATION_ERROR", `${label} 是人工证据目标，请通过“导入证据”采样`);
 	}
+	if (target.surfaceMode === "BROWSER_AGENT") {
+		throw new GeoError("VALIDATION_ERROR", `${label} 由浏览器代理每周采样后导入，不能加入自动采样批次`);
+	}
 	if (!target.enabled) throw new GeoError("TARGET_UNAVAILABLE", `${label} 已停用`);
 	if (!isSamplingPlatformEnabled(target.platform)) {
 		throw new GeoError("TARGET_UNAVAILABLE", `${label} 所属平台的自动采样在部署中未开启`);

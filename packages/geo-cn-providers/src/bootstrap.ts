@@ -5,7 +5,7 @@ import {
 	type GeoSurfaceMode,
 	isGeoCredentialRef,
 } from "@workspace/geo-domain";
-import { findSecretKeys } from "./config";
+import { findSecretKeys, parseBrowserAgentConfig } from "./config";
 import { parseAvailableWindow } from "./policy";
 
 export interface BootstrapTarget {
@@ -67,6 +67,16 @@ function settingErrors(at: string, item: Record<string, unknown>): string[] {
 			? [`${at}.credentialRef 必须是工作台设置中管理的密钥引用名（大写字母、数字和下划线）`]
 			: []),
 		...(window.ok ? [] : [`${at}.availableWindow：${window.error}`]),
+		...(item.surfaceMode === "BROWSER_AGENT" ? browserAgentErrors(at, item) : []),
+	];
+}
+
+/** A browser agent signs in as the user in their own browser, so it has no credential to reference. */
+function browserAgentErrors(at: string, item: Record<string, unknown>): string[] {
+	const config = parseBrowserAgentConfig(item.config);
+	return [
+		...(config.ok ? [] : config.errors.map((error) => `${at}.config.${error}`)),
+		...(item.credentialRef === undefined ? [] : [`${at}.credentialRef 浏览器模拟用户目标不使用凭据`]),
 	];
 }
 

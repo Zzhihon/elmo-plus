@@ -415,7 +415,9 @@ export async function exportObservation(principal: GeoPrincipal, observationId: 
 					? "本记录来自模型 API 代理评测，不等同于该平台面向用户的产品回答。"
 					: detail.target.surfaceMode === "MANUAL_EVIDENCE"
 						? "本记录为人工采样导入，证据位置见 evidence。"
-						: "本记录来自已获许可的第三方服务采集的用户界面回答。",
+						: detail.target.surfaceMode === "BROWSER_AGENT"
+							? "本记录由浏览器代理在已登录的用户浏览器中提问后导入，截图见 evidence。"
+							: "本记录来自已获许可的第三方服务采集的用户界面回答。",
 			targetVerificationStatus: detail.target.verificationStatus,
 			countsInRates: detail.countsInRates,
 		},

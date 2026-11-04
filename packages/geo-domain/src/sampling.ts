@@ -1,4 +1,4 @@
-import type { GeoBatchStatus, GeoObservationStatus, GeoRunStatus } from "./enums";
+import type { GeoBatchStatus, GeoObservationStatus, GeoRunStatus, GeoSurfaceMode } from "./enums";
 import { GEO_QUEUE, samplingRunIdempotencyKey } from "./queues";
 
 /** Payload `{ organizationId, observationId }`. Sent after an observation with an answer is stored. */
@@ -7,6 +7,19 @@ export const GEO_EVALUATE_OBSERVATION_QUEUE = GEO_QUEUE.evaluation;
 export interface GeoEvaluateObservationJob {
 	organizationId: string;
 	observationId: string;
+}
+
+/**
+ * Modes whose answers only ever arrive by import: a person, or an agent driving the
+ * user's own signed-in browser. The worker never samples them and no batch includes them.
+ */
+export const GEO_IMPORT_ONLY_SURFACE_MODES = [
+	"BROWSER_AGENT",
+	"MANUAL_EVIDENCE",
+] as const satisfies readonly GeoSurfaceMode[];
+
+export function isImportOnlySurface(mode: GeoSurfaceMode): boolean {
+	return (GEO_IMPORT_ONLY_SURFACE_MODES as readonly string[]).includes(mode);
 }
 
 export const GEO_TERMINAL_RUN_STATUSES = [

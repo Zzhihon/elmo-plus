@@ -16,6 +16,7 @@ import {
 	GEO_VERIFICATION_STATUSES,
 	GeoError,
 	type GeoPrincipal,
+	isImportOnlySurface,
 	targetCredentialRef,
 } from "@workspace/geo-domain";
 import {
@@ -107,7 +108,7 @@ function toView(
 	platforms: ReadonlySet<string>,
 ): SamplingTargetView {
 	const config = validateTargetConfig(row.surfaceMode, row.config, row.modelId);
-	const platformEnabled = row.surfaceMode === "MANUAL_EVIDENCE" || platforms.has(row.platform);
+	const platformEnabled = isImportOnlySurface(row.surfaceMode) || platforms.has(row.platform);
 	const configErrors = config.ok ? [] : config.errors;
 	return {
 		id: row.id,
@@ -136,7 +137,7 @@ function toView(
 		configErrors,
 		runnable:
 			row.enabled &&
-			row.surfaceMode !== "MANUAL_EVIDENCE" &&
+			!isImportOnlySurface(row.surfaceMode) &&
 			platformEnabled &&
 			configErrors.length === 0 &&
 			RUNNABLE_VERIFICATION.has(row.verificationStatus),
@@ -378,7 +379,7 @@ export async function setSamplingTargetCredential(
 		throw new GeoError("VALIDATION_ERROR", "凭据格式无效：应为 8 位以上、不含空格的可见 ASCII 字符");
 	}
 	const target = await loadTarget(principal, targetId);
-	if (target.surfaceMode === "MANUAL_EVIDENCE") throw new GeoError("VALIDATION_ERROR", "人工证据目标不需要凭据");
+	if (isImportOnlySurface(target.surfaceMode)) throw new GeoError("VALIDATION_ERROR", "导入类目标不需要凭据");
 	const ref = targetCredentialRef(target.id);
 	await db.transaction(async (tx) => {
 		// A reference to a credential shared through the settings page is only let go of, never deleted.

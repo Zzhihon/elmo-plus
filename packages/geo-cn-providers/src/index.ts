@@ -1,6 +1,20 @@
 export { createCaptureAdapter, sourceMethodVersion } from "./adapters";
 export { type BootstrapTarget, parseBootstrapTargets } from "./bootstrap";
 export {
+	BROWSER_AGENT_SOURCE_METHOD_VERSION,
+	BROWSER_FAILURE_CODES,
+	BROWSER_IMPORT_MAX_ROWS,
+	BrowserAgentAdapter,
+	type BrowserFailureCode,
+	type BrowserImportRow,
+	type BrowserPlanRules,
+	type BrowserRowError,
+	type BrowserSession,
+	browserPlanKey,
+	browserPlanWindow,
+	validateBrowserRows,
+} from "./browser-agent";
+export {
 	CAPTURE_FAILURE_KINDS,
 	type CaptureFailure,
 	type CaptureFailureKind,
@@ -13,11 +27,14 @@ export {
 	type TerminalRunStatus,
 } from "./classify";
 export {
+	BROWSER_AGENT_MAX_REPEATS,
+	type BrowserAgentConfig,
 	type ConfigResult,
 	estimatedCostPerRun,
 	findSecretKeys,
 	type LiveSurfaceConfig,
 	type ModelApiConfig,
+	parseBrowserAgentConfig,
 	parseLiveSurfaceConfig,
 	parseModelApiConfig,
 	targetEndpointHosts,

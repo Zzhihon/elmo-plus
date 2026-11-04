@@ -20,7 +20,7 @@ import {
 	safeErrorDetail,
 	sourceMethodVersion,
 } from "@workspace/geo-cn-providers";
-import { isTerminalRunStatus } from "@workspace/geo-domain";
+import { isImportOnlySurface, isTerminalRunStatus } from "@workspace/geo-domain";
 import { geoObjectKey, getObjectStore } from "@workspace/geo-evidence";
 import { guardedFetch } from "@workspace/geo-site-ingestion";
 import { db } from "@workspace/lib/db/db";
@@ -48,8 +48,8 @@ export type CaptureJobOutcome =
 /** Stops a run for good before anything is sent: a disabled or unverified target produces no sample at all. */
 function gateFailure(ctx: RunContext): CaptureFailure | null {
 	const { target } = ctx;
-	if (target.surfaceMode === "MANUAL_EVIDENCE") {
-		return captureFailure("MANUAL_ONLY", "MANUAL_ONLY", "人工证据目标只能通过导入采样");
+	if (isImportOnlySurface(target.surfaceMode)) {
+		return captureFailure("MANUAL_ONLY", "MANUAL_ONLY", "该目标只能通过导入采样");
 	}
 	if (!target.enabled) return captureFailure("CONFIG", "TARGET_DISABLED", "采样目标已停用");
 	if (!isSamplingPlatformEnabled(target.platform)) {

@@ -300,6 +300,30 @@ export function parseLiveSurfaceConfig(config: unknown): ConfigResult<LiveSurfac
 	return errors.length ? { ok: false, errors } : { ok: true, value };
 }
 
+export interface BrowserAgentConfig {
+	/** The app's chat page the agent opens in the user's signed-in browser. */
+	chatUrl: string;
+	notes?: string;
+	/** How many times each question is asked per weekly plan. */
+	repeats: number;
+}
+
+export const BROWSER_AGENT_MAX_REPEATS = 5;
+
+export function parseBrowserAgentConfig(config: unknown): ConfigResult<BrowserAgentConfig> {
+	const record = asRecord(config) ?? {};
+	const errors = secretKeyErrors(record);
+	const chatUrl = httpsUrl(record.chatUrl, "chatUrl（AI 应用的对话页地址）", errors) ?? "";
+	if (record.notes !== undefined && typeof record.notes !== "string") errors.push("notes 必须是文字");
+	const repeats = record.repeats ?? 1;
+	if (typeof repeats !== "number" || !Number.isInteger(repeats) || repeats < 1 || repeats > BROWSER_AGENT_MAX_REPEATS) {
+		errors.push(`repeats 必须是 1–${BROWSER_AGENT_MAX_REPEATS} 之间的整数`);
+	}
+	const notes =
+		typeof record.notes === "string" && record.notes.trim() ? record.notes.trim().slice(0, 2000) : undefined;
+	return errors.length ? { ok: false, errors } : { ok: true, value: { chatUrl, notes, repeats: repeats as number } };
+}
+
 /** Whether a target's configuration is complete enough to run; the manual mode needs none. */
 export function validateTargetConfig(
 	mode: GeoSurfaceMode,
@@ -310,7 +334,12 @@ export function validateTargetConfig(
 		const secretKeys = findSecretKeys(config);
 		return secretKeys.length ? { ok: false, errors: secretKeys.map((path) => `${path} 看起来是凭据`) } : { ok: true };
 	}
-	const result = mode === "MODEL_API" ? parseModelApiConfig(config, modelId) : parseLiveSurfaceConfig(config);
+	const result =
+		mode === "MODEL_API"
+			? parseModelApiConfig(config, modelId)
+			: mode === "BROWSER_AGENT"
+				? parseBrowserAgentConfig(config)
+				: parseLiveSurfaceConfig(config);
 	return result.ok ? { ok: true } : { ok: false, errors: result.errors };
 }
 

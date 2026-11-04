@@ -14,7 +14,7 @@ import {
 	safeErrorDetail,
 	validateTargetConfig,
 } from "@workspace/geo-cn-providers";
-import { assertGeoPermission, GeoError, type GeoPrincipal } from "@workspace/geo-domain";
+import { assertGeoPermission, GeoError, type GeoPrincipal, isImportOnlySurface } from "@workspace/geo-domain";
 import { findMentionRanges } from "@workspace/geo-reports/evaluation";
 import { guardedFetch } from "@workspace/geo-site-ingestion";
 import { db } from "@workspace/lib/db/db";
@@ -107,6 +107,7 @@ async function quotaUsage(conn: DbConnection, principal: GeoPrincipal, now: Date
 
 function isConnected(target: SamplingTargetRow): boolean {
 	return (
+		!isImportOnlySurface(target.surfaceMode) &&
 		target.enabled &&
 		isSamplingPlatformEnabled(target.platform) &&
 		RUNNABLE_VERIFICATION.has(target.verificationStatus) &&
@@ -117,6 +118,7 @@ function isConnected(target: SamplingTargetRow): boolean {
 /** The worker's own gates, in words a customer can act on. Null when the target can be asked now. */
 function unavailableReason(target: SamplingTargetRow, now: Date): string | null {
 	if (target.surfaceMode === "MANUAL_EVIDENCE") return "这个渠道只能人工导入记录，不能实时提问";
+	if (target.surfaceMode === "BROWSER_AGENT") return "这个渠道由浏览器代理定期采样，不能实时提问";
 	if (!target.enabled) return "这个平台的连接已停用";
 	if (!isSamplingPlatformEnabled(target.platform)) return "当前部署没有开放这个平台";
 	if (!RUNNABLE_VERIFICATION.has(target.verificationStatus)) return "这个平台的连接还没有通过验证";
@@ -153,16 +155,14 @@ export async function getLiveSetup(
 	return {
 		quota,
 		// Platforms nobody has connected are not choices a customer can act on, so they are only counted.
-		notConnected: targets.filter((target) => target.surfaceMode !== "MANUAL_EVIDENCE" && !isConnected(target)).length,
-		targets: targets
-			.filter((target) => target.surfaceMode !== "MANUAL_EVIDENCE" && isConnected(target))
-			.map((target) => ({
-				id: target.id,
-				platform: target.platform,
-				surfaceMode: target.surfaceMode,
-				modelId: target.modelId,
-				unavailableReason: unavailableReason(target, now),
-			})),
+		notConnected: targets.filter((target) => !isImportOnlySurface(target.surfaceMode) && !isConnected(target)).length,
+		targets: targets.filter(isConnected).map((target) => ({
+			id: target.id,
+			platform: target.platform,
+			surfaceMode: target.surfaceMode,
+			modelId: target.modelId,
+			unavailableReason: unavailableReason(target, now),
+		})),
 	};
 }
 

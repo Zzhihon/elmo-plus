@@ -1,5 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { GEO_CATALOG_SET_NAME, GEO_PLATFORM_LABELS, GEO_SURFACE_MODE_LABELS } from "@workspace/geo-domain";
+import {
+	GEO_CATALOG_SET_NAME,
+	GEO_PLATFORM_LABELS,
+	GEO_SURFACE_MODE_LABELS,
+	isImportOnlySurface,
+} from "@workspace/geo-domain";
 import { Alert, AlertDescription } from "@workspace/ui/components/alert";
 import { Button } from "@workspace/ui/components/button";
 import { Checkbox } from "@workspace/ui/components/checkbox";
@@ -47,7 +52,7 @@ export function CreateBatchDialog({
 		queryFn: () => listFrozenPromptSetsFn({ data: { organizationId: organization.id } }),
 		enabled: open,
 	});
-	const automatic = targets.filter((target) => target.surfaceMode !== "MANUAL_EVIDENCE");
+	const automatic = targets.filter((target) => !isImportOnlySurface(target.surfaceMode));
 	// Sets arrive newest first; the customer's own questions are what a routine round should ask.
 	const newestSet = sets.data?.find((item) => item.name === GEO_CATALOG_SET_NAME) ?? sets.data?.[0];
 	const promptSetId = chosenSetId ?? newestSet?.id ?? null;

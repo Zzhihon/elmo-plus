@@ -1,3 +1,4 @@
+import { BrowserAgentAdapter } from "./browser-agent";
 import { captureFailure } from "./classify";
 import { parseLiveSurfaceConfig, parseModelApiConfig } from "./config";
 import { LicensedHttpAdapter } from "./live-surface";
@@ -34,6 +35,7 @@ export function createCaptureAdapter(
 	options: { credential: string | null; timeoutMs: number; fetch: FetchLike; now?: () => Date },
 ): GeoCaptureAdapter {
 	if (target.surfaceMode === "MANUAL_EVIDENCE") return new ManualEvidenceAdapter();
+	if (target.surfaceMode === "BROWSER_AGENT") return new BrowserAgentAdapter();
 	if (target.surfaceMode === "MODEL_API") {
 		const parsed = parseModelApiConfig(target.config, target.modelId);
 		return parsed.ok
