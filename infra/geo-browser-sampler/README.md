@@ -68,9 +68,22 @@ ChatGPT 和 Gemini 在部分网络环境下不可用；agent 不会切换网络�
    - 桌面版（从 Dock 启动，不读 `~/.zshrc`）：`launchctl setenv GEO_MCP_KEY "$(cat ~/.config/geo/mcp-key)"` 后重启 Codex；重启电脑后需重新执行，可以把这条命令放进一个登录时运行的 LaunchAgent。
    - 运行 `codex mcp list` 确认 `geo` 已配置；在线程里让 agent 调用一次 `geo_get_sampling_plan` 确认连通。
 
-### 3. 创建自动化
+### 3. 定时运行
 
-按 `automation-prompt.md` 操作：在 Codex 桌面版中于本仓库目录下新建线程，再为该线程创建每周一 09:00（Asia/Shanghai）的自动化，粘贴提示词。首次建议先手动在该线程发送一遍提示词，观察完整一轮。
+推荐用 launchd 每周一 09:00 无人值守执行 `bin/run-weekly.sh`（内部调用 `codex exec`，不需要打开 Codex 桌面版）：
+
+```sh
+REPO=/Users/<你>/path/to/repo
+KEY=$HOME/.config/geo/mcp-key   # 第 2 节的 API key 文件
+sed -e "s#__REPO__#$REPO#g" -e "s#__KEY_FILE__#$KEY#g" \
+  "$REPO/infra/geo-browser-sampler/launchd/com.geo.browser-sampler.plist" > ~/Library/LaunchAgents/com.geo.browser-sampler.plist
+launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/com.geo.browser-sampler.plist
+launchctl kickstart "gui/$(id -u)/com.geo.browser-sampler"   # 想立刻跑一轮时
+```
+
+运行日志在 `infra/local/geo-browser-sampler/logs/`，最后一次的汇报在 `last-run.txt`。电脑在该时刻睡眠时，launchd 会在唤醒后补跑；关机则跳过。GEO 系统（`[mcp_servers.geo]` 的 url）在运行时必须可访问。
+
+也可以改用 Codex 桌面版的线程自动化：按 `automation-prompt.md` 新建线程并设为每周一 09:00，好处是结果直接出现在该线程里。两种方式选一种，不要同时开。
 
 ## 结果在哪里
 

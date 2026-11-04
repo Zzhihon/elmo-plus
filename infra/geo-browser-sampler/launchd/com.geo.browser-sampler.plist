@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.geo.browser-sampler</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/zsh</string>
+		<string>-lc</string>
+		<string>__REPO__/infra/geo-browser-sampler/bin/run-weekly.sh</string>
+	</array>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>GEO_SAMPLER_REPO</key>
+		<string>__REPO__</string>
+		<key>GEO_MCP_KEY_FILE</key>
+		<string>__KEY_FILE__</string>
+	</dict>
+	<!-- Monday 09:00 local time; launchd runs a missed slot when the Mac wakes. -->
+	<key>StartCalendarInterval</key>
+	<dict>
+		<key>Weekday</key>
+		<integer>1</integer>
+		<key>Hour</key>
+		<integer>9</integer>
+		<key>Minute</key>
+		<integer>0</integer>
+	</dict>
+	<key>StandardOutPath</key>
+	<string>__REPO__/infra/local/geo-browser-sampler/logs/launchd.out</string>
+	<key>StandardErrorPath</key>
+	<string>__REPO__/infra/local/geo-browser-sampler/logs/launchd.err</string>
+</dict>
+</plist>
