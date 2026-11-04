@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { GEO_PLATFORM_LABELS, GEO_SURFACE_MODE_LABELS } from "@workspace/geo-domain";
+import { GEO_CATALOG_SET_NAME, GEO_PLATFORM_LABELS, GEO_SURFACE_MODE_LABELS } from "@workspace/geo-domain";
 import { Alert, AlertDescription } from "@workspace/ui/components/alert";
 import { Button } from "@workspace/ui/components/button";
 import { Checkbox } from "@workspace/ui/components/checkbox";
@@ -35,7 +35,7 @@ export function CreateBatchDialog({
 	const organization = useGeoOrganization();
 	const queryClient = useQueryClient();
 	const writeError = useWriteErrorMessage();
-	const [promptSetId, setPromptSetId] = useState<string | null>(null);
+	const [chosenSetId, setPromptSetId] = useState<string | null>(null);
 	const [selected, setSelected] = useState<string[]>([]);
 	const [repeatCount, setRepeatCount] = useState("3");
 	const [includeExtended, setIncludeExtended] = useState(false);
@@ -48,6 +48,9 @@ export function CreateBatchDialog({
 		enabled: open,
 	});
 	const automatic = targets.filter((target) => target.surfaceMode !== "MANUAL_EVIDENCE");
+	// Sets arrive newest first; the customer's own questions are what a routine round should ask.
+	const newestSet = sets.data?.find((item) => item.name === GEO_CATALOG_SET_NAME) ?? sets.data?.[0];
+	const promptSetId = chosenSetId ?? newestSet?.id ?? null;
 	const set = sets.data?.find((item) => item.id === promptSetId);
 	const repeats = Number(repeatCount);
 	const questions = set ? (includeExtended ? set.itemCount : set.coreCount) : 0;
