@@ -3,6 +3,7 @@ import type { AnswerSegment } from "@workspace/geo-reports/evaluation";
 import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
 import { cn } from "@workspace/ui/lib/utils";
+import { useState } from "react";
 import { formatDateTime } from "@/components/geo/sampling/format";
 import { ResponseMarkdown } from "@/components/response-markdown";
 import type { ConsoleAnswer, ConsoleCitation } from "@/server/geo/console-core";
@@ -54,13 +55,23 @@ function OutcomeStrip({ answer }: { answer: ConsoleAnswer }) {
 	);
 }
 
+const CITATIONS_SHOWN = 8;
+
+/** Our own and competitors' pages first: those are what a reader looks for in a long source list. */
+function citationRank(citation: ConsoleCitation): number {
+	return citation.owner === "OWN" ? 0 : citation.owner === "COMPETITOR" ? 1 : 2;
+}
+
 function CitationList({ citations }: { citations: ConsoleCitation[] }) {
+	const [expanded, setExpanded] = useState(false);
 	if (citations.length === 0) {
 		return <p className="text-xs text-muted-foreground">这次回答没有列出引用来源。</p>;
 	}
+	const ordered = [...citations].sort((a, b) => citationRank(a) - citationRank(b) || a.ordinal - b.ordinal);
+	const shown = expanded ? ordered : ordered.slice(0, CITATIONS_SHOWN);
 	return (
 		<ol className="flex flex-col gap-1.5">
-			{citations.map((citation) => (
+			{shown.map((citation) => (
 				<li key={citation.ordinal} className="flex items-start gap-2 text-sm">
 					<span className="w-5 shrink-0 text-right text-xs text-muted-foreground">{citation.ordinal}.</span>
 					<div className="min-w-0 flex-1">
@@ -87,6 +98,13 @@ function CitationList({ citations }: { citations: ConsoleCitation[] }) {
 					)}
 				</li>
 			))}
+			{ordered.length > CITATIONS_SHOWN && (
+				<li>
+					<Button variant="link" size="sm" className="h-auto px-0" onClick={() => setExpanded(!expanded)}>
+						{expanded ? "收起" : `展开全部 ${ordered.length} 个来源`}
+					</Button>
+				</li>
+			)}
 		</ol>
 	);
 }
