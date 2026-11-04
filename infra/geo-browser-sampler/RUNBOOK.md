@@ -75,7 +75,7 @@
    {"runKey":"2026-W45/doubao/<promptId>/1","planKey":"2026-W45","platform":"doubao","promptId":"<promptId>","question":"<方案原文>","sampledAt":"2026-11-02T09:14:03+08:00","status":"VALID","citations":[{"url":"https://…","title":"…"}],"evidence":["shots/doubao-<promptId>-1.png"],"evidenceRefs":[],"modelVersion":"<页面显示的模型名>","session":{"account":"test-1","loggedIn":true,"deepThinking":false,"webSearch":true,"region":"CN"}}
    ```
 
-   `session.region` 填 README 中操作员约定的网络地区，不确定写 `unknown`。
+   `session.account` 和 `session.region` 取自 `$OUT/accounts.md`（操作员维护的“平台 → 账号标签 → 网络地区”），没有该文件或不确定时省略 account、region 写 `unknown`。
 
 8. **间隔**：两次提问之间随机等待 20–60 秒（例如 `sleep $((20 + RANDOM % 41))`）。
 
