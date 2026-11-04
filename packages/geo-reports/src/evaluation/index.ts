@@ -20,4 +20,10 @@ export {
 	reviewPriorityOf,
 } from "./evaluate";
 export { buildSemanticPrompt, type SemanticJudgement, semanticJudgementSchema } from "./llm-prompt";
+export {
+	type AnswerSegment,
+	findMentionRanges,
+	type MentionRange,
+	splitAnswerByMentions,
+} from "./mention-spans";
 export { findOrderedLists } from "./ordered-list";
