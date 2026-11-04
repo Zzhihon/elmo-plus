@@ -20,6 +20,9 @@ function openrouterApiUrl(): string {
 // fallback); per the docs that's OpenAI, Anthropic, Perplexity, and xAI.
 const DEFAULT_RESEARCH_MODEL = "anthropic/claude-sonnet-5.5";
 
+// A stalled connection would otherwise hold the calling job open until the queue expires it.
+const RESEARCH_TIMEOUT_MS = 5 * 60_000;
+
 function researchModel(): string {
 	return process.env.OPENROUTER_RESEARCH_MODEL?.trim() || DEFAULT_RESEARCH_MODEL;
 }
@@ -89,6 +92,7 @@ export const openrouter: Provider = {
 			method: "POST",
 			headers: openrouterHeaders(),
 			body: JSON.stringify(body),
+			signal: AbortSignal.timeout(RESEARCH_TIMEOUT_MS),
 		});
 		if (!res.ok) {
 			throw new Error(`OpenRouter API error (${res.status}): ${await res.text()}`);
