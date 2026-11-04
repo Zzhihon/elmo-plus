@@ -4,6 +4,7 @@ import { GEO_EVALUATION_QUEUES } from "./evaluation";
 import { GEO_KNOWLEDGE_QUEUES } from "./knowledge";
 import { GEO_PROFILE_QUEUES } from "./profile";
 import type { GeoQueue } from "./queue";
+import { GEO_RECOMMENDATION_QUEUES } from "./recommendations";
 import { GEO_REPORTS_QUEUES } from "./reports";
 import { GEO_SAMPLING_QUEUES } from "./sampling";
 import { GEO_SITE_QUEUES } from "./site";
@@ -19,6 +20,7 @@ export function allGeoQueues(): GeoQueue[] {
 		...GEO_SAMPLING_QUEUES,
 		...GEO_EVALUATION_QUEUES,
 		...GEO_COMPETITOR_QUEUES,
+		...GEO_RECOMMENDATION_QUEUES,
 		...GEO_REPORTS_QUEUES,
 		...GEO_TASKS_QUEUES,
 	];
