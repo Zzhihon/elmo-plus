@@ -21,6 +21,7 @@ import {
 } from "@workspace/geo-domain";
 import { geoObjectKey, getObjectStore, hostOf, normalizeUrl } from "@workspace/geo-evidence";
 import { db } from "@workspace/lib/db/db";
+import type { DbConnection } from "@workspace/lib/db/db-connection";
 import {
 	geoEvidenceUploads,
 	geoObservationCitations,
@@ -258,7 +259,78 @@ export async function importBrowserObservations(
 	now = new Date(),
 ): Promise<BrowserImportResult> {
 	assertGeoPermission(principal, "evidence.import");
-	const input = browserImportInputSchema.parse(raw);
+	const { planKey, setId, prepared, errors } = await prepareRows(principal, browserImportInputSchema.parse(raw), now);
+	if (prepared.length === 0) {
+		return { importBatchId: null, created: 0, skipped: 0, failedRecorded: 0, errors };
+	}
+
+	const importBatchId = randomUUID();
+	const outcome = await db.transaction(async (tx) => {
+		await tx.execute(
+			sql`select pg_advisory_xact_lock(hashtextextended(${`geo-browser-import:${principal.organizationId}`}, 0))`,
+		);
+		const prior = await priorAttempts(
+			tx,
+			principal.organizationId,
+			prepared.map((item) => item.row.runKey),
+		);
+		const fresh = prepared.filter(
+			(item) =>
+				!prior.answered.has(item.row.runKey) &&
+				!(item.row.status === "FAILED" && prior.lastFailure.has(item.row.runKey)),
+		);
+		const available = await unboundUploads(tx, principal, [...new Set(fresh.flatMap((item) => item.evidenceKeys))]);
+		const rowErrors: BrowserRowError[] = [];
+		const created: { id: string; evaluable: boolean }[] = [];
+		const boundKeys = new Set<string>();
+		for (const item of fresh) {
+			if (item.evidenceKeys.some((key) => !available.has(key))) {
+				rowErrors.push({
+					runKey: item.row.runKey,
+					field: "evidenceRefs",
+					message: "证据文件不是由当前密钥的签发人为本次导入上传的，或已被其他导入使用，请重新上传",
+				});
+				continue;
+			}
+			created.push(
+				await insertObservation(tx, principal, item, {
+					...observationValues(principal, item, planKey, setId),
+					retryOfObservationId: prior.lastFailure.get(item.row.runKey) ?? null,
+					importBatchId,
+				}),
+			);
+			for (const key of item.evidenceKeys) boundKeys.add(key);
+		}
+		await bindUploads(tx, principal, [...boundKeys], importBatchId);
+		const summary = {
+			created: created.filter((item) => item.evaluable).length,
+			skipped: prepared.length - fresh.length,
+			failedRecorded: created.filter((item) => !item.evaluable).length,
+		};
+		if (created.length > 0) {
+			await writeGeoAudit(tx, {
+				principal,
+				action: "observation.import",
+				entityType: "observation_import",
+				entityId: importBatchId,
+				metadata: { format: "browser-agent", planKey, promptSetId: setId, ...summary },
+			});
+		}
+		return { created, rowErrors, summary };
+	});
+
+	await queueEvaluations(
+		principal.organizationId,
+		outcome.created.filter((item) => item.evaluable).map((item) => item.id),
+	);
+	return {
+		importBatchId: outcome.created.length > 0 ? importBatchId : null,
+		...outcome.summary,
+		errors: [...errors, ...outcome.rowErrors],
+	};
+}
+
+async function prepareRows(principal: GeoPrincipal, input: z.output<typeof browserImportInputSchema>, now: Date) {
 	const plan = resolvePlanKey(input.planKey, now);
 	const [promptSet, targets] = await Promise.all([
 		planPromptSet(principal.organizationId),
@@ -285,126 +357,80 @@ export async function importBrowserObservations(
 			prepared.push({ row, target, revision: revisions.get(row.promptId) as number, evidenceKeys: keys });
 		}
 	}
-	if (prepared.length === 0) {
-		return { importBatchId: null, created: 0, skipped: 0, failedRecorded: 0, errors };
-	}
+	return { planKey: plan.key, setId: promptSet.set.id, prepared, errors };
+}
 
-	const importBatchId = randomUUID();
-	const outcome = await db.transaction(async (tx) => {
-		await tx.execute(
-			sql`select pg_advisory_xact_lock(hashtextextended(${`geo-browser-import:${principal.organizationId}`}, 0))`,
-		);
-		const o = geoObservations;
-		const existing = await tx
-			.select({ id: o.id, runKey: sql<string>`${o.responseMetadata}->>'runKey'`, status: o.status })
-			.from(o)
-			.where(
-				and(
-					eq(o.organizationId, principal.organizationId),
-					inArray(
-						sql`${o.responseMetadata}->>'runKey'`,
-						prepared.map((item) => item.row.runKey),
-					),
-				),
-			)
-			.orderBy(asc(o.createdAt));
-		const answered = new Set(existing.filter((row) => isEvaluableObservation(row.status)).map((row) => row.runKey));
-		const lastFailure = new Map(
+async function priorAttempts(tx: DbConnection, organizationId: string, runKeys: string[]) {
+	const o = geoObservations;
+	const existing = await tx
+		.select({ id: o.id, runKey: sql<string>`${o.responseMetadata}->>'runKey'`, status: o.status })
+		.from(o)
+		.where(and(eq(o.organizationId, organizationId), inArray(sql`${o.responseMetadata}->>'runKey'`, runKeys)))
+		.orderBy(asc(o.createdAt));
+	return {
+		answered: new Set(existing.filter((row) => isEvaluableObservation(row.status)).map((row) => row.runKey)),
+		lastFailure: new Map(
 			existing.filter((row) => !isEvaluableObservation(row.status)).map((row) => [row.runKey, row.id]),
-		);
-		const fresh = prepared.filter(
-			(item) => !answered.has(item.row.runKey) && !(item.row.status === "FAILED" && lastFailure.has(item.row.runKey)),
-		);
-		const uploadKeys = [...new Set(fresh.flatMap((item) => item.evidenceKeys))];
-		const available = new Set(
-			uploadKeys.length === 0
-				? []
-				: (
-						await tx
-							.select({ key: geoEvidenceUploads.objectKey })
-							.from(geoEvidenceUploads)
-							.where(
-								and(
-									eq(geoEvidenceUploads.organizationId, principal.organizationId),
-									eq(geoEvidenceUploads.uploadedBy, principal.actorId),
-									isNull(geoEvidenceUploads.importBatchId),
-									inArray(geoEvidenceUploads.objectKey, uploadKeys),
-								),
-							)
-					).map((row) => row.key),
-		);
-		const rowErrors: BrowserRowError[] = [];
-		const created: { id: string; evaluable: boolean }[] = [];
-		const boundKeys = new Set<string>();
-		for (const item of fresh) {
-			if (item.evidenceKeys.some((key) => !available.has(key))) {
-				rowErrors.push({
-					runKey: item.row.runKey,
-					field: "evidenceRefs",
-					message: "证据文件不是由当前密钥的签发人为本次导入上传的，或已被其他导入使用，请重新上传",
-				});
-				continue;
-			}
-			const [observation] = await tx
-				.insert(o)
-				.values({
-					...observationValues(principal, item, plan.key, promptSet.set.id),
-					retryOfObservationId: lastFailure.get(item.row.runKey) ?? null,
-					importBatchId,
-				})
-				.returning({ id: o.id, status: o.status });
-			created.push({ id: observation.id, evaluable: isEvaluableObservation(observation.status) });
-			for (const key of item.evidenceKeys) boundKeys.add(key);
-			if (item.row.status !== "FAILED" && item.row.citations.length > 0) {
-				await tx.insert(geoObservationCitations).values(
-					item.row.citations.map((citation, ordinal) => ({
-						organizationId: principal.organizationId,
-						observationId: observation.id,
-						ordinal,
-						url: citation.url,
-						normalizedUrl: normalizeUrl(citation.url),
-						host: hostOf(citation.url),
-						title: citation.title ?? null,
-					})),
-				);
-			}
-		}
-		if (boundKeys.size > 0) {
-			await tx
-				.update(geoEvidenceUploads)
-				.set({ importBatchId })
-				.where(
-					and(
-						eq(geoEvidenceUploads.organizationId, principal.organizationId),
-						eq(geoEvidenceUploads.uploadedBy, principal.actorId),
-						isNull(geoEvidenceUploads.importBatchId),
-						inArray(geoEvidenceUploads.objectKey, [...boundKeys]),
-					),
-				);
-		}
-		const summary = {
-			created: created.filter((item) => item.evaluable).length,
-			skipped: prepared.length - fresh.length,
-			failedRecorded: created.filter((item) => !item.evaluable).length,
-		};
-		if (created.length > 0) {
-			await writeGeoAudit(tx, {
-				principal,
-				action: "observation.import",
-				entityType: "observation_import",
-				entityId: importBatchId,
-				metadata: { format: "browser-agent", planKey: plan.key, promptSetId: promptSet.set.id, ...summary },
-			});
-		}
-		return { created, rowErrors, summary };
-	});
+		),
+	};
+}
 
-	for (const { id: observationId, evaluable } of outcome.created) {
-		if (!evaluable) continue;
+function uploadsOf(principal: GeoPrincipal, keys: string[]) {
+	return and(
+		eq(geoEvidenceUploads.organizationId, principal.organizationId),
+		eq(geoEvidenceUploads.uploadedBy, principal.actorId),
+		isNull(geoEvidenceUploads.importBatchId),
+		inArray(geoEvidenceUploads.objectKey, keys),
+	);
+}
+
+/** An answer may only point at files this caller uploaded and no import has used yet. */
+async function unboundUploads(tx: DbConnection, principal: GeoPrincipal, keys: string[]): Promise<Set<string>> {
+	if (keys.length === 0) return new Set();
+	const rows = await tx
+		.select({ key: geoEvidenceUploads.objectKey })
+		.from(geoEvidenceUploads)
+		.where(uploadsOf(principal, keys));
+	return new Set(rows.map((row) => row.key));
+}
+
+async function bindUploads(tx: DbConnection, principal: GeoPrincipal, keys: string[], importBatchId: string) {
+	if (keys.length === 0) return;
+	await tx.update(geoEvidenceUploads).set({ importBatchId }).where(uploadsOf(principal, keys));
+}
+
+async function insertObservation(
+	tx: DbConnection,
+	principal: GeoPrincipal,
+	item: PreparedRow,
+	values: typeof geoObservations.$inferInsert,
+): Promise<{ id: string; evaluable: boolean }> {
+	const [observation] = await tx
+		.insert(geoObservations)
+		.values(values)
+		.returning({ id: geoObservations.id, status: geoObservations.status });
+	if (item.row.status !== "FAILED" && item.row.citations.length > 0) {
+		await tx.insert(geoObservationCitations).values(
+			item.row.citations.map((citation, ordinal) => ({
+				organizationId: principal.organizationId,
+				observationId: observation.id,
+				ordinal,
+				url: citation.url,
+				normalizedUrl: normalizeUrl(citation.url),
+				host: hostOf(citation.url),
+				title: citation.title ?? null,
+			})),
+		);
+	}
+	return { id: observation.id, evaluable: isEvaluableObservation(observation.status) };
+}
+
+async function queueEvaluations(organizationId: string, observationIds: string[]) {
+	for (const observationId of observationIds) {
 		try {
 			await enqueueGeoJob(
 				GEO_EVALUATE_OBSERVATION_QUEUE,
-				{ organizationId: principal.organizationId, observationId },
+				{ organizationId, observationId },
 				{ singletonKey: `observation:${observationId}` },
 			);
 		} catch (error) {
@@ -413,11 +439,6 @@ export async function importBrowserObservations(
 			);
 		}
 	}
-	return {
-		importBatchId: outcome.created.length > 0 ? importBatchId : null,
-		...outcome.summary,
-		errors: [...errors, ...outcome.rowErrors],
-	};
 }
 
 const BROWSER_EVIDENCE_TYPES = ["image/png", "image/jpeg", "application/pdf"] as const;

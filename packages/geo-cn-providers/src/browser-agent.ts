@@ -189,11 +189,15 @@ function checkRunKey(
 	return { runKey, repeatIndex };
 }
 
-function checkRow(raw: unknown, index: number, plan: BrowserPlanRules, now: Date): BrowserImportRow | BrowserRowError {
-	const input = record(raw);
-	const key = typeof input.runKey === "string" && input.runKey.trim() ? input.runKey.trim() : `#${index + 1}`;
-	const fail = (field: string, message: string): BrowserRowError => ({ runKey: key, field, message });
+type Fail = (field: string, message: string) => BrowserRowError;
 
+/** Which planned question this row answers, and that it was asked within the plan's week. */
+function checkPlanned(
+	input: Record<string, unknown>,
+	plan: BrowserPlanRules,
+	now: Date,
+	fail: Fail,
+): Omit<BrowserRowBase, "evidenceRefs" | "modelVersion" | "session" | "note"> | BrowserRowError {
 	if (!(GEO_PLATFORMS as readonly unknown[]).includes(input.platform)) return fail("platform", "平台无效");
 	const platform = input.platform as GeoPlatform;
 	if (typeof input.promptId !== "string" || !UUID_SHAPE.test(input.promptId)) {
@@ -209,25 +213,23 @@ function checkRow(raw: unknown, index: number, plan: BrowserPlanRules, now: Date
 	if (!question) return fail("question", "缺少实际提问的问题文字");
 	const sampledAt = checkSampledAt(input.sampledAt, now, plan.window);
 	if (typeof sampledAt === "string") return fail("sampledAt", sampledAt);
+	return { runKey: run.runKey, platform, promptId, repeatIndex: run.repeatIndex, question, sampledAt };
+}
 
-	const refs = Array.isArray(input.evidenceRefs) ? input.evidenceRefs : [];
+function checkEvidenceRefs(value: unknown, fail: Fail): string[] | BrowserRowError {
+	const refs = Array.isArray(value) ? value : [];
 	if (refs.length > MAX_EVIDENCE_REFS) return fail("evidenceRefs", `每条最多 ${MAX_EVIDENCE_REFS} 个证据文件`);
 	if (refs.some((ref) => typeof ref !== "string" || !isUploadedEvidenceRef(ref))) {
 		return fail("evidenceRefs", "证据引用无效，应为 geo_upload_evidence 返回的 evidenceRef");
 	}
-	const base: BrowserRowBase = {
-		runKey: run.runKey,
-		platform,
-		promptId,
-		repeatIndex: run.repeatIndex,
-		question,
-		sampledAt,
-		evidenceRefs: [...new Set(refs as string[])],
-		modelVersion: text(input.modelVersion, 200),
-		session: parseSession(input.session),
-		note: text(input.note, 1000),
-	};
+	return [...new Set(refs as string[])];
+}
 
+function withOutcome(
+	input: Record<string, unknown>,
+	base: BrowserRowBase,
+	fail: Fail,
+): BrowserImportRow | BrowserRowError {
 	if (input.status === "FAILED") {
 		const failure = record(input.failure);
 		if (!(BROWSER_FAILURE_CODES as readonly unknown[]).includes(failure.code)) {
@@ -241,8 +243,9 @@ function checkRow(raw: unknown, index: number, plan: BrowserPlanRules, now: Date
 			failure: { code, message: text(failure.message, 500) },
 		};
 	}
-	if (input.status !== "VALID" && input.status !== "PARTIAL")
+	if (input.status !== "VALID" && input.status !== "PARTIAL") {
 		return fail("status", "状态只能是 VALID、PARTIAL 或 FAILED");
+	}
 	const responseText = typeof input.responseText === "string" ? input.responseText : "";
 	if (!responseText.trim()) return fail("responseText", "有回答的记录必须附回答原文");
 	if (responseText.length > MANUAL_RESPONSE_MAX_CHARS) {
@@ -251,6 +254,27 @@ function checkRow(raw: unknown, index: number, plan: BrowserPlanRules, now: Date
 	if (base.evidenceRefs.length === 0) return fail("evidenceRefs", "有回答的记录至少要附一张截图");
 	const { citations, dropped } = parseCitations(input.citations);
 	return { ...base, status: input.status, responseText, citations, droppedCitations: dropped };
+}
+
+function checkRow(raw: unknown, index: number, plan: BrowserPlanRules, now: Date): BrowserImportRow | BrowserRowError {
+	const input = record(raw);
+	const key = typeof input.runKey === "string" && input.runKey.trim() ? input.runKey.trim() : `#${index + 1}`;
+	const fail: Fail = (field, message) => ({ runKey: key, field, message });
+	const planned = checkPlanned(input, plan, now, fail);
+	if ("field" in planned) return planned;
+	const evidenceRefs = checkEvidenceRefs(input.evidenceRefs, fail);
+	if (!Array.isArray(evidenceRefs)) return evidenceRefs;
+	return withOutcome(
+		input,
+		{
+			...planned,
+			evidenceRefs,
+			modelVersion: text(input.modelVersion, 200),
+			session: parseSession(input.session),
+			note: text(input.note, 1000),
+		},
+		fail,
+	);
 }
 
 export interface BrowserPlanRules {
