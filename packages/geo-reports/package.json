@@ -11,6 +11,8 @@
 		".": "./src/index.ts",
 		"./evaluation": "./src/evaluation/index.ts",
 		"./queries": "./src/queries/index.ts",
+		"./recommendations": "./src/recommendations/index.ts",
+		"./recommendations/labels": "./src/recommendations/labels.ts",
 		"./pdf": "./src/pdf.ts"
 	},
 	"dependencies": {
