@@ -26,7 +26,10 @@
    command = "npx"
    args = ["-y", "chrome-devtools-mcp@1.12.0", "--userDataDir", "/Users/<你>/.local/share/geo-sampler-chrome", "--viewport", "1440x1000", "--usageStatistics", "false", "--performanceCrux", "false"]
    startup_timeout_sec = 60.0
+   default_tools_approval_mode = "approve"
    ```
+
+   `default_tools_approval_mode = "approve"` 让无人值守运行时不必逐次批准浏览器操作；`[mcp_servers.geo]` 也要加同一行。只给这两个采样用的 MCP 加，不要全局放开。
 2. 用同一个目录打开一个 Chrome 窗口：`open -na "Google Chrome" --args --user-data-dir="$HOME/.local/share/geo-sampler-chrome"`。这个配置目录只用于采样，不登录私人账号。
 3. 在这个窗口里**由操作员手动登录**以下 6 个应用，使用专用测试账号。agent 永远不会替你登录、注册或处理验证码：
    - 豆包 https://www.doubao.com/chat/
