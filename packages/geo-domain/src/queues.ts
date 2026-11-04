@@ -11,6 +11,7 @@ export const GEO_QUEUE = {
 	samplingDispatch: "geo-sampling-dispatch",
 	samplingCapture: "geo-sampling-capture",
 	evaluation: "geo-evaluation",
+	competitorDiscovery: "geo-competitor-discovery",
 	reportGenerate: "geo-report-generate",
 	taskRetest: "geo-task-retest",
 	maintenance: "geo-maintenance",

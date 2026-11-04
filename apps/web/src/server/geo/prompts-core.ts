@@ -14,7 +14,9 @@ import {
 	type GeoPromptCsvError,
 	type GeoPromptLabels,
 	type GeoPromptRevisionSnapshot,
+	type GeoPromptSetStatus,
 	type GeoPromptStatus,
+	type GeoTransitionResult,
 	isPromptEditable,
 	missingPromptCsvColumns,
 	normalizePromptQuestion,
@@ -326,7 +328,7 @@ export async function getPrompt(
 	return { ...row, revisions };
 }
 
-async function insertPrompt(
+export async function insertPrompt(
 	tx: DbConnection,
 	principal: GeoPrincipal,
 	input: z.output<typeof promptInputSchema>,
@@ -375,7 +377,7 @@ export async function createPrompt(principal: GeoPrincipal, raw: GeoPromptInput)
 }
 
 /** Serializes the duplicate-question check with the insert that follows it. */
-async function lockPromptLibrary(tx: DbConnection, organizationId: string) {
+export async function lockPromptLibrary(tx: DbConnection, organizationId: string) {
 	await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`geo-prompts:${organizationId}`}, 0))`);
 }
 
@@ -582,7 +584,7 @@ export async function getPromptSet(
  * Draft items mirror the prompts as they are now; only freezing pins them. Rewriting
  * them is safe because nothing may sample a set before it is frozen.
  */
-async function replaceDraftItems(tx: DbConnection, organizationId: string, setId: string, promptIds: string[]) {
+export async function replaceDraftItems(tx: DbConnection, organizationId: string, setId: string, promptIds: string[]) {
 	const unique = [...new Set(promptIds)];
 	const prompts =
 		unique.length === 0
@@ -700,90 +702,105 @@ export async function createNextPromptSetVersion(principal: GeoPrincipal, id: st
 
 const FREEZABLE: readonly GeoPromptStatus[] = ["BASELINE", "FROZEN"];
 
+export interface GeoPromptSetFreezeRules {
+	set: (status: GeoPromptSetStatus, itemCount: number) => GeoTransitionResult<GeoPromptSetStatus>;
+	prompt: (status: GeoPromptStatus) => GeoTransitionResult<GeoPromptStatus>;
+}
+
 /**
  * Pins every item to the revision it has now. A prompt already frozen by an earlier set
  * is included as is; anything not through business review blocks the freeze.
  */
+export async function freezePromptSetInTransaction(
+	tx: DbConnection,
+	principal: GeoPrincipal,
+	id: string,
+	rules: GeoPromptSetFreezeRules,
+	auditMetadata: Record<string, unknown> = {},
+): Promise<void> {
+	const set = await loadSet(tx, principal.organizationId, id, true);
+	const items = await tx
+		.select({ promptId: geoPromptSetItems.promptId })
+		.from(geoPromptSetItems)
+		.where(eq(geoPromptSetItems.setId, id));
+	assertGeoTransition(rules.set(set.status, items.length));
+
+	const promptIds = items.map((item) => item.promptId);
+	const prompts = await tx
+		.select()
+		.from(geoPrompts)
+		.where(and(eq(geoPrompts.organizationId, principal.organizationId), inArray(geoPrompts.id, promptIds)))
+		.orderBy(asc(geoPrompts.id))
+		.for("update");
+	const blocked = prompts.filter((prompt) => !FREEZABLE.includes(prompt.status));
+	if (blocked.length > 0) {
+		const sample = blocked
+			.slice(0, 3)
+			.map((prompt) => `“${prompt.question}”`)
+			.join("、");
+		throw new GeoError(
+			"VALIDATION_ERROR",
+			`${blocked.length} 条问法尚未通过业务审核，不能冻结：${sample}${blocked.length > 3 ? " 等" : ""}`,
+		);
+	}
+
+	// Re-snapshot in the item order the set already had.
+	const existingOrder = await tx
+		.select({ promptId: geoPromptSetItems.promptId })
+		.from(geoPromptSetItems)
+		.where(eq(geoPromptSetItems.setId, id))
+		.orderBy(asc(geoPromptSetItems.createdAt), asc(geoPromptSetItems.promptId));
+	await replaceDraftItems(
+		tx,
+		principal.organizationId,
+		id,
+		existingOrder.map((item) => item.promptId),
+	);
+
+	const toFreeze = prompts.filter((prompt) => prompt.status === "BASELINE");
+	for (const prompt of toFreeze) assertGeoTransition(rules.prompt(prompt.status));
+	if (toFreeze.length > 0) {
+		await tx
+			.update(geoPrompts)
+			.set({ status: "FROZEN", updatedAt: new Date() })
+			.where(
+				inArray(
+					geoPrompts.id,
+					toFreeze.map((prompt) => prompt.id),
+				),
+			);
+	}
+
+	const now = new Date();
+	const [frozen] = await tx
+		.update(geoPromptSets)
+		.set({ status: "FROZEN", frozenAt: now, frozenBy: principal.actorId, updatedAt: now })
+		.where(eq(geoPromptSets.id, id))
+		.returning();
+	await writeGeoAudit(tx, {
+		principal,
+		action: "prompt_set.freeze",
+		entityType: "prompt_set",
+		entityId: id,
+		before: set,
+		after: frozen,
+		metadata: {
+			...auditMetadata,
+			itemCount: prompts.length,
+			promptsFrozen: toFreeze.map((prompt) => prompt.id),
+		},
+	});
+}
+
 export async function freezePromptSet(principal: GeoPrincipal, id: string): Promise<GeoFrozenPromptSet> {
 	assertGeoPermission(principal, "prompt.freeze");
 	const actor = transitionActorOf(principal);
-
-	await db.transaction(async (tx) => {
-		const set = await loadSet(tx, principal.organizationId, id, true);
-		const items = await tx
-			.select({ promptId: geoPromptSetItems.promptId })
-			.from(geoPromptSetItems)
-			.where(eq(geoPromptSetItems.setId, id));
-		assertGeoTransition(promptSetFreezeTransition(set.status, actor, items.length));
-
-		const promptIds = items.map((item) => item.promptId);
-		const prompts = await tx
-			.select()
-			.from(geoPrompts)
-			.where(and(eq(geoPrompts.organizationId, principal.organizationId), inArray(geoPrompts.id, promptIds)))
-			.orderBy(asc(geoPrompts.id))
-			.for("update");
-		const blocked = prompts.filter((prompt) => !FREEZABLE.includes(prompt.status));
-		if (blocked.length > 0) {
-			const sample = blocked
-				.slice(0, 3)
-				.map((prompt) => `“${prompt.question}”`)
-				.join("、");
-			throw new GeoError(
-				"VALIDATION_ERROR",
-				`${blocked.length} 条问法尚未通过业务审核，不能冻结：${sample}${blocked.length > 3 ? " 等" : ""}`,
-			);
-		}
-
-		// Re-snapshot in the item order the set already had.
-		const existingOrder = await tx
-			.select({ promptId: geoPromptSetItems.promptId })
-			.from(geoPromptSetItems)
-			.where(eq(geoPromptSetItems.setId, id))
-			.orderBy(asc(geoPromptSetItems.createdAt), asc(geoPromptSetItems.promptId));
-		await replaceDraftItems(
-			tx,
-			principal.organizationId,
-			id,
-			existingOrder.map((item) => item.promptId),
-		);
-
-		const toFreeze = prompts.filter((prompt) => prompt.status === "BASELINE");
-		for (const prompt of toFreeze) {
-			assertGeoTransition(promptTransition({ status: prompt.status, action: "FREEZE", actor }));
-		}
-		if (toFreeze.length > 0) {
-			await tx
-				.update(geoPrompts)
-				.set({ status: "FROZEN", updatedAt: new Date() })
-				.where(
-					inArray(
-						geoPrompts.id,
-						toFreeze.map((prompt) => prompt.id),
-					),
-				);
-		}
-
-		const now = new Date();
-		const [frozen] = await tx
-			.update(geoPromptSets)
-			.set({ status: "FROZEN", frozenAt: now, frozenBy: principal.actorId, updatedAt: now })
-			.where(eq(geoPromptSets.id, id))
-			.returning();
-		await writeGeoAudit(tx, {
-			principal,
-			action: "prompt_set.freeze",
-			entityType: "prompt_set",
-			entityId: id,
-			before: set,
-			after: frozen,
-			metadata: {
-				itemCount: prompts.length,
-				promptsFrozen: toFreeze.map((prompt) => prompt.id),
-			},
-		});
-	});
-
+	await db.transaction((tx) =>
+		freezePromptSetInTransaction(tx, principal, id, {
+			set: (status, itemCount) => promptSetFreezeTransition(status, actor, itemCount),
+			prompt: (status) => promptTransition({ status, action: "FREEZE", actor }),
+		}),
+	);
 	return getFrozenPromptSet(db, principal.organizationId, id, { includeExtended: true });
 }
 

@@ -256,6 +256,15 @@ export async function getBrand(
 export async function createBrand(principal: GeoPrincipal, raw: GeoBrandInput): Promise<GeoBrandEntity> {
 	assertGeoPermission(principal, "brand.manage");
 	const input = brandInputSchema.parse(raw);
+	return db.transaction((tx) => insertBrandInTransaction(tx, principal, input));
+}
+
+/** For callers that must add a brand atomically with their own writes; the caller checks permission. */
+export async function insertBrandInTransaction(
+	tx: DbConnection,
+	principal: GeoPrincipal,
+	input: z.output<typeof brandInputSchema>,
+): Promise<GeoBrandEntity> {
 	const terms = cleanTerms({
 		displayName: input.displayName,
 		legalName: input.legalName,
@@ -264,39 +273,36 @@ export async function createBrand(principal: GeoPrincipal, raw: GeoBrandInput): 
 		historicalNames: input.historicalNames,
 		domains: input.domains,
 	});
-
-	return db.transaction(async (tx) => {
-		await lockGeoDictionary(tx, principal.organizationId);
-		await assertNoConflicts(tx, principal.organizationId, terms);
-		const [row] = await tx
-			.insert(geoBrandEntities)
-			.values({
-				...terms,
-				organizationId: principal.organizationId,
-				kind: input.kind,
-				officialUrl: input.officialUrl,
-				regions: dedupeBrandTerms(input.regions),
-				factStatus: input.factStatus ?? "UNVERIFIED",
-				factNotes: input.factNotes ?? [],
-				createdBy: principal.actorId,
-			})
-			.returning();
-		if (!row) throw new Error("Brand insert returned no row");
-		const version = await appendDictionaryVersion(
-			tx,
-			principal,
-			input.changeNote ?? `新增${input.kind === "OWN" ? "品牌" : "竞品"}“${row.displayName}”`,
-		);
-		await writeGeoAudit(tx, {
-			principal,
-			action: "brand.create",
-			entityType: "brand",
-			entityId: row.id,
-			after: row,
-			metadata: { dictionaryVersion: version.version },
-		});
-		return row;
+	await lockGeoDictionary(tx, principal.organizationId);
+	await assertNoConflicts(tx, principal.organizationId, terms);
+	const [row] = await tx
+		.insert(geoBrandEntities)
+		.values({
+			...terms,
+			organizationId: principal.organizationId,
+			kind: input.kind,
+			officialUrl: input.officialUrl,
+			regions: dedupeBrandTerms(input.regions),
+			factStatus: input.factStatus ?? "UNVERIFIED",
+			factNotes: input.factNotes ?? [],
+			createdBy: principal.actorId,
+		})
+		.returning();
+	if (!row) throw new Error("Brand insert returned no row");
+	const version = await appendDictionaryVersion(
+		tx,
+		principal,
+		input.changeNote ?? `新增${input.kind === "OWN" ? "品牌" : "竞品"}“${row.displayName}”`,
+	);
+	await writeGeoAudit(tx, {
+		principal,
+		action: "brand.create",
+		entityType: "brand",
+		entityId: row.id,
+		after: row,
+		metadata: { dictionaryVersion: version.version },
 	});
+	return row;
 }
 
 export async function updateBrand(principal: GeoPrincipal, id: string, raw: GeoBrandPatch): Promise<GeoBrandEntity> {
