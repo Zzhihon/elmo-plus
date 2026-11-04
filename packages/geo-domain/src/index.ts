@@ -13,6 +13,7 @@ export * from "./permissions";
 export * from "./principal";
 export * from "./prompt-csv";
 export * from "./prompt-state";
+export * from "./question-catalog";
 export * from "./queues";
 export * from "./sampling";
 export * from "./task-gates";
