@@ -80,6 +80,11 @@ export function planWeek(planKey) {
 	return { start: new Date(start), end: new Date(start + 7 * 86_400_000) };
 }
 
+/** A FAILED run may be asked again; the last row for a runKey is the one that counts. */
+export function latestRows(rows) {
+	return [...new Map(rows.map((row) => [row.runKey, row])).values()];
+}
+
 export function readRows(resultsDir) {
 	const file = join(resultsDir, OBSERVATIONS_FILE);
 	if (!existsSync(file)) return [];

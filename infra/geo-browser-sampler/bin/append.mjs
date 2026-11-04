@@ -17,8 +17,8 @@ row.evidence ??= [];
 row.evidenceRefs ??= [];
 
 const errors = validateRow(row);
-if (readRows(dir).some((entry) => entry.row?.runKey === row.runKey)) {
-	errors.push({ field: "runKey", message: "already recorded; skip this run" });
+if (readRows(dir).some((entry) => entry.row?.runKey === row.runKey && entry.row.status !== "FAILED")) {
+	errors.push({ field: "runKey", message: "already answered; skip this run" });
 }
 if (errors.length) {
 	for (const e of errors) console.error(`${row.runKey ?? "-"} ${e.field}: ${e.message}`);

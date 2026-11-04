@@ -2,7 +2,7 @@
 // Usage: node validate.mjs <results/<planKey> dir>
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { planWeek, readRows, resultsDirArg, validateRow } from "./lib.mjs";
+import { latestRows, planWeek, readRows, resultsDirArg, validateRow } from "./lib.mjs";
 
 const dir = resultsDirArg(process.argv.slice(2));
 const planKey = basename(dir);
@@ -32,8 +32,11 @@ for (const { line, row, parseError } of entries) {
 	const runKey = row.runKey ?? "-";
 	for (const e of validateRow(row)) report(errors, line, runKey, e.field, e.message);
 
-	if (seen.has(runKey)) report(errors, line, runKey, "runKey", `duplicate of line ${seen.get(runKey)}`);
-	else seen.set(runKey, line);
+	const earlier = seen.get(runKey);
+	if (earlier && earlier.status !== "FAILED") {
+		report(errors, line, runKey, "runKey", `duplicate of line ${earlier.line}`);
+	}
+	seen.set(runKey, { line, status: row.status });
 
 	if (row.planKey && row.planKey !== planKey) report(errors, line, runKey, "planKey", `is not ${planKey}`);
 
@@ -66,6 +69,9 @@ for (const { line, row, parseError } of entries) {
 		report(warnings, line, runKey, "citations", "VALID with no citations (fine if the app showed none)");
 	}
 
+}
+
+for (const row of latestRows(entries.filter((e) => e.row).map((e) => e.row))) {
 	const counts = table.get(row.platform) ?? { VALID: 0, PARTIAL: 0, FAILED: 0, codes: {} };
 	if (row.status in counts) counts[row.status] += 1;
 	if (row.failure?.code) counts.codes[row.failure.code] = (counts.codes[row.failure.code] ?? 0) + 1;

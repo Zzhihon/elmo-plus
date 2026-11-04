@@ -7,7 +7,7 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
-import { contentTypeFor, OBSERVATIONS_FILE, readRows, resultsDirArg } from "./lib.mjs";
+import { contentTypeFor, latestRows, OBSERVATIONS_FILE, readRows, resultsDirArg } from "./lib.mjs";
 
 const CHUNK = 50;
 const args = process.argv.slice(2);
@@ -106,16 +106,17 @@ function saveRows() {
 	renameSync(`${file}.tmp`, file);
 }
 
-const pending = rows.filter((r) => r.evidence?.length && r.evidenceRefs?.length !== r.evidence.length);
+const current = latestRows(rows);
+const pending = current.filter((r) => r.evidence?.length && r.evidenceRefs?.length !== r.evidence.length);
 const missing = pending.flatMap((r) => r.evidence.filter((shot) => !existsSync(join(dir, shot))));
 console.log(
-	`${rows.length} row(s), ${pending.length} needing screenshot upload, ${Math.ceil(rows.length / CHUNK)} import chunk(s)`,
+	`${current.length} run(s), ${pending.length} needing screenshot upload, ${Math.ceil(current.length / CHUNK)} import chunk(s)`,
 );
 if (missing.length) console.warn(`missing screenshots (rows will import without them): ${missing.join(", ")}`);
 
 if (dryRun) {
 	for (const r of pending) console.log(`  would upload ${r.evidence.join(", ")} for ${r.runKey}`);
-	console.log(`  would import ${rows.length} row(s) into ${planKey}`);
+	console.log(`  would import ${current.length} run(s) into ${planKey}`);
 	process.exit(0);
 }
 
@@ -148,8 +149,8 @@ for (const row of pending) {
 }
 
 const totals = { created: 0, skipped: 0, failedRecorded: 0, errors: [] };
-for (let i = 0; i < rows.length; i += CHUNK) {
-	const result = await client.call("geo_import_browser_observations", { planKey, rows: rows.slice(i, i + CHUNK) });
+for (let i = 0; i < current.length; i += CHUNK) {
+	const result = await client.call("geo_import_browser_observations", { planKey, rows: current.slice(i, i + CHUNK) });
 	totals.created += result.created ?? 0;
 	totals.skipped += result.skipped ?? 0;
 	totals.failedRecorded += result.failedRecorded ?? 0;

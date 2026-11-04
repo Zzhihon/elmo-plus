@@ -30,7 +30,9 @@
 
 跳过：
 - 方案 `completedRunKeys` 中已有的；
-- `$OUT/results/<planKey>/observations.jsonl` 中已有的（任何状态都算，包括 FAILED——本周不再重问）。
+- `$OUT/results/<planKey>/observations.jsonl` 中最后一行状态为 VALID 或 PARTIAL 的。
+
+补采：方案 `failedRunKeys` 里的、或本地最后一行为 FAILED 的 runKey，本次重新提问一次（同一次运行内不重复补采）。重问成功后用 `bin/append.mjs` 追加新行即可，旧的 FAILED 行保留作审计，同步时以最后一行为准，服务器会用新回答替换失败记录。若失败原因仍在（例如仍要求登录），照常记 FAILED 并在 summary 里说明。
 
 先执行 `mkdir -p $OUT/results/<planKey>/shots $OUT/results/<planKey>/tmp`。全部跳过时，直接进入第 6 节做同步和汇总。按方案中 `platforms` 的顺序逐个平台执行；平台内按问题顺序，问完所有问题的第 1 次再做第 2 次。
 
