@@ -106,8 +106,7 @@ export interface CitedPageEvidence {
 	observationId: string;
 }
 
-export interface RecommendationEvidence {
-	[key: string]: unknown;
+export type RecommendationEvidence = {
 	promptIds: string[];
 	observationIds: string[];
 	competitorIds: string[];
@@ -126,7 +125,7 @@ export interface RecommendationEvidence {
 	pages?: { pageId: string | null; url: string | null }[];
 	claims?: { id: string; observationId: string; claimText: string; verdict: GeoClaimVerdict }[];
 	platform?: string;
-}
+};
 
 export interface RecommendationDraft {
 	kind: GeoRecommendationKind;
