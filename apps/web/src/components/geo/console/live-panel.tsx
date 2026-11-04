@@ -94,10 +94,7 @@ function TargetPicker({
 						onCheckedChange={(checked) => onToggle(target.id, Boolean(checked))}
 					/>
 					<label htmlFor={`live-target-${target.id}`} className="flex flex-col text-sm leading-tight">
-						<span>
-							{channelLabel(target.platform, target.surfaceMode)}
-							{target.modelId && <span className="ml-1 text-xs text-muted-foreground">{target.modelId}</span>}
-						</span>
+						<span>{channelLabel(target.platform, target.surfaceMode)}</span>
 						{target.unavailableReason && (
 							<span className="text-xs text-muted-foreground">{target.unavailableReason}</span>
 						)}
@@ -264,6 +261,11 @@ export function LivePanel({ organizationId, canAsk }: { organizationId: string; 
 					canAsk={canAsk}
 					onAnswered={setLatest}
 				/>
+			)}
+			{setup.data.notConnected > 0 && (
+				<p className="text-xs text-muted-foreground">
+					另有 {setup.data.notConnected} 个平台渠道还没有接入，接入后会出现在这里。
+				</p>
 			)}
 
 			{latest.length > 0 && (

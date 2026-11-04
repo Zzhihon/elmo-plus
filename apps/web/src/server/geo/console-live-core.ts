@@ -105,6 +105,15 @@ async function quotaUsage(conn: DbConnection, principal: GeoPrincipal, now: Date
 	};
 }
 
+function isConnected(target: SamplingTargetRow): boolean {
+	return (
+		target.enabled &&
+		isSamplingPlatformEnabled(target.platform) &&
+		RUNNABLE_VERIFICATION.has(target.verificationStatus) &&
+		validateTargetConfig(target.surfaceMode, target.config, target.modelId).ok
+	);
+}
+
 /** The worker's own gates, in words a customer can act on. Null when the target can be asked now. */
 function unavailableReason(target: SamplingTargetRow, now: Date): string | null {
 	if (target.surfaceMode === "MANUAL_EVIDENCE") return "这个渠道只能人工导入记录，不能实时提问";
@@ -138,13 +147,15 @@ async function loadTargets(organizationId: string, ids?: readonly string[]): Pro
 export async function getLiveSetup(
 	principal: GeoPrincipal,
 	now = new Date(),
-): Promise<{ targets: LiveTargetOption[]; quota: LiveQuota }> {
+): Promise<{ targets: LiveTargetOption[]; notConnected: number; quota: LiveQuota }> {
 	assertGeoPermission(principal, "console.read");
 	const [targets, quota] = await Promise.all([loadTargets(principal.organizationId), quotaUsage(db, principal, now)]);
 	return {
 		quota,
+		// Platforms nobody has connected are not choices a customer can act on, so they are only counted.
+		notConnected: targets.filter((target) => target.surfaceMode !== "MANUAL_EVIDENCE" && !isConnected(target)).length,
 		targets: targets
-			.filter((target) => target.surfaceMode !== "MANUAL_EVIDENCE")
+			.filter((target) => target.surfaceMode !== "MANUAL_EVIDENCE" && isConnected(target))
 			.map((target) => ({
 				id: target.id,
 				platform: target.platform,
