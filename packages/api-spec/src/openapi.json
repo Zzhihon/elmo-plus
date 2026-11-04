@@ -3129,11 +3129,11 @@
 					},
 					"platform": {
 						"type": "string",
-						"enum": ["doubao", "deepseek", "yuanbao", "qwen"]
+						"enum": ["doubao", "deepseek", "yuanbao", "qwen", "chatgpt", "gemini"]
 					},
 					"surfaceMode": {
 						"type": "string",
-						"enum": ["LIVE_SURFACE", "MODEL_API", "MANUAL_EVIDENCE"]
+						"enum": ["LIVE_SURFACE", "BROWSER_AGENT", "MODEL_API", "MANUAL_EVIDENCE"]
 					},
 					"provider": {
 						"type": "string"
@@ -3359,11 +3359,11 @@
 					},
 					"platform": {
 						"type": "string",
-						"enum": ["doubao", "deepseek", "yuanbao", "qwen"]
+						"enum": ["doubao", "deepseek", "yuanbao", "qwen", "chatgpt", "gemini"]
 					},
 					"surfaceMode": {
 						"type": "string",
-						"enum": ["LIVE_SURFACE", "MODEL_API", "MANUAL_EVIDENCE"]
+						"enum": ["LIVE_SURFACE", "BROWSER_AGENT", "MODEL_API", "MANUAL_EVIDENCE"]
 					},
 					"repeatIndex": {
 						"type": "integer"
@@ -3437,11 +3437,11 @@
 										},
 										"platform": {
 											"type": "string",
-											"enum": ["doubao", "deepseek", "yuanbao", "qwen"]
+											"enum": ["doubao", "deepseek", "yuanbao", "qwen", "chatgpt", "gemini"]
 										},
 										"surfaceMode": {
 											"type": "string",
-											"enum": ["LIVE_SURFACE", "MODEL_API", "MANUAL_EVIDENCE"]
+											"enum": ["LIVE_SURFACE", "BROWSER_AGENT", "MODEL_API", "MANUAL_EVIDENCE"]
 										},
 										"provider": {
 											"type": "string"
@@ -3684,11 +3684,11 @@
 					},
 					"platform": {
 						"type": "string",
-						"enum": ["doubao", "deepseek", "yuanbao", "qwen"]
+						"enum": ["doubao", "deepseek", "yuanbao", "qwen", "chatgpt", "gemini"]
 					},
 					"surfaceMode": {
 						"type": "string",
-						"enum": ["LIVE_SURFACE", "MODEL_API", "MANUAL_EVIDENCE"]
+						"enum": ["LIVE_SURFACE", "BROWSER_AGENT", "MODEL_API", "MANUAL_EVIDENCE"]
 					},
 					"status": {
 						"type": "string",
@@ -3771,11 +3771,11 @@
 							},
 							"platform": {
 								"type": "string",
-								"enum": ["doubao", "deepseek", "yuanbao", "qwen"]
+								"enum": ["doubao", "deepseek", "yuanbao", "qwen", "chatgpt", "gemini"]
 							},
 							"surfaceMode": {
 								"type": "string",
-								"enum": ["LIVE_SURFACE", "MODEL_API", "MANUAL_EVIDENCE"]
+								"enum": ["LIVE_SURFACE", "BROWSER_AGENT", "MODEL_API", "MANUAL_EVIDENCE"]
 							},
 							"provider": {
 								"type": "string"
@@ -6336,11 +6336,11 @@
 				"properties": {
 					"platform": {
 						"type": "string",
-						"enum": ["doubao", "deepseek", "yuanbao", "qwen"]
+						"enum": ["doubao", "deepseek", "yuanbao", "qwen", "chatgpt", "gemini"]
 					},
 					"surfaceMode": {
 						"type": "string",
-						"enum": ["LIVE_SURFACE", "MODEL_API", "MANUAL_EVIDENCE"]
+						"enum": ["LIVE_SURFACE", "BROWSER_AGENT", "MODEL_API", "MANUAL_EVIDENCE"]
 					},
 					"validSampleRate": {
 						"type": "object",
@@ -6491,11 +6491,11 @@
 				"properties": {
 					"platform": {
 						"type": "string",
-						"enum": ["doubao", "deepseek", "yuanbao", "qwen"]
+						"enum": ["doubao", "deepseek", "yuanbao", "qwen", "chatgpt", "gemini"]
 					},
 					"surfaceMode": {
 						"type": "string",
-						"enum": ["LIVE_SURFACE", "MODEL_API", "MANUAL_EVIDENCE"]
+						"enum": ["LIVE_SURFACE", "BROWSER_AGENT", "MODEL_API", "MANUAL_EVIDENCE"]
 					},
 					"before": {
 						"$ref": "#/components/schemas/GeoBatchRoundFigures"
@@ -11901,7 +11901,7 @@
 						"required": false,
 						"schema": {
 							"type": "string",
-							"enum": ["doubao", "deepseek", "yuanbao", "qwen"]
+							"enum": ["doubao", "deepseek", "yuanbao", "qwen", "chatgpt", "gemini"]
 						},
 						"description": "平台"
 					},
@@ -11911,7 +11911,7 @@
 						"required": false,
 						"schema": {
 							"type": "string",
-							"enum": ["LIVE_SURFACE", "MODEL_API", "MANUAL_EVIDENCE"]
+							"enum": ["LIVE_SURFACE", "BROWSER_AGENT", "MODEL_API", "MANUAL_EVIDENCE"]
 						},
 						"description": "源模式"
 					},
@@ -16213,7 +16213,7 @@
 						"in": "query",
 						"schema": {
 							"type": "string",
-							"enum": ["doubao", "deepseek", "yuanbao", "qwen"]
+							"enum": ["doubao", "deepseek", "yuanbao", "qwen", "chatgpt", "gemini"]
 						}
 					},
 					{
@@ -16221,7 +16221,7 @@
 						"in": "query",
 						"schema": {
 							"type": "string",
-							"enum": ["LIVE_SURFACE", "MODEL_API", "MANUAL_EVIDENCE"]
+							"enum": ["LIVE_SURFACE", "BROWSER_AGENT", "MODEL_API", "MANUAL_EVIDENCE"]
 						}
 					}
 				],
