@@ -48,6 +48,15 @@ export function manualRound(sampledAt: Date): { key: string; startedAt: string }
 	return { key: `week:${new Date(monday).toISOString().slice(0, 10)}`, startedAt: start.toISOString() };
 }
 
+/** The browser agent's own key for one planned question, shared by a failed attempt and the retry that answered it. */
+function browserRunKey() {
+	return sql<string | null>`${geoObservations.responseMetadata}->>'runKey'`;
+}
+
+function importedSlotKey(row: { id: string; runKey: string | null }): string {
+	return row.runKey ? `browser:${row.runKey}` : `observation:${row.id}`;
+}
+
 function sampleColumns() {
 	const o = geoObservations;
 	const e = geoEvaluations;
@@ -63,6 +72,7 @@ function sampleColumns() {
 		sampledAt: o.sampledAt,
 		createdAt: o.createdAt,
 		promptSetId: o.promptSetId,
+		runKey: browserRunKey(),
 		batchId: geoSamplingRuns.batchId,
 		repeatIndex: geoSamplingRuns.repeatIndex,
 		batchCreatedAt: geoSamplingBatches.createdAt,
@@ -139,7 +149,7 @@ function toSample(row: SampleRow, claims: Map<string, MetricClaim[]>): MetricSam
 					targetId: row.targetId,
 					repeatIndex: row.repeatIndex,
 				})
-			: `observation:${row.id}`;
+			: importedSlotKey(row);
 	return {
 		observationId: row.id,
 		slotKey,
@@ -240,7 +250,14 @@ async function plannedSlots(db: DbConnection, organizationId: string, filter: Me
 	}
 	const o = geoObservations;
 	const manual = await db
-		.select({ id: o.id, status: o.status, sampledAt: o.sampledAt, platform: o.platform, surfaceMode: o.surfaceMode })
+		.select({
+			id: o.id,
+			runKey: browserRunKey(),
+			status: o.status,
+			sampledAt: o.sampledAt,
+			platform: o.platform,
+			surfaceMode: o.surfaceMode,
+		})
 		.from(o)
 		.where(and(observationConditions(organizationId, filter), isNull(o.runId)))
 		.limit(GEO_MAX_METRIC_SAMPLES);
@@ -253,7 +270,7 @@ async function plannedSlots(db: DbConnection, organizationId: string, filter: Me
 			sampledAt: run.updatedAt.toISOString(),
 		})),
 		...manual.map((row) => ({
-			slotKey: `observation:${row.id}`,
+			slotKey: importedSlotKey(row),
 			platform: row.platform,
 			surfaceMode: row.surfaceMode,
 			status: row.status,
