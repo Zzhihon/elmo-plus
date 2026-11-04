@@ -1,4 +1,5 @@
 export * from "./compare";
+export * from "./competitors/discovery";
 export * from "./csv";
 export * from "./insights";
 export * from "./metrics";

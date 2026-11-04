@@ -1,4 +1,5 @@
 import type { Job, PgBoss } from "pg-boss";
+import { GEO_COMPETITOR_QUEUES } from "./competitor-discovery";
 import { GEO_EVALUATION_QUEUES } from "./evaluation";
 import { GEO_KNOWLEDGE_QUEUES } from "./knowledge";
 import { GEO_PROFILE_QUEUES } from "./profile";
@@ -17,6 +18,7 @@ export function allGeoQueues(): GeoQueue[] {
 		...GEO_KNOWLEDGE_QUEUES,
 		...GEO_SAMPLING_QUEUES,
 		...GEO_EVALUATION_QUEUES,
+		...GEO_COMPETITOR_QUEUES,
 		...GEO_REPORTS_QUEUES,
 		...GEO_TASKS_QUEUES,
 	];
