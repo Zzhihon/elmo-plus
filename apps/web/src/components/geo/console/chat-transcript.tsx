@@ -4,6 +4,7 @@ import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
 import { cn } from "@workspace/ui/lib/utils";
 import { formatDateTime } from "@/components/geo/sampling/format";
+import { ResponseMarkdown } from "@/components/response-markdown";
 import type { ConsoleAnswer, ConsoleCitation } from "@/server/geo/console-core";
 import { channelLabel, outcomeParts } from "./labels";
 import { useTypewriter } from "./use-typewriter";
@@ -13,25 +14,13 @@ const MARK_CLASS = {
 	COMPETITOR: "rounded-sm bg-orange-100 px-0.5 font-medium text-orange-900",
 } as const;
 
-function AnswerText({ segments, shown }: { segments: AnswerSegment[]; shown: number }) {
-	return (
-		<p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
-			{segments.map((segment) => {
-				if (segment.start >= shown) return null;
-				const text = segment.end > shown ? segment.text.slice(0, shown - segment.start) : segment.text;
-				if (!segment.kind) return <span key={segment.start}>{text}</span>;
-				return (
-					<mark
-						key={segment.start}
-						className={MARK_CLASS[segment.kind]}
-						title={segment.kind === "OWN" ? "你的品牌" : `竞品：${segment.entityName ?? ""}`}
-					>
-						{text}
-					</mark>
-				);
-			})}
-		</p>
+function AnswerText({ text, segments, shown }: { text: string; segments: AnswerSegment[]; shown: number }) {
+	const markRanges = segments.flatMap((segment) =>
+		segment.kind && segment.start < shown
+			? [{ start: segment.start, end: Math.min(segment.end, shown), className: MARK_CLASS[segment.kind] }]
+			: [],
 	);
+	return <ResponseMarkdown markRanges={markRanges}>{text.slice(0, shown)}</ResponseMarkdown>;
 }
 
 export function HighlightLegend() {
@@ -146,7 +135,7 @@ export function ChatTranscript({
 					)}
 					aria-busy={!done}
 				>
-					<AnswerText segments={answer.segments} shown={shown} />
+					<AnswerText text={answer.answerText} segments={answer.segments} shown={shown} />
 					{!done && (
 						<Button variant="link" size="sm" className="mt-1 h-auto px-0" onClick={showAll}>
 							显示全部

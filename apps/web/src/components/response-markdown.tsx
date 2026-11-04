@@ -64,10 +64,12 @@ export function ResponseMarkdown({
 	children,
 	highlight,
 	markRange,
+	markRanges = [],
 }: {
 	children: string;
 	highlight?: string;
 	markRange?: MarkRange;
+	markRanges?: MarkRange[];
 }) {
 	return (
 		<div className="prose prose-sm max-w-none break-words">
@@ -75,6 +77,7 @@ export function ResponseMarkdown({
 				remarkPlugins={[remarkGfm]}
 				rehypePlugins={[
 					...(markRange ? [rehypeMarkRange(markRange)] : []),
+					...markRanges.map(rehypeMarkRange),
 					...(highlight ? [rehypeHighlight(highlight)] : []),
 				]}
 				components={components}
