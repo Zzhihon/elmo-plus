@@ -34,6 +34,7 @@ export const SOURCE_KIND_LABELS: Record<GeoTaskSourceKind, string> = {
 	OBSERVATION: "采样证据",
 	FINDING: "站点审计发现",
 	ASSERTION: "知识断言",
+	RECOMMENDATION: "提升建议",
 	MANUAL: "手动创建",
 };
 
