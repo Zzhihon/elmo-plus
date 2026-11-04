@@ -159,6 +159,16 @@ describe("answer snippet", () => {
 		expect(snippet.parts.map((part) => part.text).join("")).toBe(text);
 		expect(snippet.cutBefore).toBe(false);
 	});
+
+	it("shows a markdown answer as plain text without moving the marks", () => {
+		const text = "### 推荐\n- **甲电气**：老牌厂家\n- 我们公司";
+		const snippet = answerSnippet(text, [
+			{ kind: "COMPETITOR", start: 11, end: 14 },
+			{ kind: "BRAND", start: 24, end: 28 },
+		]);
+		expect(snippet.parts.map((part) => part.text).join("")).toBe("推荐\n甲电气：老牌厂家\n我们公司");
+		expect(snippet.parts.filter((part) => part.mark).map((part) => part.text)).toEqual(["甲电气", "我们公司"]);
+	});
 });
 
 describe("dashboard layout", () => {

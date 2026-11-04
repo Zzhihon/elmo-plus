@@ -209,6 +209,15 @@ const SNIPPET_LEAD = 40;
  * A window of the answer around the first brand it names, split so our brand and the
  * competitors can be highlighted. Overlapping spans keep the first one.
  */
+/** Answers arrive as markdown; a snippet is shown as plain text, so its markup would only be noise. */
+function plainText(markdown: string): string {
+	return markdown
+		.replace(/^\s{0,3}(#{1,6}|[-*+]|>|\d+\.)\s+/gm, "")
+		.replace(/(\*\*|__|`|~~)/g, "")
+		.replace(/^\s*\|?(\s*:?-{3,}:?\s*\|)+\s*$/gm, "")
+		.replace(/\s*\|\s*/g, " ");
+}
+
 export function answerSnippet(
 	text: string,
 	spans: readonly Pick<GeoEvidenceSpan, "kind" | "start" | "end">[],
@@ -238,5 +247,9 @@ export function answerSnippet(
 		cursor = end;
 	}
 	if (cursor < to) parts.push({ start: cursor, text: text.slice(cursor, to), mark: null });
-	return { parts, cutBefore: from > 0, cutAfter: to < text.length };
+	return {
+		parts: parts.map((part) => ({ ...part, text: plainText(part.text) })).filter((part) => part.text.length > 0),
+		cutBefore: from > 0,
+		cutAfter: to < text.length,
+	};
 }
