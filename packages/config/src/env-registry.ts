@@ -214,7 +214,6 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		name: "OPENROUTER_BASE_URL",
 		scope: "server",
 		requiredBy: "optional",
-		provider: "openrouter",
 		description:
 			"OpenAI-compatible base URL that the OpenRouter provider sends requests to instead of https://openrouter.ai/api/v1, such as a gateway reachable from mainland China.",
 	},
@@ -222,9 +221,15 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		name: "OPENROUTER_RESEARCH_MODEL",
 		scope: "server",
 		requiredBy: "optional",
-		provider: "openrouter",
 		description:
 			"Model the OpenRouter provider asks for structured research, such as brand onboarding and GEO evaluation. Set it with OPENROUTER_BASE_URL when the endpoint is not OpenRouter. It must support JSON schema output.",
+	},
+	{
+		name: "OPENROUTER_RESEARCH_EXTRA_BODY",
+		scope: "server",
+		requiredBy: "optional",
+		description:
+			'JSON object merged into every structured research request, for endpoint-specific options such as {"thinking":{"type":"disabled"}} on Volcengine Ark.',
 	},
 	{
 		name: "ONBOARDING_LLM_TARGET",

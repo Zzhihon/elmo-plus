@@ -27,6 +27,16 @@ function researchModel(): string {
 	return process.env.OPENROUTER_RESEARCH_MODEL?.trim() || DEFAULT_RESEARCH_MODEL;
 }
 
+function researchExtraBody(): Record<string, unknown> {
+	const raw = process.env.OPENROUTER_RESEARCH_EXTRA_BODY?.trim();
+	if (!raw) return {};
+	const parsed: unknown = JSON.parse(raw);
+	if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+		throw new Error("OPENROUTER_RESEARCH_EXTRA_BODY must be a JSON object");
+	}
+	return parsed as Record<string, unknown>;
+}
+
 function openrouterHeaders(): Record<string, string> {
 	return {
 		Authorization: `Bearer ${getCredential("OPENROUTER_API_KEY")}`,
@@ -81,6 +91,7 @@ export const openrouter: Provider = {
 		// Raw fetch (no AI SDK) so we can attach the OpenRouter `plugins` field
 		// — the AI SDK's OpenAI-compat path doesn't pass it through.
 		const body: Record<string, unknown> = {
+			...researchExtraBody(),
 			model,
 			messages: [{ role: "user", content: prompt }],
 			response_format: jsonSchemaResponseFormat(schema),
