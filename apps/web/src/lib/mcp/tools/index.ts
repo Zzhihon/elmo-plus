@@ -3,11 +3,13 @@
  * `adminOnly`, so an instance key gets what an organization key gets.
  */
 
+import { isGeoWorkspaceEnabled } from "@workspace/config/geo";
 import { getDeployment } from "@workspace/deployment";
 import { type Principal, principalScopes } from "@/lib/auth/api-auth";
 import { getAnalytics, getCitations, getOpportunities, getPromptPerformance, getQueryFanout } from "./analytics";
 import { getBilling, getBrand, listBrandsTool, listCompetitorsTool } from "./brands";
 import type { McpTool } from "./define";
+import { GEO_MCP_TOOLS } from "./geo";
 import { listModels, whoami } from "./identity";
 import { createPromptsTool, listPromptsTool, listPromptTags, updatePromptTool } from "./prompts";
 import { getRun, listRuns } from "./runs";
@@ -39,7 +41,10 @@ export const MCP_TOOLS: readonly McpTool[] = [
 export function toolsFor(auth: Principal): McpTool[] {
 	const held = principalScopes(auth);
 	const readOnlyDeployment = getDeployment().features.readOnly;
-	return MCP_TOOLS.filter((tool) => {
+	// Only an organization key answers for one organization and has a GEO grant of its own.
+	const offered =
+		isGeoWorkspaceEnabled() && auth.kind === "organization" ? [...MCP_TOOLS, ...GEO_MCP_TOOLS] : MCP_TOOLS;
+	return offered.filter((tool) => {
 		if (readOnlyDeployment && !tool.readOnly) return false;
 		return tool.scopes.every((scope) => held.has(scope));
 	});

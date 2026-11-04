@@ -16,7 +16,7 @@ import { loadGeoMemberRoles } from "@workspace/lib/geo/roles";
 import { loadGeoSecondFactorState } from "@workspace/lib/geo/session-factor";
 import { and, eq, or } from "drizzle-orm";
 import { geoApiScope } from "@/lib/api/scopes";
-import type { ApiAuth } from "@/lib/auth/api-auth";
+import type { ApiAuth, OrganizationAuth, Principal } from "@/lib/auth/api-auth";
 import { READ_ONLY_MESSAGE } from "@/lib/read-only-errors";
 
 const ADMIN_ORGANIZATION_HEADER = "X-Geo-Organization-Id";
@@ -65,6 +65,10 @@ export async function resolveGeoApiPrincipal(
 		};
 	}
 
+	return resolveGeoKeyPrincipal(auth, requestId);
+}
+
+async function resolveGeoKeyPrincipal(auth: OrganizationAuth, requestId: string): Promise<GeoPrincipal> {
 	if (auth.brandIds !== null) {
 		throw new GeoError("FORBIDDEN", "限定品牌范围的 API Key 不能访问 GEO 工作台");
 	}
@@ -80,6 +84,15 @@ export async function resolveGeoApiPrincipal(
 		requestId,
 		scopes,
 	};
+}
+
+/** Over MCP only an organization key, which carries its own GEO grant, reaches the workspace. */
+export async function resolveGeoMcpPrincipal(auth: Principal): Promise<GeoPrincipal> {
+	assertEnabled();
+	if (auth.kind !== "organization") {
+		throw new GeoError("FORBIDDEN", "GEO 工具只能通过开通了 GEO 权限的组织 API Key 使用");
+	}
+	return resolveGeoKeyPrincipal(auth, randomUUID());
 }
 
 async function findMemberOrganizationId(userId: string, idOrSlug: string): Promise<string | null> {
