@@ -1,6 +1,6 @@
 # GEO 浏览器采样 Runbook
 
-本文件是每周采样任务的执行说明，执行者是驱动操作员真实 Chrome 的 Codex agent。目标只有一个：**像真实买家一样**在 6 个 AI 应用里提问，原样记录买家看到的回答、引用来源和截图，再同步进 GEO 系统。
+本文件是每周采样任务的执行说明，执行者是通过 `geo-chrome` MCP（chrome-devtools-mcp，固定使用采样专用 Chrome 配置目录）操控浏览器的 Codex agent。目标只有一个：**像真实买家一样**在 6 个 AI 应用里提问，原样记录买家看到的回答、引用来源和截图，再同步进 GEO 系统。
 
 下文中 `$REPO` 指本仓库根目录（由自动化提示词给出），`$S` 指 `$REPO/infra/geo-browser-sampler`，`$OUT` 指 `$REPO/infra/local/geo-browser-sampler`（不提交到 git）。
 
@@ -40,7 +40,7 @@
 
 ### 3.1 打开
 
-在已登录的 Chrome（操作员日常使用、已手动登录各应用的那个配置文件）中新开标签页打开该平台的 `chatUrl`。不要使用未登录的内置浏览器或无痕窗口。
+只用 `geo-chrome` MCP 的工具操作浏览器（`new_page` / `navigate_page` 打开、`take_snapshot` 看页面结构、`fill` / `click` / `press_key` 输入和发送、`evaluate_script` 读取回答全文和引用链接、`take_screenshot` 截图）。它启动的 Chrome 使用操作员已手动登录各应用的采样专用配置目录。不要改用 Codex 内置浏览器、Chrome 扩展或其他浏览器通道。用 `new_page` 打开该平台的 `chatUrl`。
 
 检查：
 - 页面显示登录按钮 / 要求登录 → `LOGIN_REQUIRED`，停止该平台。
@@ -64,7 +64,7 @@
 3. **等待完成**：满足任一即视为完成——“停止生成”按钮消失且回答下方出现复制 / 点赞等操作按钮；或回答文本连续 5 秒没有变化。从发送起最长等 180 秒，超时则按第 5 节判断（有部分文本记 PARTIAL + `TIMEOUT` 说明于 note，完全没有文本记 FAILED `TIMEOUT`）。
 4. **引用**：展开“参考资料 / 引用 / 搜索结果 / 来源 / Sources”等面板（含回答内角标点开后的列表），收集每条来源的 URL 和标题到 `citations`。只记应用真实展示的来源，去重，保持出现顺序。展开失败时记 PARTIAL，并在 `note` 说明。
 5. **回答全文**：优先点回答下方的“复制”按钮，然后 `pbpaste > $OUT/results/<planKey>/tmp/answer.txt`；复制按钮不可用时读取回答区 DOM 文本写入同一文件。全文必须完整（包括表格、列表），不要摘要或改写。
-6. **截图**：把整段对话（问题 + 完整回答 + 展开后的引用）截图保存为 `$OUT/results/<planKey>/shots/<platform>-<promptId>-<n>.png`。聊天内容常在页面内部滚动区域里，一张截不全时滚动分段截图，依次命名 `<platform>-<promptId>-<n>-a.png`、`-b.png`…，全部写进 `evidence`。浏览器工具无法存文件时，可用 `screencapture -x <文件>`（窗口须在前台）。
+6. **截图**：把整段对话（问题 + 完整回答 + 展开后的引用）截图保存为 `$OUT/results/<planKey>/shots/<platform>-<promptId>-<n>.png`。聊天内容常在页面内部滚动区域里，一张截不全时滚动分段截图，依次命名 `<platform>-<promptId>-<n>-a.png`、`-b.png`…，全部写进 `evidence`。用 `take_screenshot`（`fullPage: true`，`filePath` 指向上述文件）保存；回答在页面内部滚动区域时，先 `evaluate_script` 把该区域滚到对应位置再分段截图。
 7. **写入一行**：把除 `responseText` 以外的字段写到 `tmp/row.json`，然后执行：
 
    ```

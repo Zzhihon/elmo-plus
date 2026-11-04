@@ -17,9 +17,18 @@
 
 ### 1. Chrome 与账号
 
-1. 为采样准备一个专用的 Chrome 配置文件（个人资料），只用于采样，不登录私人账号。
-2. 在该配置文件中安装 Codex 的 Chrome 扩展（`browser_use_external` 通过它驱动真实 Chrome），并确认 Codex 能看到这个浏览器。
-3. **由操作员手动登录**以下 6 个应用，使用专用测试账号。agent 永远不会替你登录、注册或处理验证码：
+采样不用你日常的 Chrome，也不用 Codex 的 Chrome 扩展（扩展每个会话都要人工批准，无人值守时会被拒绝）。agent 通过 `chrome-devtools-mcp` 启动一个使用专用配置目录的 Chrome，登录态保存在这个目录里。
+
+1. 在 `~/.codex/config.toml` 加入：
+
+   ```toml
+   [mcp_servers.geo-chrome]
+   command = "npx"
+   args = ["-y", "chrome-devtools-mcp@1.12.0", "--userDataDir", "/Users/<你>/.local/share/geo-sampler-chrome", "--viewport", "1440x1000", "--usageStatistics", "false", "--performanceCrux", "false"]
+   startup_timeout_sec = 60.0
+   ```
+2. 用同一个目录打开一个 Chrome 窗口：`open -na "Google Chrome" --args --user-data-dir="$HOME/.local/share/geo-sampler-chrome"`。这个配置目录只用于采样，不登录私人账号。
+3. 在这个窗口里**由操作员手动登录**以下 6 个应用，使用专用测试账号。agent 永远不会替你登录、注册或处理验证码：
    - 豆包 https://www.doubao.com/chat/
    - DeepSeek https://chat.deepseek.com/
    - 通义千问 https://www.qianwen.com/
@@ -28,7 +37,8 @@
    - Gemini https://gemini.google.com/app
 4. 在每个应用的设置里关闭记忆 / 个性化 / 参考历史对话；深度思考和联网搜索保持应用默认（除非方案另有要求）。
 5. 给每个账号起一个标签（如 `test-1`），在 `infra/local/geo-browser-sampler/accounts.md` 里记下“平台 → 标签 → 网络地区（如 CN）”，agent 写 `session.account` / `session.region` 时只用标签。该目录不提交。
-6. 登录态会过期。summary 中出现 `LOGIN_REQUIRED` 时，手动重新登录对应应用即可。
+6. 登录完成后**关闭这个 Chrome 窗口**：同一目录同一时间只能被一个 Chrome 使用，不关的话 agent 启动浏览器会失败。
+7. 登录态会过期。summary 中出现 `LOGIN_REQUIRED` 时，用第 2 步的命令打开窗口重新登录，再关掉。
 
 ChatGPT 和 Gemini 在部分网络环境下不可用；agent 不会切换网络，只会记 `REGION_BLOCKED`。网络环境由操作员事先决定并保持每周一致。
 
