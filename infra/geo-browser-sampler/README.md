@@ -10,6 +10,7 @@
 | `bin/append.mjs` | agent 追加一行结果（校验 + 防重复） |
 | `bin/validate.mjs` | 校验一周的结果目录并输出分平台统计 |
 | `bin/sync.mjs` | MCP 工具不可用时的回退同步 |
+| `bin/login.sh` | 打开采样专用 Chrome 供操作员登录 |
 
 脚本只依赖 Node 24，无需安装依赖。
 
@@ -30,7 +31,7 @@
    ```
 
    `default_tools_approval_mode = "approve"` 让无人值守运行时不必逐次批准浏览器操作；`[mcp_servers.geo]` 也要加同一行。只给这两个采样用的 MCP 加，不要全局放开。
-2. 用同一个目录打开一个 Chrome 窗口：`open -na "Google Chrome" --args --user-data-dir="$HOME/.local/share/geo-sampler-chrome"`。这个配置目录只用于采样，不登录私人账号。
+2. 运行 `infra/geo-browser-sampler/bin/login.sh`，它用同一个目录打开 Chrome，并一次打开下面 6 个应用的标签页。不要用 `open -na "Google Chrome" --user-data-dir=...` 代替：chrome-devtools-mcp 启动 Chrome 时带 `--use-mock-keychain --password-store=basic`，普通方式启动保存的 cookie 用的是系统钥匙串加密，agent 读不出来，相当于没登录。这个配置目录只用于采样，不登录私人账号。
 3. 在这个窗口里**由操作员手动登录**以下 6 个应用，使用专用测试账号。agent 永远不会替你登录、注册或处理验证码：
    - 豆包 https://www.doubao.com/chat/
    - DeepSeek https://chat.deepseek.com/
@@ -41,7 +42,7 @@
 4. 在每个应用的设置里关闭记忆 / 个性化 / 参考历史对话；深度思考和联网搜索保持应用默认（除非方案另有要求）。
 5. 给每个账号起一个标签（如 `test-1`），在 `infra/local/geo-browser-sampler/accounts.md` 里记下“平台 → 标签 → 网络地区（如 CN）”，agent 写 `session.account` / `session.region` 时只用标签。该目录不提交。
 6. 登录完成后**关闭这个 Chrome 窗口**：同一目录同一时间只能被一个 Chrome 使用，不关的话 agent 启动浏览器会失败。
-7. 登录态会过期。summary 中出现 `LOGIN_REQUIRED` 时，用第 2 步的命令打开窗口重新登录，再关掉。
+7. 登录态保存在配置目录里，每周运行复用同一份，不需要每次登录。某个平台过期时 summary 会出现 `LOGIN_REQUIRED`，只重登那一个：`bin/login.sh https://chat.deepseek.com/`，登录后关掉窗口。
 
 ChatGPT 和 Gemini 在部分网络环境下不可用；agent 不会切换网络，只会记 `REGION_BLOCKED`。网络环境由操作员事先决定并保持每周一致。
 
