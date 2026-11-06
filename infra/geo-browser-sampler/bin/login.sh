@@ -16,4 +16,4 @@ if (( $# )); then urls=("$@"); else urls=(
   https://chatgpt.com/
   https://gemini.google.com/app
 ); fi
-exec "$CHROME" --user-data-dir="$PROFILE" --use-mock-keychain --password-store=basic --no-first-run "${urls[@]}"
+exec "$CHROME" --user-data-dir="$PROFILE" --use-mock-keychain --password-store=basic --no-first-run "${urls[@]}" >/dev/null 2>&1
