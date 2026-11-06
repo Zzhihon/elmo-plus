@@ -64,7 +64,7 @@
 3. **等待完成**：满足任一即视为完成——“停止生成”按钮消失且回答下方出现复制 / 点赞等操作按钮；或回答文本连续 5 秒没有变化。从发送起最长等 180 秒，超时则按第 5 节判断（有部分文本记 PARTIAL + `TIMEOUT` 说明于 note，完全没有文本记 FAILED `TIMEOUT`）。
 4. **引用**：展开“参考资料 / 引用 / 搜索结果 / 来源 / Sources”等面板（含回答内角标点开后的列表），收集每条来源的 URL 和标题到 `citations`。只记应用真实展示的来源，去重，保持出现顺序。展开失败时记 PARTIAL，并在 `note` 说明。
 5. **回答全文**：优先点回答下方的“复制”按钮，然后 `pbpaste > $OUT/results/<planKey>/tmp/answer.txt`；复制按钮不可用时读取回答区 DOM 文本写入同一文件。全文必须完整（包括表格、列表），不要摘要或改写。
-6. **截图**：把整段对话（问题 + 完整回答 + 展开后的引用）截图保存为 `$OUT/results/<planKey>/shots/<platform>-<promptId>-<n>.png`。聊天内容常在页面内部滚动区域里，一张截不全时滚动分段截图，依次命名 `<platform>-<promptId>-<n>-a.png`、`-b.png`…，全部写进 `evidence`。用 `take_screenshot`（`fullPage: true`，`filePath` 指向上述文件）保存；回答在页面内部滚动区域时，先 `evaluate_script` 把该区域滚到对应位置再分段截图。
+6. **截图**：把整段对话（问题 + 完整回答 + 展开后的引用）截图保存为 `$OUT/results/<planKey>/shots/<platform>-<promptId>-<n>.png`。聊天内容常在页面内部滚动区域里，一张截不全时滚动分段截图，依次命名 `<platform>-<promptId>-<n>-a.png`、`-b.png`…，全部写进 `evidence`。用 `take_screenshot`（`fullPage: true`）保存：geo-chrome 只允许写入系统临时目录，`filePath` 要用 `$TMPDIR/geo-shots/<同名文件>`（先 `mkdir -p "$TMPDIR/geo-shots"`），保存后再 `cp` 到上述 `shots/` 路径；直接写 `shots/` 会被拒绝（Access denied … not within any of the configured workspace roots）。回答在页面内部滚动区域时，先 `evaluate_script` 把该区域滚到对应位置再分段截图。
 7. **写入一行**：把除 `responseText` 以外的字段写到 `tmp/row.json`，然后执行：
 
    ```
